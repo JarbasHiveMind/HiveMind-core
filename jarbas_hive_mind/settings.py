@@ -1,7 +1,7 @@
 from os import makedirs
 from os.path import isdir, join, expanduser
 
-DATA_PATH = expanduser("~/jarbas_hivemind")
+DATA_PATH = expanduser("~/jarbasHiveMind")
 
 if not isdir(DATA_PATH):
     makedirs(DATA_PATH)
@@ -10,8 +10,6 @@ CERTS_PATH = join(DATA_PATH, "certs")
 if not isdir(CERTS_PATH):
     makedirs(CERTS_PATH)
 
-DEFAULT_SSL_CRT = join(CERTS_PATH, "hivemind.crt")
-DEFAULT_SSL_KEY = join(CERTS_PATH, "hivemind.key")
 
 DB_PATH = join(DATA_PATH, "database")
 if not isdir(DB_PATH):

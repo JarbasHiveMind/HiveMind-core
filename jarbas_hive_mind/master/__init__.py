@@ -6,15 +6,14 @@ from jarbas_hive_mind.database import ClientDatabase
 from jarbas_utils.log import LOG
 from jarbas_utils.messagebus import Message, get_mycroft_bus
 
-author = "jarbasAI"
 
-NAME = "JarbasMindv0.1"
+platform = "HiveMindV0.5"
 
 users = ClientDatabase()
 
 
 # protocol
-class JarbasMindProtocol(WebSocketServerProtocol):
+class HiveMindProtocol(WebSocketServerProtocol):
     def onConnect(self, request):
 
         LOG.info("Client connecting: {0}".format(request.peer))
@@ -44,7 +43,7 @@ class JarbasMindProtocol(WebSocketServerProtocol):
         self.factory.mycroft_send("hive.client.connect", data, context)
         # return a pair with WS protocol spoken (or None for any) and
         # custom headers to send in initial WS opening handshake HTTP response
-        headers = {"server": NAME}
+        headers = {"server": platform}
         return (None, headers)
 
     def onOpen(self):
@@ -91,9 +90,9 @@ class JarbasMindProtocol(WebSocketServerProtocol):
 
 
 # server internals
-class JarbasMind(WebSocketServerFactory):
+class HiveMind(WebSocketServerFactory):
     def __init__(self, bus=None, *args, **kwargs):
-        super(JarbasMind, self).__init__(*args, **kwargs)
+        super(HiveMind, self).__init__(*args, **kwargs)
         # list of clients
         self.clients = {}
         # ip block policy
@@ -107,7 +106,7 @@ class JarbasMind(WebSocketServerFactory):
         data = data or {}
         context = context or {}
         if "client_name" not in context:
-            context["client_name"] = NAME
+            context["client_name"] = platform
         self.bus.emit(Message(type, data, context))
 
     def register_mycroft_messages(self):
@@ -187,14 +186,14 @@ class JarbasMind(WebSocketServerFactory):
                                                               "unknown")
 
             # messages/skills/intents per user
-            if message.type in client.blacklist.get("messages", []):
+            if message.msg_type in client.blacklist.get("messages", []):
                 LOG.warning(client.peer + " sent a blacklisted message " \
-                                          "type: " + message.type)
+                                          "type: " + message.msg_type)
                 return
             # TODO check intent / skill that will trigger
 
             # send client message to internal mycroft bus
-            self.mycroft_send(message.type, message.data, message.context)
+            self.mycroft_send(message.msg_type, message.data, message.context)
 
     # mycroft handlers
     def handle_send(self, message):
@@ -231,8 +230,8 @@ class JarbasMind(WebSocketServerFactory):
     def handle_message(self, message=None):
         # forward internal messages to clients if they are the target
         message = Message.deserialize(message)
-        if message.type == "complete_intent_failure":
-            message.type = "hive.complete_intent_failure"
+        if message.msg_type == "complete_intent_failure":
+            message.msg_type = "hive.complete_intent_failure"
         message.context = message.context or {}
         peer = message.context.get("destination")
         if peer and peer in self.clients:

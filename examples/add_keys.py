@@ -1,4 +1,4 @@
-from jarbas_hive_mind.database.client import ClientDatabase
+from jarbas_hive_mind.database import ClientDatabase
 
 db = ClientDatabase(debug=True)
 

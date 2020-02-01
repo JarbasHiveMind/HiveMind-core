@@ -1,20 +1,18 @@
 import json
-from threading import Thread
-
 from autobahn.twisted.websocket import WebSocketClientFactory, \
     WebSocketClientProtocol
 from twisted.internet.protocol import ReconnectingClientFactory
 
-from jarbas_utils.log import LOG as logger
+from jarbas_utils.log import LOG
 from jarbas_utils.messagebus import Message, get_mycroft_bus
 
-platform = "Jarbas Drone"
+platform = "HiveMindSlaveV0.1"
 
 
-class JarbasDroneProtocol(WebSocketClientProtocol):
+class HiveMindSlaveProtocol(WebSocketClientProtocol):
 
     def onConnect(self, response):
-        logger.info("Server connected: {0}".format(response.peer))
+        LOG.info("HiveMind connected: {0}".format(response.peer))
         self.factory.bus.emit(Message("hive.mind.connected",
                                       {"server_id": response.headers[
                                               "server"]}))
@@ -22,11 +20,11 @@ class JarbasDroneProtocol(WebSocketClientProtocol):
         self.factory.status = "connected"
 
     def onOpen(self):
-        logger.info("WebSocket connection open. ")
+        LOG.info("HiveMind WebSocket connection open. ")
         self.factory.bus.emit(Message("hive.mind.websocket.open"))
 
     def onMessage(self, payload, isBinary):
-        logger.info("status: " + self.factory.status)
+        LOG.info("status: " + self.factory.status)
         if not isBinary:
             payload = payload.decode("utf-8")
             data = {"payload": payload, "isBinary": isBinary}
@@ -36,7 +34,7 @@ class JarbasDroneProtocol(WebSocketClientProtocol):
                                       data))
 
     def onClose(self, wasClean, code, reason):
-        logger.info("WebSocket connection closed: {0}".format(reason))
+        LOG.info("WebSocket connection closed: {0}".format(reason))
         self.factory.bus.emit(Message("hive.mind.connection.closed",
                                       {"wasClean": wasClean,
                                            "reason": reason,
@@ -53,11 +51,11 @@ class JarbasDroneProtocol(WebSocketClientProtocol):
             return json.dumps(message.__dict__)
 
 
-class JarbasDrone(WebSocketClientFactory, ReconnectingClientFactory):
-    protocol = JarbasDroneProtocol
+class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
+    protocol = HiveMindSlaveProtocol
 
     def __init__(self, bus=None, *args, **kwargs):
-        super(JarbasDrone, self).__init__(*args, **kwargs)
+        super(HiveMindSlave, self).__init__(*args, **kwargs)
         self.client = None
         self.status = "disconnected"
         # mycroft_ws
@@ -79,14 +77,14 @@ class JarbasDrone(WebSocketClientFactory, ReconnectingClientFactory):
 
     # websocket handlers
     def clientConnectionFailed(self, connector, reason):
-        logger.info(
-            "Client connection failed: " + str(reason) + " .. retrying ..")
+        LOG.info(
+            "HiveMind connection failed: " + str(reason) + " .. retrying ..")
         self.status = "disconnected"
         self.retry(connector)
 
     def clientConnectionLost(self, connector, reason):
-        logger.info(
-            "Client connection lost: " + str(reason) + " .. retrying ..")
+        LOG.info(
+            "HiveMind connection lost: " + str(reason) + " .. retrying ..")
         self.status = "disconnected"
         self.retry(connector)
 
@@ -117,13 +115,13 @@ class JarbasDrone(WebSocketClientFactory, ReconnectingClientFactory):
 
     def sendRaw(self, data):
         if self.client is None:
-            logger.error("Client is none")
+            LOG.error("Client is none")
             return
         self.client.sendMessage(data, isBinary=True)
 
     def sendMessage(self, type, data, context=None):
         if self.client is None:
-            logger.error("Client is none")
+            LOG.error("Client is none")
             return
         if context is None:
             context = {}
