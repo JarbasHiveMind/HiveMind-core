@@ -110,16 +110,7 @@ class HiveMind(WebSocketServerFactory):
         self.bus.emit(Message(type, data, context))
 
     def register_mycroft_messages(self):
-        # HACK, TODO find why failing
-        # self.bus.on('message', self.handle_message)
-
-        def wrapper(cl, message):
-            message = Message.deserialize(message)
-            self.handle_message(message)
-
         self.bus.on("message", self.handle_message)
-        # self.bus.client.on_message = wrapper
-
         self.bus.on('hive.client.broadcast', self.handle_broadcast)
         self.bus.on('hive.client.send', self.handle_send)
 
@@ -187,7 +178,7 @@ class HiveMind(WebSocketServerFactory):
 
             # messages/skills/intents per user
             if message.msg_type in client.blacklist.get("messages", []):
-                LOG.warning(client.peer + " sent a blacklisted message " \
+                LOG.warning(client.peer + " sent a blacklisted message "
                                           "type: " + message.msg_type)
                 return
             # TODO check intent / skill that will trigger
