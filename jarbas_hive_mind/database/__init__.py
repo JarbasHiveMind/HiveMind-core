@@ -9,8 +9,6 @@ from jarbas_hive_mind.settings import CLIENTS_DB
 
 from sqlalchemy.ext.declarative import declarative_base
 
-__author__ = "JarbasAI"
-
 
 Base = declarative_base()
 
@@ -74,7 +72,7 @@ class ClientDatabase(object):
                 return True
             return False
 
-    def change_api(self, old_key, new_key):
+    def change_key(self, old_key, new_key):
         with session_scope(self.db) as session:
             user = self.get_client_by_api_key(old_key)
             if not user:

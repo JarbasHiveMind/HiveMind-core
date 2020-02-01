@@ -42,7 +42,8 @@ class HiveMindSlaveProtocol(WebSocketClientProtocol):
         self.factory.client = None
         self.factory.status = "disconnected"
 
-    def serialize_message(self, message):
+    @staticmethod
+    def serialize_message(message):
         # convert a Message object into raw data that can be sent over
         # websocket
         if hasattr(message, 'serialize'):
@@ -65,15 +66,15 @@ class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
     # initialize methods
     def register_mycroft_messages(self):
         self.bus.on("hive.mind.message.received",
-                    self.handle_receive_server_message)
+                    self.handle_incoming_message)
         self.bus.on("hive.mind.message.send",
-                    self.handle_send_server_message)
+                    self.handle_outgoing_message)
 
     def shutdown(self):
         self.bus.remove("hive.mind.message.received",
-                        self.handle_receive_server_message)
+                        self.handle_incoming_message)
         self.bus.remove("hive.mind.message.send",
-                        self.handle_send_server_message)
+                        self.handle_outgoing_message)
 
     # websocket handlers
     def clientConnectionFailed(self, connector, reason):
@@ -89,7 +90,7 @@ class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
         self.retry(connector)
 
     # mycroft handlers
-    def handle_receive_server_message(self, message):
+    def handle_incoming_message(self, message):
         server_msg = message.data.get("payload")
         is_file = message.data.get("isBinary")
         if is_file:
@@ -100,7 +101,7 @@ class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
             message = Message.deserialize(server_msg)
             self.bus.emit(message)
 
-    def handle_send_server_message(self, message):
+    def handle_outgoing_message(self, message):
         server_msg = message.data.get("payload")
         is_file = message.data.get("isBinary")
         if is_file:
@@ -110,7 +111,8 @@ class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
             # send message to server
             server_msg = Message.deserialize(server_msg)
             server_msg.context["platform"] = platform
-            self.sendMessage(server_msg.type, server_msg.data,
+            self.sendMessage(server_msg.msg_type,
+                             server_msg.data,
                              server_msg.context)
 
     def sendRaw(self, data):

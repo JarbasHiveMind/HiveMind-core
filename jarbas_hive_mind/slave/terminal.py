@@ -41,13 +41,13 @@ class HiveMindTerminal(WebSocketClientFactory, ReconnectingClientFactory):
 
     # websocket handlers
     def clientConnectionFailed(self, connector, reason):
-        LOG.info("Client connection failed: " + str(
+        LOG.info("HiveMind connection failed: " + str(
             reason) + " .. retrying ..")
         self.status = "disconnected"
         self.retry(connector)
 
     def clientConnectionLost(self, connector, reason):
-        LOG.info("Client connection lost: " + str(
+        LOG.info("HiveMind connection lost: " + str(
             reason) + " .. retrying ..")
         self.status = "disconnected"
         self.retry(connector)
