@@ -1,7 +1,7 @@
 from json_database import JsonStorage
 from os.path import join, exists, isdir
 from os import makedirs
-from jarbas_hive_mind.settings import DEFAULT_PORT, DATA_PATH, CERTS_PATH, DB_PATH
+from jarbas_hive_mind.settings import DEFAULT_PORT, DATA_PATH, CERTS_PATH
 
 
 _DEFAULT_CONFIG = join(DATA_PATH, "HiveMind.conf")
@@ -17,9 +17,8 @@ def default_config():
         "ssl_certfile": "HiveMind.crt",
         "ssl_keyfile": "HiveMind.key"
     }
-    default["database"] = {
-        "clients": "sqlite:///" + join(DB_PATH, "clients.db")
-    }
+    default["database"] = join(DATA_PATH, "database", "clients.db")
+
     default["log_blacklist"] = []
     default["mycroft_bus"] = {
         "host": "0.0.0.0",

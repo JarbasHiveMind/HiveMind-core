@@ -3,13 +3,11 @@ import base64
 from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
 from jarbas_hive_mind.database import ClientDatabase
+from jarbas_hive_mind.exceptions import UnauthorizedKeyError
 from jarbas_utils.log import LOG
 from jarbas_utils.messagebus import Message, get_mycroft_bus
 
-
-platform = "HiveMindV0.5"
-
-users = ClientDatabase()
+platform = "HiveMindV0.6"
 
 
 # protocol
@@ -27,8 +25,11 @@ class HiveMindProtocol(WebSocketServerProtocol):
         self.platform = request.headers.get("platform", "unknown")
 
         try:
-            user = users.get_client_by_api_key(key)
-        except:
+            with ClientDatabase() as users:
+                user = users.get_client_by_api_key(key)
+                if not user:
+                    raise UnauthorizedKeyError
+        except UnauthorizedKeyError:
             LOG.info("Client provided an invalid api key")
             self.factory.mycroft_send("hive.client.connection.error",
                                       {"error": "invalid api key",
@@ -36,10 +37,12 @@ class HiveMindProtocol(WebSocketServerProtocol):
                                        "api_key": key,
                                        "platform": self.platform},
                                       context)
-            raise ValueError("Invalid API key")
+            raise
+
         # send message to internal mycroft bus
         data = {"ip": ip, "headers": request.headers}
-        self.blacklist = users.get_blacklist_by_api_key(key)
+        with ClientDatabase() as users:
+            self.blacklist = users.get_blacklist_by_api_key(key)
         self.factory.mycroft_send("hive.client.connect", data, context)
         # return a pair with WS protocol spoken (or None for any) and
         # custom headers to send in initial WS opening handshake HTTP response

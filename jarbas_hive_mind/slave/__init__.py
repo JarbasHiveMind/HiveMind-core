@@ -34,6 +34,9 @@ class HiveMindSlaveProtocol(WebSocketClientProtocol):
                                       data))
 
     def onClose(self, wasClean, code, reason):
+        if "WebSocket connection upgrade failed":
+            # key rejected
+            LOG.error("Key rejected")
         LOG.info("WebSocket connection closed: {0}".format(reason))
         self.factory.bus.emit(Message("hive.mind.connection.closed",
                                       {"wasClean": wasClean,

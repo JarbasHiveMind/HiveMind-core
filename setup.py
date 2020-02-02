@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='jarbas_hive_mind',
-    version='0.5.1',
+    version='0.6.0',
     packages=['jarbas_hive_mind',
               'jarbas_hive_mind.master',
               'jarbas_hive_mind.slave',
@@ -15,8 +15,7 @@ setup(
                       "autobahn",
                       "twisted",
                       "jarbas_utils>=0.4.1",
-                      "json_database",
-                      "sqlalchemy"],
+                      "json_database"],
     url='https://github.com/JarbasAl/hive_mind',
     license='MIT',
     author='jarbasAI',
