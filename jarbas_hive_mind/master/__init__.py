@@ -30,7 +30,7 @@ class HiveMindProtocol(WebSocketServerProtocol):
                 if not user:
                     raise UnauthorizedKeyError
         except UnauthorizedKeyError:
-            LOG.info("Client provided an invalid api key")
+            LOG.error("Client provided an invalid api key")
             self.factory.mycroft_send("hive.client.connection.error",
                                       {"error": "invalid api key",
                                        "ip": ip,

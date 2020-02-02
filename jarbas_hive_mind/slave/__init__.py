@@ -5,6 +5,7 @@ from twisted.internet.protocol import ReconnectingClientFactory
 
 from jarbas_utils.log import LOG
 from jarbas_utils.messagebus import Message, get_mycroft_bus
+from jarbas_hive_mind.exceptions import UnauthorizedKeyError
 
 platform = "HiveMindSlaveV0.1"
 
@@ -34,16 +35,20 @@ class HiveMindSlaveProtocol(WebSocketClientProtocol):
                                       data))
 
     def onClose(self, wasClean, code, reason):
-        if "WebSocket connection upgrade failed":
+        if "WebSocket connection upgrade failed" in reason:
             # key rejected
             LOG.error("Key rejected")
-        LOG.info("WebSocket connection closed: {0}".format(reason))
+        LOG.warning("HiveMind WebSocket connection closed: {0}".format(reason))
         self.factory.bus.emit(Message("hive.mind.connection.closed",
                                       {"wasClean": wasClean,
-                                           "reason": reason,
-                                           "code": code}))
+                                       "reason": reason,
+                                       "code": code}))
         self.factory.client = None
         self.factory.status = "disconnected"
+        if "WebSocket connection upgrade failed" in reason:
+            # key rejected
+            LOG.error("Key rejected")
+            raise UnauthorizedKeyError
 
     @staticmethod
     def serialize_message(message):
@@ -81,13 +86,13 @@ class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
 
     # websocket handlers
     def clientConnectionFailed(self, connector, reason):
-        LOG.info(
+        LOG.error(
             "HiveMind connection failed: " + str(reason) + " .. retrying ..")
         self.status = "disconnected"
         self.retry(connector)
 
     def clientConnectionLost(self, connector, reason):
-        LOG.info(
+        LOG.error(
             "HiveMind connection lost: " + str(reason) + " .. retrying ..")
         self.status = "disconnected"
         self.retry(connector)
