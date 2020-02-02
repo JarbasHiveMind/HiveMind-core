@@ -28,6 +28,7 @@ def start_mind(config=None, bus=None):
 
 
 if __name__ == '__main__':
+    # TODO argparse
     start_mind()
 
     # that's it, now external applications can connect to the HiveMind

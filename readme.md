@@ -5,6 +5,7 @@ check [examples](./examples) for setup
 - run add_keys to add authorized connection
 - run mycroft_master in mycroft device
 
+![](./hivemind.png)
 
 ## Terminals
 
