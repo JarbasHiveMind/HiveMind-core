@@ -48,8 +48,7 @@ class HiveMindTerminalProtocol(WebSocketClientProtocol):
                     sync=False,
                     doNotCompress=False):
         if self.factory.crypto_key and not isBinary:
-            payload = encrypt_as_json(self.factory.crypto_key,
-                                      bytes(payload, encoding="utf-8"))
+            payload = encrypt_as_json(self.factory.crypto_key, payload)
         if isinstance(payload, str):
             payload = bytes(payload, encoding="utf-8")
         super().sendMessage(payload, isBinary, fragmentSize=fragmentSize,
