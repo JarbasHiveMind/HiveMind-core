@@ -12,7 +12,7 @@ check [examples](./examples) for setup
 - [Remote Cli](https://github.com/OpenJarbas/HiveMind-cli)
 - [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)
 - [Webchat Satellite]() - Coming soon
-- [Https Bridge]() - Coming soon
+- [REST (https) Terminal]() - Coming soon
 - [MQTT Terminal]() - Coming soon
 
 ## Bridges
