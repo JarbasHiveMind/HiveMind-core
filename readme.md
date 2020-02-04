@@ -33,6 +33,9 @@ check [examples](./examples) for setup
 
 The glocal mycroft bus
 
+Red - original message
+
+Yellow - reply message
 
 #### Broadcast
 
@@ -74,4 +77,4 @@ Propagate message and receive answers from everyone
 Propagate message until response is found and send response trough
 Rendevouz/Router Node
 
-![](./data_flow/cascade.gif)
+![](./data_flow/rendevouz.gif)
