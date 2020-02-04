@@ -18,7 +18,7 @@ if not isdir(DB_PATH):
 CLIENTS_DB = "sqlite:///" + join(DB_PATH, "clients.db")
 
 DEFAULT_PORT = 5678
-USE_SSL = False
+USE_SSL = True
 
 LOG_BLACKLIST = []
 
@@ -27,52 +27,4 @@ MYCROFT_WEBSOCKET_CONFIG = {
     "port": 8181,
     "route": "/core",
     "ssl": False
-}
-
-STT_CONFIG = {"stt": {
-    "module": "google",
-    "deepspeech_server": {
-        "uri": "http://localhost:8080/stt"
-    },
-    "kaldi": {
-        "uri": "http://localhost:8080/client/dynamic/recognize"
-    }
-}}
-
-LISTENER_CONFIG = {
-    "listener": {
-        "sample_rate": 16000,
-        "channels": 1,
-        "record_wake_words": False,
-        "record_utterances": False,
-        "phoneme_duration": 120,
-        "multiplier": 1.0,
-        "energy_ratio": 1.5,
-        "wake_word": "hey mycroft",
-        "stand_up_word": "wake up"
-    },
-    "hotwords": {
-        "hey mycroft": {
-            "module": "pocketsphinx",
-            "phonemes": "HH EY . M AY K R AO F T",
-            "threshold": 1e-90,
-            "lang": "en-us"
-        },
-        "thank you": {
-            "module": "pocketsphinx",
-            "phonemes": "TH AE NG K . Y UW .",
-            "threshold": 1e-1,
-            "listen": False,
-            "utterance": "thank you",
-            "active": False,
-            "sound": "",
-            "lang": "en-us"
-        },
-        "wake up": {
-            "module": "pocketsphinx",
-            "phonemes": "W EY K . AH P",
-            "threshold": 1e-20,
-            "lang": "en-us"
-        }
-    }
 }

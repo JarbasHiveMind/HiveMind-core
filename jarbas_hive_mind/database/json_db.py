@@ -7,7 +7,7 @@ from jarbas_utils.log import LOG
 class Client:
     def __init__(self, id, api_key, name="", mail="",
                  description="", is_admin=False, last_seen=-1,
-                 blacklist=None):
+                 blacklist=None, crypto_key=None):
         self.client_id = id
         self.description = description
         self.api_key = api_key
@@ -15,6 +15,7 @@ class Client:
         self.mail = mail
         self.last_seen = last_seen
         self.is_admin = is_admin
+        self.crypto_key = crypto_key
         self.blacklist = blacklist or {
             "messages": [],
             "skills": [],
@@ -52,6 +53,21 @@ class JsonClientDatabase(JsonDatabase):
         self.update_item(item_id, user)
         return True
 
+    def change_crypto_key(self, api_key, new_key):
+        user = self.get_client_by_api_key(api_key)
+        if not user:
+            return False
+        item_id = self.get_item_id(user)
+        user["crypto_key"] = new_key
+        self.update_item(item_id, user)
+        return True
+
+    def get_crypto_key(self, api_key):
+        user = self.get_client_by_api_key(api_key)
+        if not user:
+            return None
+        return user["crypto_key"]
+
     def change_name(self, new_name, key):
         user = self.get_client_by_api_key(key)
         if not user:
@@ -88,7 +104,7 @@ class JsonClientDatabase(JsonDatabase):
         return self.search_by_value("name", name)
 
     def add_client(self, name=None, mail=None, key="", admin=None,
-                   blacklist=None):
+                   blacklist=None, crypto_key="666"):
         user = self.get_client_by_api_key(key)
         item_id = self.get_item_id(user)
         if item_id >= 0:
@@ -100,6 +116,7 @@ class JsonClientDatabase(JsonDatabase):
                 user["blacklist"] = blacklist
             if admin is not None:
                 user["is_admin"] = admin
+            user["crypto_key"] = crypto_key
 
             self.update_item(item_id, user)
         else:

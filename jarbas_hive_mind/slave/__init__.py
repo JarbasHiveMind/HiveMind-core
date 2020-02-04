@@ -6,8 +6,11 @@ from twisted.internet.protocol import ReconnectingClientFactory
 from jarbas_utils.log import LOG
 from jarbas_utils.messagebus import Message, get_mycroft_bus
 from jarbas_hive_mind.exceptions import UnauthorizedKeyError
+from jarbas_hive_mind.utils import decrypt_from_json, encrypt_as_json, \
+    serialize_message
 
-platform = "HiveMindSlaveV0.1"
+
+platform = "HiveMindSlaveV0.2"
 
 
 class HiveMindSlaveProtocol(WebSocketClientProtocol):
@@ -27,12 +30,21 @@ class HiveMindSlaveProtocol(WebSocketClientProtocol):
     def onMessage(self, payload, isBinary):
         LOG.info("status: " + self.factory.status)
         if not isBinary:
-            payload = payload.decode("utf-8")
+            payload = self.decode(payload)
             data = {"payload": payload, "isBinary": isBinary}
         else:
             data = {"payload": None, "isBinary": isBinary}
         self.factory.bus.emit(Message("hive.mind.message.received",
                                       data))
+
+    def decode(self, payload):
+        payload = payload.decode("utf-8")
+        if self.factory.crypto_key:
+            LOG.debug("Decrypting message with key: {key}".format(
+                key=self.factory.crypto_key))
+            payload = decrypt_from_json(self.factory.crypto_key, payload)
+        msg = json.loads(payload)
+        return msg
 
     def onClose(self, wasClean, code, reason):
         if "WebSocket connection upgrade failed" in reason:
@@ -50,23 +62,31 @@ class HiveMindSlaveProtocol(WebSocketClientProtocol):
             LOG.error("Key rejected")
             raise UnauthorizedKeyError
 
-    @staticmethod
-    def serialize_message(message):
-        # convert a Message object into raw data that can be sent over
-        # websocket
-        if hasattr(message, 'serialize'):
-            return message.serialize()
-        else:
-            return json.dumps(message.__dict__)
+    def sendMessage(self,
+                    payload,
+                    isBinary=False,
+                    fragmentSize=None,
+                    sync=False,
+                    doNotCompress=False):
+        if self.factory.crypto_key and not isBinary:
+            LOG.debug("Encrypting message with key: {key}".format(
+                key=self.factory.crypto_key))
+            payload = encrypt_as_json(self.factory.crypto_key,
+                                      bytes(payload, encoding="utf-8"))
+        if isinstance(payload, str):
+            payload = bytes(payload, encoding="utf-8")
+        super().sendMessage(payload, isBinary, fragmentSize=fragmentSize,
+                            sync=sync, doNotCompress=doNotCompress)
 
 
 class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
     protocol = HiveMindSlaveProtocol
 
-    def __init__(self, bus=None, *args, **kwargs):
+    def __init__(self, bus=None, crypto_key=None, *args, **kwargs):
         super(HiveMindSlave, self).__init__(*args, **kwargs)
         self.client = None
         self.status = "disconnected"
+        self.crypto_key = crypto_key
         # mycroft_ws
         self.bus = bus or get_mycroft_bus()
         self.register_mycroft_messages()
@@ -135,8 +155,10 @@ class HiveMindSlave(WebSocketClientFactory, ReconnectingClientFactory):
             return
         if context is None:
             context = {}
-        msg = self.client.serialize_message(Message(type, data, context))
+        msg = serialize_message(Message(type, data, context))
+
         self.client.sendMessage(msg, isBinary=False)
+
         self.bus.emit(Message("hive.mind.message.sent",
                               {"type": type,
                                "data": data,

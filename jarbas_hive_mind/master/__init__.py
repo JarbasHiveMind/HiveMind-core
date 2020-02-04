@@ -1,13 +1,14 @@
 import base64
-
 from autobahn.twisted.websocket import WebSocketServerProtocol, \
     WebSocketServerFactory
 from jarbas_hive_mind.database import ClientDatabase
 from jarbas_hive_mind.exceptions import UnauthorizedKeyError
 from jarbas_utils.log import LOG
 from jarbas_utils.messagebus import Message, get_mycroft_bus
+from jarbas_hive_mind.utils import decrypt_from_json, encrypt_as_json
 
-platform = "HiveMindV0.6"
+
+platform = "HiveMindV0.7"
 
 
 # protocol
@@ -29,6 +30,7 @@ class HiveMindProtocol(WebSocketServerProtocol):
                 user = users.get_client_by_api_key(key)
                 if not user:
                     raise UnauthorizedKeyError
+                self.crypto_key = users.get_crypto_key(key)
         except UnauthorizedKeyError:
             LOG.error("Client provided an invalid api key")
             self.factory.mycroft_send("hive.client.connection.error",
@@ -65,8 +67,9 @@ class HiveMindProtocol(WebSocketServerProtocol):
             LOG.info(
                 "Binary message received: {0} bytes".format(len(payload)))
         else:
+            payload = self.decode(payload)
             LOG.info(
-                "Text message received: {0}".format(payload.decode('utf8')))
+                "Text message received: {0}".format(payload))
 
         self.factory.process_message(self, payload, isBinary)
 
@@ -90,6 +93,27 @@ class HiveMindProtocol(WebSocketServerProtocol):
         data = {"ip": ip, "reason": "connection lost"}
         context = {"source": self.peer}
         self.factory.mycroft_send("hive.client.disconnect", data, context)
+
+    def decode(self, payload):
+        payload = payload.decode("utf-8")
+        if self.crypto_key:
+            payload = decrypt_from_json(self.crypto_key, payload)
+        return payload
+
+    def sendMessage(self,
+                    payload,
+                    isBinary=False,
+                    fragmentSize=None,
+                    sync=False,
+                    doNotCompress=False):
+        if self.crypto_key and not isBinary:
+            payload = encrypt_as_json(self.crypto_key, payload)
+        if isinstance(payload, str):
+            payload = bytes(payload, encoding="utf-8")
+        super().sendMessage(payload, isBinary,
+                            fragmentSize=fragmentSize,
+                            sync=sync,
+                            doNotCompress=doNotCompress)
 
 
 # server internals
@@ -171,7 +195,6 @@ class HiveMind(WebSocketServerFactory):
             pass
         else:
             # add context for this message
-            payload = payload.decode("utf-8")
             message = Message.deserialize(payload)
             message.context["source"] = client.peer
             message.context["destination"] = "skills"

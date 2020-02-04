@@ -27,6 +27,7 @@ class Client(Base):
     description = Column(Text)
     api_key = Column(String)
     name = Column(String)
+    crypto_key = Column(String)
     mail = Column(String)
     last_seen = Column(Integer, default=0)
     is_admin = Column(Boolean, default=False)
@@ -65,6 +66,13 @@ class SQLClientDatabase:
         user.api_key = new_key
         return True
 
+    def change_crypto_key(self, api_key, new_key):
+        user = self.get_client_by_api_key(api_key)
+        if not user:
+            return False
+        user.crypto_key = new_key
+        return True
+
     def change_name(self, new_name, key):
         user = self.get_client_by_api_key(key)
         if not user:
@@ -91,8 +99,14 @@ class SQLClientDatabase:
     def get_client_by_name(self, name):
         return self.session.query(Client).filter_by(name=name).all()
 
+    def get_crypto_key(self, api_key):
+        user = self.get_client_by_api_key(api_key)
+        if not user:
+            return None
+        return user.crypto_key
+
     def add_client(self, name=None, mail=None, key="", admin=False,
-                   blacklist="{}"):
+                   blacklist="{}", crypto_key=None):
         if isinstance(blacklist, dict):
             blacklist = json.dumps(blacklist)
 
@@ -102,6 +116,7 @@ class SQLClientDatabase:
             user.mail = mail
             user.blacklist = blacklist
             user.is_admin = admin
+            user.crypto_key = crypto_key if crypto_key else user.crypto_key
         else:
             user = Client(api_key=key, name=name, mail=mail,
                           blacklist=blacklist, id=self.total_clients() + 1,

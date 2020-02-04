@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='jarbas_hive_mind',
-    version='0.6.1',
+    version='0.7.0',
     packages=['jarbas_hive_mind',
               'jarbas_hive_mind.master',
               'jarbas_hive_mind.slave',
@@ -14,8 +14,9 @@ setup(
                       "service_identity",
                       "autobahn",
                       "twisted",
-                      "jarbas_utils>=0.4.1",
-                      "json_database"],
+                      "jarbas_utils>=0.5.0",
+                      "json_database",
+                      "pycryptodome"],
     url='https://github.com/JarbasAl/hive_mind',
     license='MIT',
     author='jarbasAI',
