@@ -17,6 +17,7 @@ check [examples](./examples) for setup
 
 ## Bridges
 
+- [Mattermost Bridge](https://github.com/JarbasAl/HiveMind_mattermost_bridge)
 - [HackChat Bridge](https://github.com/OpenJarbas/HiveMind-HackChatBridge)
 - [Twitch Bridge]() - Coming soon
 - [Facebook Bridge]() - Coming soon
