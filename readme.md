@@ -56,26 +56,3 @@ Send message up the authority chain, never to a slave
 
 ![](./data_flow/escalate.gif)
 
-
-#### Ask
-
-
-Send message up the authority chain until first answer, also forwarded
-to slaves
-
-![](./data_flow/ask.gif)
-
-#### Cascade
-
-
-Propagate message and receive answers from everyone
-
-![](./data_flow/cascade.gif)
-
-#### Rendevouz
-
-
-Propagate message until response is found and send response trough
-Rendevouz/Router Node
-
-![](./data_flow/rendevouz.gif)
