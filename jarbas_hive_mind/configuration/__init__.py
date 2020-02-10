@@ -1,7 +1,8 @@
 from json_database import JsonStorage
 from os.path import join, exists, isdir
 from os import makedirs
-from jarbas_hive_mind.settings import DEFAULT_PORT, DATA_PATH, CERTS_PATH
+from jarbas_hive_mind.settings import DEFAULT_PORT, DATA_PATH, CERTS_PATH, \
+    MYCROFT_WEBSOCKET_CONFIG
 
 
 _DEFAULT_CONFIG = join(DATA_PATH, "HiveMind.conf")
@@ -20,12 +21,7 @@ def default_config():
     default["database"] = join(DATA_PATH, "database", "clients.db")
 
     default["log_blacklist"] = []
-    default["mycroft_bus"] = {
-        "host": "0.0.0.0",
-        "port": 8181,
-        "route": "/core",
-        "ssl": False
-    }
+    default["mycroft_bus"] = MYCROFT_WEBSOCKET_CONFIG
 
     return default
 

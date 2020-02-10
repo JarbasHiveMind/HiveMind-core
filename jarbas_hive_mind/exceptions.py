@@ -29,5 +29,5 @@ class SecureConnectionFailed(ConnectionError):
     """ Could not connect by SSL """
 
 
-class HiveMindEntryPointNotFound(DNSLookupError):
+class HiveMindEntryPointNotFound(ConnectionError, DNSLookupError):
     """ can not connect to provided address """

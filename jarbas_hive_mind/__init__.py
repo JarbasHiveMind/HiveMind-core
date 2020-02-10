@@ -2,6 +2,7 @@ import base64
 from twisted.internet import reactor, ssl
 from jarbas_hive_mind.master import HiveMind, HiveMindProtocol
 from jarbas_hive_mind.configuration import CONFIGURATION
+from jarbas_hive_mind.settings import DEFAULT_PORT
 from jarbas_hive_mind.utils import create_self_signed_cert
 from jarbas_hive_mind.exceptions import SecureConnectionFailed, ConnectionError
 from jarbas_utils.messagebus import get_mycroft_bus
@@ -12,7 +13,7 @@ from os.path import join, exists, isfile
 class HiveMindConnection:
     _autorun = True
 
-    def __init__(self, host="127.0.0.1", port=5678):
+    def __init__(self, host="127.0.0.1", port=DEFAULT_PORT):
         host = host.replace("https://", "wss://").replace("http://", "ws://")
         if "wss://" in host:
             secure = True
@@ -86,7 +87,7 @@ class HiveMindConnection:
 class HiveMindListener:
     _autorun = True
 
-    def __init__(self, port=5678, max_cons=-1, bus=None):
+    def __init__(self, port=DEFAULT_PORT, max_cons=-1, bus=None):
         self.host = "0.0.0.0"
         self.port = port
         self.max_cons = max_cons
@@ -196,27 +197,9 @@ class HiveMindListener:
             return self.unsafe_listen()
 
 
-def get_listener(port=5678, max_connections=-1, bus=None):
+def get_listener(port=DEFAULT_PORT, max_connections=-1, bus=None):
     return HiveMindListener(port, max_connections, bus)
 
 
-def get_connection(host="127.0.0.1", port=5678):
+def get_connection(host="127.0.0.1", port=DEFAULT_PORT):
     return HiveMindConnection(host, port)
-
-
-if __name__ == '__main__':
-
-    def connect_to_hivemind(host="127.0.0.1",
-                            port=5678, name="Jarbas Dummy Terminal",
-                            key="cli_key", useragent="JarbasDummyTerminalV0.1"):
-        con = HiveMindConnection(host, port)
-
-        from jarbas_hive_mind.slave.terminal import HiveMindTerminal
-        terminal = HiveMindTerminal(con.address,
-                                    headers=con.get_headers(name, key),
-                                    useragent=useragent)
-
-        con.secure_connect(terminal)
-
-    # client
-    # connect_to_hivemind()

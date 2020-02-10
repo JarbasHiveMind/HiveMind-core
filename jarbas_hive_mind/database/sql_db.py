@@ -23,7 +23,7 @@ def props(cls):
 
 class Client(Base):
     __tablename__ = "clients"
-    id = Column(Integer, primary_key=True)
+    client_id = Column(Integer, primary_key=True)
     description = Column(Text)
     api_key = Column(String)
     name = Column(String)
@@ -119,7 +119,8 @@ class SQLClientDatabase:
             user.crypto_key = crypto_key if crypto_key else user.crypto_key
         else:
             user = Client(api_key=key, name=name, mail=mail,
-                          blacklist=blacklist, id=self.total_clients() + 1,
+                          blacklist=blacklist,
+                          client_id=self.total_clients() + 1,
                           is_admin=admin)
             self.session.add(user)
 

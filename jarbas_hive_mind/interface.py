@@ -32,7 +32,9 @@ class HiveMindSlaveInterface:
         if isinstance(payload, Message):
             payload = payload.serialize()
         payload = {"msg_type": "bus",
-                   "payload": payload
+                   "payload": payload,
+                   "node": self.node_id,
+                   "source_peer": self.peer
                    }
         self.send(payload)
 
@@ -72,7 +74,6 @@ class HiveMindSlaveInterface:
                                "source": self.peer})
             self.bus.emit(message)
 
-    # WIP ZONE
     def escalate(self, payload, msg_data=None):
         msg_data = msg_data or {}
         payload = {"msg_type": "escalate",
@@ -146,7 +147,8 @@ class HiveMindMasterInterface:
         payload = {"msg_type": "broadcast",
                    "payload": payload,
                    "route": msg_data.get("route", []),
-                   "source_peer": self.peer
+                   "source_peer": self.peer,
+                   "node": self.node_id
                    }
         no_send = [n["source"] for n in msg_data.get("route", [])]
         self.send_to_many(payload, no_send)
@@ -172,7 +174,6 @@ class HiveMindMasterInterface:
                                "source": self.peer})
             self.bus.emit(message)
 
-    # WIP ZONE
     def escalate(self, payload, msg_data=None):
         msg_data = msg_data or {}
         payload = {"msg_type": "escalate",

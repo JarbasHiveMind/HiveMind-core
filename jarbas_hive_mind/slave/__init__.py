@@ -86,14 +86,10 @@ class HiveMindSlave(HiveMindTerminal):
             self.interface.send(payload)
 
     # parsed protocol messages
-    def handle_incoming_mycroft(self, message):
+    def handle_incoming_mycroft(self, payload):
         """ HiveMind is sending a mycroft bus message"""
         # you are a slave_connection, just forward to the bus
-        self.bus.emit(message)
-
-    # HiveMind protocol messages
-    def handle_incoming_message(self, payload):
-        self.bus.emit(Message("hive.mind.message.received", payload))
+        self.bus.emit(Message("hive.message.received", payload))
         super().handle_incoming_message(payload)
 
     # websocket handlers
@@ -103,6 +99,6 @@ class HiveMindSlave(HiveMindTerminal):
 
     def send_to_hivemind_bus(self, payload):
         super().send_to_hivemind_bus(payload)
-        self.bus.emit(Message("hive.mind.message.sent",
+        self.bus.emit(Message("hive.message.sent",
                               {"payload": payload}))
 

@@ -5,10 +5,10 @@ from jarbas_utils.log import LOG
 
 
 class Client:
-    def __init__(self, id, api_key, name="", mail="",
+    def __init__(self, client_id, api_key, name="", mail="",
                  description="", is_admin=False, last_seen=-1,
                  blacklist=None, crypto_key=None):
-        self.client_id = id
+        self.client_id = client_id
         self.description = description
         self.api_key = api_key
         self.name = name
@@ -104,7 +104,7 @@ class JsonClientDatabase(JsonDatabase):
         return self.search_by_value("name", name)
 
     def add_client(self, name=None, mail=None, key="", admin=None,
-                   blacklist=None, crypto_key="666"):
+                   blacklist=None, crypto_key=None):
         user = self.get_client_by_api_key(key)
         item_id = self.get_item_id(user)
         if item_id >= 0:
@@ -121,7 +121,8 @@ class JsonClientDatabase(JsonDatabase):
             self.update_item(item_id, user)
         else:
             user = Client(api_key=key, name=name, mail=mail,
-                          blacklist=blacklist, id=self.total_clients() + 1,
+                          blacklist=blacklist,
+                          client_id=self.total_clients() + 1,
                           is_admin=admin)
             self.add_item(user)
 
