@@ -11,6 +11,7 @@ check [examples](./examples) for setup
 
 - [Remote Cli](https://github.com/OpenJarbas/HiveMind-cli)
 - [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)
+- [Flask WebUi](https://github.com/OpenJarbas/HiveMind-flask-terminal)
 - [Webchat Satellite]() - Coming soon
 - [REST (https) Terminal]() - Coming soon
 - [MQTT Terminal]() - Coming soon
