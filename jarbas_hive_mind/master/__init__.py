@@ -18,11 +18,18 @@ class HiveMindProtocol(WebSocketServerProtocol):
     def onConnect(self, request):
 
         LOG.info("Client connecting: {0}".format(request.peer))
-        # validate user
-        userpass_encoded = bytes(request.headers.get("authorization"),
-                                 encoding="utf-8")[2:-1]
+        auth = request.headers.get("authorization")
+        if not auth:
+            cookie = request.headers.get("cookie")
+            if cookie:
+                auth = cookie.replace("X-Authorization=", "")
+                userpass_encoded = bytes(auth, encoding="utf-8")
+        else:
+            userpass_encoded = bytes(auth, encoding="utf-8")[2:-1]
+
         userpass_decoded = base64.b64decode(userpass_encoded).decode("utf-8")
         name, key = userpass_decoded.split(":")
+
         ip = request.peer.split(":")[1]
         context = {"source": self.peer}
         self.platform = request.headers.get("platform", "unknown")
@@ -191,6 +198,7 @@ class HiveMind(WebSocketServerFactory):
         """
        Remove client from list of managed connections.
        """
+
         LOG.info("deregistering client: " + str(client.peer))
         if client.peer in self.clients.keys():
             client_data = self.clients[client.peer] or {}
