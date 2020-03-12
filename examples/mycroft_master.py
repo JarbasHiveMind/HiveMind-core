@@ -1,9 +1,8 @@
 from jarbas_hive_mind import get_listener
 from jarbas_hive_mind.configuration import CONFIGURATION
-from jarbas_utils import create_daemon
 
 
-def start_mind(config=None, bus=None, daemonic=False):
+def start_mind(config=None, bus=None):
 
     config = config or CONFIGURATION
 
@@ -16,10 +15,7 @@ def start_mind(config=None, bus=None, daemonic=False):
     # read port and ssl settings
     listener.load_config(config)
 
-    if daemonic:
-        create_daemon(listener.listen)
-    else:
-        listener.listen()
+    listener.listen()
 
 
 if __name__ == '__main__':

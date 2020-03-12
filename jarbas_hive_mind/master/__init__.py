@@ -8,7 +8,10 @@ from jarbas_utils.messagebus import Message, get_mycroft_bus
 from jarbas_hive_mind.utils import decrypt_from_json, encrypt_as_json
 from jarbas_hive_mind.interface import HiveMindMasterInterface
 import json
-
+from jarbas_hive_mind.utils import get_ip
+from jarbas_hive_mind.discovery.ssdp import SSDPServer
+from jarbas_hive_mind.discovery.upnp_server import UPNPHTTPServer
+import uuid
 
 platform = "HiveMindV0.7"
 
@@ -77,7 +80,7 @@ class HiveMindProtocol(WebSocketServerProtocol):
                 "Binary message received: {0} bytes".format(len(payload)))
         else:
             payload = self.decode(payload)
-            #LOG.debug(
+            # LOG.debug(
             #    "Text message received: {0}".format(payload))
 
         self.factory.on_message(self, payload, isBinary)
@@ -128,7 +131,7 @@ class HiveMindProtocol(WebSocketServerProtocol):
 
 
 class HiveMind(WebSocketServerFactory):
-    def __init__(self, bus=None, *args, **kwargs):
+    def __init__(self, bus=None, announce=True, *args, **kwargs):
         super(HiveMind, self).__init__(*args, **kwargs)
         # list of clients
         self.listener = None
@@ -141,9 +144,40 @@ class HiveMind(WebSocketServerFactory):
         self.register_mycroft_messages()
 
         self.interface = HiveMindMasterInterface(self)
+        self.announce = announce
+        self.upnp_server = None
+        self.ssdp = None
+
+    def start_announcing(self):
+        if self.ssdp is None or self.upnp_server is None:
+            device_uuid = uuid.uuid4()
+            local_ip_address = get_ip()
+            hivemind_socket = self.listener.address.replace("0.0.0.0", local_ip_address)
+            self.upnp_server = UPNPHTTPServer(8088,
+                                              friendly_name="JarbasHiveMind Master",
+                                              manufacturer='JarbasAI',
+                                              manufacturer_url='https://ai-jarbas.gitbook.io/jarbasai/',
+                                              model_description='Jarbas HiveMind',
+                                              model_name="HiveMind-core",
+                                              model_number="0.9",
+                                              model_url="https://github.com/OpenJarbas/HiveMind-core",
+                                              serial_number=platform,
+                                              uuid=device_uuid,
+                                              presentation_url=hivemind_socket,
+                                              host=local_ip_address)
+            self.upnp_server.start()
+
+            self.ssdp = SSDPServer()
+            self.ssdp.register('local',
+                               'uuid:{}::upnp:rootdevice'.format(device_uuid),
+                               'upnp:rootdevice',
+                               self.upnp_server.path)
+            self.ssdp.start()
 
     def bind(self, listener):
         self.listener = listener
+        if self.announce:
+            self.start_announcing()
 
     @property
     def peer(self):
@@ -357,4 +391,3 @@ class HiveMind(WebSocketServerFactory):
                        "payload": message.serialize()
                        }
             self.interface.send(payload, client)
-

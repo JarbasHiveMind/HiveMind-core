@@ -11,6 +11,7 @@ def connect_to_hivemind(host="wss://0.0.0.0", port=5678,
 
     component = HiveMindSlave(bus=bus, headers=con.get_headers(name, key),
                               crypto_key=crypto_key, useragent=useragent)
+                              #,auto_reconnect=True)
 
     # will check url for ssl
     con.connect(component)

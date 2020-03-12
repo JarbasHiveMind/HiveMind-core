@@ -13,6 +13,7 @@ with ClientDatabase() as db:
     name = "test_user"
     key = "test_key"
     db.add_client(name, mail, key, crypto_key=crypto_key, admin=True)
+    db.add_client(name, mail, "dummy_key")
 
     name = "Jarbas Drone"
     key = "drone_key"

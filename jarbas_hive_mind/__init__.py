@@ -8,6 +8,13 @@ from jarbas_hive_mind.exceptions import SecureConnectionFailed, ConnectionError
 from jarbas_utils.messagebus import get_mycroft_bus
 from jarbas_utils.log import LOG
 from os.path import join, exists, isfile
+from twisted.python.log import err
+import logging
+
+logging.getLogger("urllib3.connectionpool").setLevel("INFO")
+logging.getLogger("Service").setLevel("INFO")
+logging.getLogger("Device").setLevel("INFO")
+logging.getLogger("JsonDatabase").setLevel("INFO")
 
 
 class HiveMindConnection:
@@ -59,9 +66,7 @@ class HiveMindConnection:
         component.bind(self)
         LOG.info("Connecting securely to " + self.address)
         contextFactory = ssl.ClientContextFactory()
-        reactor.connectSSL(self.host, self.port, component, contextFactory)
-        if not reactor.running and self._autorun:
-            reactor.run()
+        self._run(reactor.connectSSL(self.host, self.port, component, contextFactory))
         return component
 
     def unsafe_connect(self, component):
@@ -69,19 +74,36 @@ class HiveMindConnection:
         component.bind(self)
         LOG.info("Connecting to " + self.address)
         LOG.warning("This listener is unsecured")
-        reactor.connectTCP(self.host, self.port, component)
-        if not reactor.running and self._autorun:
-            reactor.run()
+        self._run(reactor.connectTCP(self.host, self.port, component))
         return component
 
-    def connect(self, component):
-        if self.is_secure:
+    def _run(self, component):
+
+        def fatalError(reason):
+            print(reason)
+            err(reason, "Absolutely needed the foo, could not get it")
+            reactor.stop()
+
+       # component.addErrback(fatalError)
+
+        if not reactor.running and self._autorun:
             try:
-                return self.secure_connect(component)
-            except ConnectionError:
-                raise SecureConnectionFailed
-        else:
-            return self.unsafe_connect(component)
+                reactor.run()
+            except Exception as e:
+                print(e)
+
+    def connect(self, component):
+        try:
+            if self.is_secure:
+                try:
+                    return self.secure_connect(component)
+                except ConnectionError:
+                    raise SecureConnectionFailed
+            else:
+                return self.unsafe_connect(component)
+        except Exception as e:
+            print(e)
+            raise e
 
 
 class HiveMindListener:
