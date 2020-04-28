@@ -11,6 +11,7 @@ import json
 from jarbas_hive_mind.utils import get_ip
 from jarbas_hive_mind.discovery.ssdp import SSDPServer
 from jarbas_hive_mind.discovery.upnp_server import UPNPHTTPServer
+from jarbas_hive_mind.discovery.zero import ZeroConfAnnounce
 import uuid
 
 platform = "HiveMindV0.7"
@@ -147,12 +148,24 @@ class HiveMind(WebSocketServerFactory):
         self.announce = announce
         self.upnp_server = None
         self.ssdp = None
+        self.zero = None
 
     def start_announcing(self):
+        device_uuid = uuid.uuid4()
+        local_ip_address = get_ip()
+        hivemind_socket = self.listener.address.replace("0.0.0.0",
+                                                        local_ip_address)
+
+        if self.zero is None:
+            LOG.info("Registering zeroconf:HiveMind-websocket " +
+                     hivemind_socket)
+            self.zero = ZeroConfAnnounce(uuid=device_uuid,
+                                         port=self.port,
+                                         host=hivemind_socket)
+            self.zero.daemon = True
+            self.zero.start()
+
         if self.ssdp is None or self.upnp_server is None:
-            device_uuid = uuid.uuid4()
-            local_ip_address = get_ip()
-            hivemind_socket = self.listener.address.replace("0.0.0.0", local_ip_address)
             self.upnp_server = UPNPHTTPServer(8088,
                                               friendly_name="JarbasHiveMind Master",
                                               manufacturer='JarbasAI',
@@ -169,8 +182,8 @@ class HiveMind(WebSocketServerFactory):
 
             self.ssdp = SSDPServer()
             self.ssdp.register('local',
-                               'uuid:{}::upnp:rootdevice'.format(device_uuid),
-                               'upnp:rootdevice',
+                               'uuid:{}::upnp:HiveMind-websocket'.format(device_uuid),
+                               'upnp:HiveMind-websocket',
                                self.upnp_server.path)
             self.ssdp.start()
 
