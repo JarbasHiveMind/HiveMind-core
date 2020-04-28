@@ -27,6 +27,7 @@ check [examples](./examples) for setup
 
 ## Nodes
 
+- [NodeRed](https://github.com/OpenJarbas/HiveMind-NodeRed)
 - [Rendevouz Node]() - Coming soon
 - [Flask Microservices Node]() - Coming soon
 
