@@ -1,5 +1,6 @@
 import base64
 from twisted.internet import reactor, ssl
+from twisted.internet.error import ReactorNotRunning
 from jarbas_hive_mind.master import HiveMind, HiveMindProtocol
 from jarbas_hive_mind.configuration import CONFIGURATION
 from jarbas_hive_mind.settings import DEFAULT_PORT
@@ -180,7 +181,7 @@ class HiveMindListener:
         LOG.info("key created at: " + key)
         LOG.info("crt created at: " + cert)
 
-    def secure_listen(self, key=None, cert=None):
+    def secure_listen(self, key=None, cert=None, factory=None, protocol=None):
         self._use_ssl = True
         key = key or self.ssl_key
         cert = cert or self.ssl_cert
@@ -188,35 +189,53 @@ class HiveMindListener:
         # SSL server context: load server key and certificate
         contextFactory = ssl.DefaultOpenSSLContextFactory(key, cert)
 
-        factory = HiveMind(bus=self.bus)
-        factory.protocol = HiveMindProtocol
+        factory = factory or HiveMind(bus=self.bus)
+        factory.protocol = protocol or HiveMindProtocol
         if self.max_cons >= 0:
             factory.setProtocolOptions(maxConnections=self.max_cons)
         factory.bind(self)
+        self.factory = factory
         reactor.listenSSL(self.port, factory, contextFactory)
         LOG.info("HiveMind Listening: " + self.address)
         if self._autorun and not reactor.running:
             reactor.run()
         return factory
 
-    def unsafe_listen(self):
+    def unsafe_listen(self, factory=None, protocol=None):
         self._use_ssl = False
-        factory = HiveMind(bus=self.bus)
-        factory.protocol = HiveMindProtocol
+        factory = factory or HiveMind(bus=self.bus)
+        factory.protocol = protocol or HiveMindProtocol
         if self.max_cons >= 0:
             factory.setProtocolOptions(maxConnections=self.max_cons)
         factory.bind(self)
+        self.factory = factory
         reactor.listenTCP(self.port, factory)
         LOG.info("HiveMind Listening (UNSECURED): " + self.address)
         if self._autorun and not reactor.running:
             reactor.run()
         return factory
 
-    def listen(self):
+    def listen(self, factory=None, protocol=None):
         if self.is_secure:
-            return self.secure_listen()
+            return self.secure_listen(factory=factory, protocol=protocol)
         else:
-            return self.unsafe_listen()
+            return self.unsafe_listen(factory=factory, protocol=protocol)
+
+    def stop(self):
+        """Stop the reactor and join the reactor thread until it stops.
+        """
+        try:
+            reactor.stop()
+        except ReactorNotRunning:
+            LOG.info("twisted reactor stopped")
+        except Exception as e:
+            LOG.error(e)
+
+    def stop_from_thread(self):
+        reactor.callFromThread(self.stop)
+        for p in reactor.getDelayedCalls():
+            if p.active():
+                p.cancel()
 
 
 def get_listener(port=DEFAULT_PORT, max_connections=-1, bus=None):

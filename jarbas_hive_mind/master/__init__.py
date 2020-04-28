@@ -19,9 +19,9 @@ platform = "HiveMindV0.7"
 
 # protocol
 class HiveMindProtocol(WebSocketServerProtocol):
-    def onConnect(self, request):
 
-        LOG.info("Client connecting: {0}".format(request.peer))
+    @staticmethod
+    def decode_auth(request):
         auth = request.headers.get("authorization")
         if not auth:
             cookie = request.headers.get("cookie")
@@ -29,10 +29,21 @@ class HiveMindProtocol(WebSocketServerProtocol):
                 auth = cookie.replace("X-Authorization=", "")
                 userpass_encoded = bytes(auth, encoding="utf-8")
         else:
-            userpass_encoded = bytes(auth, encoding="utf-8")[2:-1]
+            userpass_encoded = bytes(auth, encoding="utf-8")
+            if userpass_encoded.startswith(b"Basic "):
+                userpass_encoded = userpass_encoded[6:-2]
+            else:
+                userpass_encoded = userpass_encoded[2:-1]
 
         userpass_decoded = base64.b64decode(userpass_encoded).decode("utf-8")
         name, key = userpass_decoded.split(":")
+        return name, key
+
+    def onConnect(self, request):
+
+        LOG.info("Client connecting: {0}".format(request.peer))
+
+        name, key = self.decode_auth(request)
 
         ip = request.peer.split(":")[1]
         context = {"source": self.peer}
