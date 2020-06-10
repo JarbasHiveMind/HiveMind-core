@@ -121,7 +121,10 @@ class HiveMindProtocol(WebSocketServerProtocol):
     def decode(self, payload):
         payload = payload.decode("utf-8")
         if self.crypto_key:
-            payload = decrypt_from_json(self.crypto_key, payload)
+            if "ciphertext" in payload:
+                payload = decrypt_from_json(self.crypto_key, payload)
+            else:
+                LOG.warning("Message was unencrypted")
         return payload
 
     def sendMessage(self,

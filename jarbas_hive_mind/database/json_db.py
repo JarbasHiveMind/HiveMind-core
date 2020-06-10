@@ -103,10 +103,13 @@ class JsonClientDatabase(JsonDatabase):
     def get_clients_by_name(self, name):
         return self.search_by_value("name", name)
 
-    def add_client(self, name=None, mail=None, key="", admin=None,
-                   blacklist=None, crypto_key=None):
+    def add_client(self, name=None, mail=None, key="",
+                   admin=None, blacklist=None, crypto_key="RESISTENCEisFUTILE"):
+
         user = self.get_client_by_api_key(key)
         item_id = self.get_item_id(user)
+        if crypto_key is not None:
+            crypto_key = crypto_key[:16]
         if item_id >= 0:
             if name:
                 user["name"] = name
@@ -121,7 +124,7 @@ class JsonClientDatabase(JsonDatabase):
             self.update_item(item_id, user)
         else:
             user = Client(api_key=key, name=name, mail=mail,
-                          blacklist=blacklist,
+                          blacklist=blacklist, crypto_key=crypto_key,
                           client_id=self.total_clients() + 1,
                           is_admin=admin)
             self.add_item(user)

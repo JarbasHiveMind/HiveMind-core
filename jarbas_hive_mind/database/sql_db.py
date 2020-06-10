@@ -106,11 +106,13 @@ class SQLClientDatabase:
         return user.crypto_key
 
     def add_client(self, name=None, mail=None, key="", admin=False,
-                   blacklist="{}", crypto_key=None):
+                   blacklist="{}", crypto_key="RESISTENCEisFUTILE"):
         if isinstance(blacklist, dict):
             blacklist = json.dumps(blacklist)
 
         user = self.get_client_by_api_key(key)
+        if crypto_key is not None:
+            crypto_key = crypto_key[:16]
         if user:
             user.name = name
             user.mail = mail
@@ -119,7 +121,7 @@ class SQLClientDatabase:
             user.crypto_key = crypto_key if crypto_key else user.crypto_key
         else:
             user = Client(api_key=key, name=name, mail=mail,
-                          blacklist=blacklist,
+                          blacklist=blacklist, crypto_key=crypto_key,
                           client_id=self.total_clients() + 1,
                           is_admin=admin)
             self.session.add(user)
