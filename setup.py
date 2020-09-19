@@ -17,7 +17,7 @@ setup(
                       "twisted",
                       "jarbas_utils>=0.5.0",
                       "json_database",
-                      "pycryptodome",
+                      "pycryptodomex",
                       "upnpclient>=0.0.8"],
     url='https://github.com/JarbasAl/hive_mind',
     license='MIT',
