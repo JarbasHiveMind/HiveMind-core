@@ -1,5 +1,6 @@
-
-![](./resources/logo/hivemind-512.png)
+<p align="center">
+  <img src="./resources/logo/hivemind-512.png">
+</p>
 
 # Stats:
 
