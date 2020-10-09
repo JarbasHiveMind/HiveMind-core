@@ -140,6 +140,8 @@ def serialize_message(message):
 def encrypt_as_json(key, data, nonce=None):
     if isinstance(data, dict):
         data = json.dumps(data)
+    if len(key) > 16:
+        key = key[0:16]
     try:
         ciphertext, tag, nonce = encrypt(key, data, nonce=nonce)
     except:
@@ -152,6 +154,8 @@ def encrypt_as_json(key, data, nonce=None):
 def decrypt_from_json(key, data):
     if isinstance(data, str):
         data = json.loads(data)
+    if len(key) > 16:
+        key = key[0:16]
     ciphertext = unhexlify(data["ciphertext"])
     if data.get("tag") is None:  # web crypto
         ciphertext, tag = ciphertext[:-16], ciphertext[-16:]

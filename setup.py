@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='jarbas_hive_mind',
-    version='0.10.2',
+    version='0.10.3',
     packages=['jarbas_hive_mind',
               'jarbas_hive_mind.master',
               'jarbas_hive_mind.slave',

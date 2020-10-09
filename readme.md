@@ -1,11 +1,33 @@
-# HiveMind
+
+![](./resources/logo/hivemind-512.png)
+
+# Stats:
+
+| [![GitHub stars](https://img.shields.io/github/stars/OpenJarbas/HiveMind-core.svg)](https://github.com/OpenJarbas/HiveMind-core/stargazers)  | [![GitHub last commit](https://img.shields.io/github/last-commit/OpenJarbas/HiveMind-core.svg)](https://github.com/OpenJarbas/HiveMind-core/commits/dev) |
+|:---:|:---:|
+| Please :star: this repo if you find it useful| This shows when this repo was updated for the last time |
+|[![License: Apache License 2.0](https://img.shields.io/crates/l/rustc-serialize.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)| [![contributions welcome](https://img.shields.io/badge/contributions-welcome-blue.svg?style=flat)](https://github.com/OpenJarbas/HiveMind-core/pulls) |
+| I'm using the Apache License 2.0 similar as Mycroft A.I. which means commercial use is allowed | If you have any ideas, they're always welcome.  Either submit an issue or a PR! |
+| [![Buy me a](https://img.shields.io/badge/BuyMeABeer-Paypal-blue.svg)](https://www.paypal.me/AnaIsabelFerreira) | [![Sponsor](https://img.shields.io/badge/SponsorDevelopment-Liberapay-blue.svg)](https://liberapay.com/jarbasAI/) |
+| If you feel the need, now it's as easy as clicking this button!  | You can help sponsoring HiveMind continued development with recurring donations|
+
+# Getting started
+
+At this moment development is in very early stages. 
+You will need to look around existing projects and examples folder until documentation is written and the project a little more polished
+
+
+# Components
+
+Hivemind spans several projects, see links bellow for the current ecosystem
 
 check [examples](./examples) for setup
 
 - run add_keys to add authorized connection
 - run mycroft_master in mycroft device
 
-![](./hivemind.png)
+![](./resources/hivemind.png)
+![](./resources/hive.png)
 
 ## Terminals
 
@@ -32,9 +54,13 @@ check [examples](./examples) for setup
 - [Flask Microservices Node]() - Coming soon
 
 
-### Mesh Networkin
+# Data flow
 
-The glocal mycroft bus
+The hivemind can be seen as a global mycroft bus shared across devices
+
+Bellow are some planned data flows and message types
+
+Documentation coming soon
 
 Red - original message
 
@@ -44,17 +70,23 @@ Yellow - reply message
 
 propagate message to all slaves
 
-![](./data_flow/broadcast.gif)
+![](./resources/data_flow/broadcast.gif)
 
 #### Propagate
 
 Send message to all slaves and masters
 
-![](./data_flow/propagate.gif)
+![](./resources/data_flow/propagate.gif)
 
 #### Escalate
 
 Send message up the authority chain, never to a slave
 
-![](./data_flow/escalate.gif)
+![](./resources/data_flow/escalate.gif)
 
+
+# Credits
+
+[JarbasAl](https://liberapay.com/jarbasAI/)
+
+[AIIX](https://github.com/AIIX/) - hivemind logo
