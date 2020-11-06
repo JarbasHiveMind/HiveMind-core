@@ -4,6 +4,6 @@ autobahn
 twisted
 jarbas_utils>=0.5.1
 json_database
-pycryptodomex
+pycryptodome
 upnpclient>=0.0.8
 zeroconf>=0.1.6
