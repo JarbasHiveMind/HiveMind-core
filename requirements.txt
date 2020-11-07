@@ -3,7 +3,7 @@ service_identity
 autobahn
 twisted
 jarbas_utils>=0.5.1
-json_database
+json_database>=0.2.6
 pycryptodome
 upnpclient>=0.0.8
 zeroconf>=0.1.6

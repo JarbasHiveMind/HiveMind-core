@@ -14,9 +14,15 @@
 
 # Getting started
 
-At this moment development is in very early stages. 
+At this moment development is in early stages but mostly stable. 
+
 You will need to look around existing projects and examples folder until documentation is written and the project a little more polished
 
+The easiest way to get started is by using the [Hivemind Skill](https://github.com/JarbasSkills/skill-hivemind)
+
+The main configuration can be found at
+
+    '~/.cache/json_database/HivemindCore.json'
 
 # Components
 
