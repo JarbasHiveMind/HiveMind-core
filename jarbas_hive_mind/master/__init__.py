@@ -411,10 +411,13 @@ class HiveMind(WebSocketServerFactory):
         if message.msg_type == "complete_intent_failure":
             message.msg_type = "hive.complete_intent_failure"
         message.context = message.context or {}
-        peer = message.context.get("destination")
-        if peer and peer in self.clients:
-            client = self.clients[peer].get("instance")
-            payload = {"msg_type": "bus",
-                       "payload": message.serialize()
-                       }
-            self.interface.send(payload, client)
+        peers = message.context.get("destination") or []
+        if not isinstance(peers, list):
+            peers = [peers]
+        for peer in peers:
+            if peer and peer in self.clients:
+                client = self.clients[peer].get("instance")
+                payload = {"msg_type": "bus",
+                           "payload": message.serialize()
+                           }
+                self.interface.send(payload, client)
