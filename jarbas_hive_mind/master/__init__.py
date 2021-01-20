@@ -14,11 +14,12 @@ from jarbas_hive_mind.discovery.upnp_server import UPNPHTTPServer
 from jarbas_hive_mind.discovery.zero import ZeroConfAnnounce
 import uuid
 
-platform = "HiveMindV0.7"
+
 
 
 # protocol
 class HiveMindProtocol(WebSocketServerProtocol):
+    platform = "HiveMindV0.7"
 
     @staticmethod
     def decode_auth(request):
@@ -72,7 +73,7 @@ class HiveMindProtocol(WebSocketServerProtocol):
         self.factory.mycroft_send("hive.client.connect", data, context)
         # return a pair with WS protocol spoken (or None for any) and
         # custom headers to send in initial WS opening handshake HTTP response
-        headers = {"server": platform}
+        headers = {"server": self.platform}
         return (None, headers)
 
     def onOpen(self):
@@ -188,7 +189,7 @@ class HiveMind(WebSocketServerFactory):
                                               model_name="HiveMind-core",
                                               model_number="0.9",
                                               model_url="https://github.com/OpenJarbas/HiveMind-core",
-                                              serial_number=platform,
+                                              serial_number=self.platform,
                                               uuid=device_uuid,
                                               presentation_url=hivemind_socket,
                                               host=local_ip_address)
@@ -220,7 +221,7 @@ class HiveMind(WebSocketServerFactory):
         data = data or {}
         context = context or {}
         if "client_name" not in context:
-            context["client_name"] = platform
+            context["client_name"] = self.platform
         self.bus.emit(Message(type, data, context))
 
     def register_mycroft_messages(self):
@@ -232,6 +233,10 @@ class HiveMind(WebSocketServerFactory):
         self.bus.remove('hive.send', self.handle_send)
 
     # websocket handlers
+    def handle_register(self, client, platform):
+        """ called before registering a client, subclasses can take
+        additional actions here """
+
     def register_client(self, client, platform=None):
         """
        Add client to list of managed connections.
@@ -253,6 +258,11 @@ class HiveMind(WebSocketServerFactory):
         self.clients[client.peer] = {"instance": client,
                                      "status": "connected",
                                      "platform": platform}
+        self.handle_register(client, platform)
+
+    def handle_unregister(self, client, code, reason, context):
+        """ called before unregistering a client, subclasses can take
+        additional actions here """
 
     def unregister_client(self, client, code=3078,
                           reason="unregister client request"):
@@ -266,12 +276,23 @@ class HiveMind(WebSocketServerFactory):
             j, ip, sock_num = client.peer.split(":")
             context = {"user": client_data.get("names", ["unknown_user"])[0],
                        "source": client.peer}
+            self.handle_unregister(client, code, reason, context)
             self.bus.emit(
                 Message("hive.client.disconnect",
                         {"reason": reason, "ip": ip, "sock": sock_num},
                         context))
             client.sendClose(code, reason)
             self.clients.pop(client.peer)
+
+    def handle_binary_message(self, client, payload):
+        """ binary data handler, can be for example an audio stream """
+
+    def handle_message(self, data, client):
+        """ message handler for non default message types, subclasses can
+        handle their own types here
+
+        data contains payload, msg_type, source_peer, route
+        """
 
     def on_message(self, client, payload, isBinary):
         """
@@ -280,8 +301,7 @@ class HiveMind(WebSocketServerFactory):
         client_protocol, ip, sock_num = client.peer.split(":")
 
         if isBinary:
-            # TODO receive files
-            pass
+            self.handle_binary_message(client, payload)
         else:
             # Check protocol
             data = json.loads(payload)
@@ -306,6 +326,8 @@ class HiveMind(WebSocketServerFactory):
                 self.handle_broadcast_message(data, client)
             elif msg_type == "escalate":
                 self.handle_escalate_message(data, client)
+            else:
+                self.handle_message(data, client)
 
     # HiveMind protocol messages -  from DOWNstream
     def handle_bus_message(self, payload, client):
