@@ -65,7 +65,7 @@ The main configuration can be found at
 
 ## Libraries
 
-- [HiveMindJs](https://jarbashivemind.github.io/HiveMind-js/)
+- [HiveMindJs](https://github.com/JarbasHiveMind/HiveMind-js)
 
 
 # Message types
