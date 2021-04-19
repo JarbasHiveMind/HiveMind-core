@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./resources/logo/hivemind-512.png">
+  <img src="https://github.com/JarbasHiveMind/HiveMind-assets/raw/master/logo/hivemind-512.png">
 </p>
 
 HiveMind is a community-developed superset or extension of [Mycroft](https://www.github.com/MycroftAI/mycroft-core), the open-source voice assistant.
@@ -39,67 +39,61 @@ The main configuration can be found at
 
     '~/.cache/json_database/HivemindCore.json'
 
-![](./resources/hivemind.png)
-![](./resources/hive.png)
+
+# HiveMind components
+
+![](./resources/1m5s.svg)
+
 
 ## Terminals
 
 - [Remote Cli](https://github.com/OpenJarbas/HiveMind-cli) **\<-- USE THIS FIRST**
 - [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)
-- [Flask Chatroom](https://github.com/OpenJarbas/HiveMind-flask-chatroom)
-- [Webchat](https://github.com/OpenJarbas/HiveMind---Webchat-Terminal)
-- [REST (https) Terminal]() - Coming soon
-- [MQTT Terminal]() - Coming soon
+- [Flask Chatroom](https://github.com/JarbasHiveMind/HiveMind-flask-template)
+- [Webchat](https://github.com/OpenJarbas/HiveMind-webchat)
 
 ## Bridges
 
 - [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)
 - [HackChat Bridge](https://github.com/OpenJarbas/HiveMind-HackChatBridge)
 - [Twitch Bridge](https://github.com/OpenJarbas/HiveMind-twitch-bridge)
-- [Facebook Bridge]() - Coming soon
-- [Twitter Bridge]() - Coming soon
-- [MQTT Bridge]() - Coming soon
+- [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge)
 
-## Nodes
+## Minds
 
 - [NodeRed](https://github.com/OpenJarbas/HiveMind-NodeRed)
-- [Rendevouz Node]() - Coming soon
-- [Flask Microservices Node]() - Coming soon
+
+## Libraries
+
+- [HiveMindJs](https://jarbashivemind.github.io/HiveMind-js/)
 
 
-# Data flow
+# Message types
 
 The hivemind can be seen as a global mycroft bus shared across devices
 
-Bellow are some planned data flows and message types
+Messages consist of 2 parts, a `message_type` and a `payload`.
 
-Documentation coming soon
+The `message_type` defines how the message is routed, each node may ignore 
+specific `message_type` globally/per client depending on configuration
 
-Red - original message
-
-Yellow - reply message
 
 #### Broadcast
 
-propagate message to all slaves
+propagate message to all slaves, "send the message down"
 
-![](./resources/data_flow/broadcast.gif)
-
-#### Propagate
-
-Send message to all slaves and masters
-
-![](./resources/data_flow/propagate.gif)
+![](./resources/broadcast.gif)
 
 #### Escalate
 
-Send message up the authority chain, never to a slave
+Send message up the authority chain, never to a slave, "send the message up"
 
-![](./resources/data_flow/escalate.gif)
+![](./resources/escalate.gif)
 
 
-# Credits
+#### Propagate
 
-[JarbasAl](https://liberapay.com/jarbasAI/)
+Send message to all slaves and masters, "send the message everywhere"
 
-[AIIX](https://github.com/AIIX/) - hivemind logo
+![](./resources/propagate.gif)
+
