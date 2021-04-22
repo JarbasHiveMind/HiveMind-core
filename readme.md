@@ -44,6 +44,10 @@ The main configuration can be found at
 
 ![](./resources/1m5s.svg)
 
+## Client Libraries
+
+- [HiveMind-websocket-client](https://github.com/JarbasHiveMind/hivemind_websocket_client)
+- [HiveMindJs](https://github.com/JarbasHiveMind/HiveMind-js)
 
 ## Terminals
 
@@ -62,10 +66,6 @@ The main configuration can be found at
 ## Minds
 
 - [NodeRed](https://github.com/OpenJarbas/HiveMind-NodeRed)
-
-## Libraries
-
-- [HiveMindJs](https://github.com/JarbasHiveMind/HiveMind-js)
 
 
 # Message types
