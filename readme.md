@@ -8,6 +8,8 @@ With HiveMind, you can extend one (or more, but usually just one!) instance of M
 
 HiveMind's developers have successfully connected to Mycroft from a PinePhone, a 2009 MacBook, and a Raspberry Pi 0, among other devices. Mycroft itself usually runs on our desktop computers or our home servers, but you can use any Mycroft-branded device, or [OpenVoiceOS](https://github.com/OpenVoiceOS/), as your central unit.
 
+Work in progress documentation can be found in the [wiki](https://github.com/JarbasHiveMind/HiveMind-core/wiki)
+
 # Stats:
 
 | [![GitHub stars](https://img.shields.io/github/stars/OpenJarbas/HiveMind-core.svg)](https://github.com/OpenJarbas/HiveMind-core/stargazers)  | [![GitHub last commit](https://img.shields.io/github/last-commit/OpenJarbas/HiveMind-core.svg)](https://github.com/OpenJarbas/HiveMind-core/commits/dev) |
@@ -17,28 +19,6 @@ HiveMind's developers have successfully connected to Mycroft from a PinePhone, a
 | I'm using the Apache License 2.0 which means commercial use is allowed | If you have any ideas, they're always welcome.  Either submit an issue or a PR! |
 | [![Buy me a](https://img.shields.io/badge/BuyMeABeer-Paypal-blue.svg)](https://www.paypal.me/AnaIsabelFerreira) | [![Sponsor](https://img.shields.io/badge/SponsorDevelopment-Liberapay-blue.svg)](https://liberapay.com/jarbasAI/) |
 | If you feel the need, now it's as easy as clicking this button!  | You can help sponsoring HiveMind continued development with recurring donations|
-
-# Getting started
-
-**NOTE:** Hivemind-core is also available as a Mycroft skill. You can use it *either* as a standalone program *or* as a Mycroft skill, but you can't run them both at the same time. During early development, testers are encouraged to choose this repository over the skill, as development takes place here.
-
----
-
-At this moment development is in early stages, but mostly stable. Functionality is limited to basic questions and answers, but only because we haven't implemented the bit that lets Mycroft re-activate the mic to continue a discussion. 
-
-Full tutorials will follow later. For now, you wanna do this:
-
-1. Clone this repo onto the computer or device that's running Mycroft.
-2. Note the scripts in the `examples` folder. These are enough to spin up your Hive and connect to Mycroft from another device.
-3. Edit `examples/add_keys.py` to create names and keys for your devices. You can use HiveMind without encryption, but it's discouraged for security reasons.
-4. Ensure Mycroft is running.
-5. Run `examples/mycroft_master.py`. Your Hive is now running, and you're ready to connect. See below to find a client (ideally the Voice Satellite). You will need to know the hostname or IP address of the computer or device running Mycroft, and you'll also need the device name and key you created earlier.
-
-
-The main configuration can be found at
-
-    '~/.cache/json_database/HivemindCore.json'
-
 
 # HiveMind components
 
@@ -66,34 +46,4 @@ The main configuration can be found at
 ## Minds
 
 - [NodeRed](https://github.com/OpenJarbas/HiveMind-NodeRed)
-
-
-# Message types
-
-The hivemind can be seen as a global mycroft bus shared across devices
-
-Messages consist of 2 parts, a `message_type` and a `payload`.
-
-The `message_type` defines how the message is routed, each node may ignore 
-specific `message_type` globally/per client depending on configuration
-
-
-#### Broadcast
-
-propagate message to all slaves, "send the message down"
-
-![](./resources/broadcast.gif)
-
-#### Escalate
-
-Send message up the authority chain, never to a slave, "send the message up"
-
-![](./resources/escalate.gif)
-
-
-#### Propagate
-
-Send message to all slaves and masters, "send the message everywhere"
-
-![](./resources/propagate.gif)
 
