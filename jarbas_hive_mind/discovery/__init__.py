@@ -5,7 +5,6 @@ from ovos_utils.log import LOG
 from ovos_utils.xml_helper import xml2dict
 from jarbas_hive_mind.slave import HiveMindSlave
 from jarbas_hive_mind.slave.terminal import HiveMindTerminal
-from jarbas_hive_mind.discovery.zero import ZeroScanner
 import requests
 
 
@@ -160,16 +159,6 @@ class LocalDiscovery(threading.Thread):
         self.blacklist = []
         self.running = False
         self.connected = False
-        self.zero = ZeroScanner()
-        self.zero.on_new_node = self.on_new_zeroconf_node
-        self.zero.daemon = True
-        self.zero.start()
-
-    def on_new_zeroconf_node(self, node):
-        node = HiveMindNode(_Device(node["address"]))
-        LOG.info("ZeroConf Node Found: " + str(node.address))
-        self._nodes[node.address] = node
-        self.on_new_node(node)
 
     def on_new_upnp_node(self, node):
         LOG.info("UpNp Node Found: " + node.xml)
@@ -213,7 +202,6 @@ class LocalDiscovery(threading.Thread):
 
     def stop(self):
         self.running = False
-        self.zero.stop()
 
     def search_and_connect(self, *args, **kwargs):
         while True:

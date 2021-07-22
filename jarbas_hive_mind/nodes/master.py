@@ -12,7 +12,6 @@ import json
 from jarbas_hive_mind.message import HiveMessage, HiveMessageType
 from jarbas_hive_mind.discovery.ssdp import SSDPServer
 from jarbas_hive_mind.discovery.upnp_server import UPNPHTTPServer
-from jarbas_hive_mind.discovery.zero import ZeroConfAnnounce
 from jarbas_hive_mind.nodes import HiveMindNodeType
 import uuid
 from ovos_utils.messagebus import FakeBus
@@ -151,7 +150,7 @@ class HiveMindProtocol(WebSocketServerProtocol):
 class HiveMind(WebSocketServerFactory):
     node_type = HiveMindNodeType.MIND
 
-    def __init__(self, bus=None, announce=False, *args, **kwargs):
+    def __init__(self, bus=None, announce=True, *args, **kwargs):
         super(HiveMind, self).__init__(*args, **kwargs)
         # list of clients
         self.listener = None
@@ -170,23 +169,12 @@ class HiveMind(WebSocketServerFactory):
         self.announce = announce
         self.upnp_server = None
         self.ssdp = None
-        self.zero = None
 
     def start_announcing(self):
         device_uuid = uuid.uuid4()
         local_ip_address = get_ip()
         hivemind_socket = self.listener.address.replace("0.0.0.0",
                                                         local_ip_address)
-
-        if self.zero is None:
-            LOG.info("Registering zeroconf:HiveMind-websocket " +
-                     hivemind_socket)
-            self.zero = ZeroConfAnnounce(uuid=device_uuid,
-                                         port=self.port,
-                                         host=hivemind_socket)
-            self.zero.daemon = True
-            self.zero.start()
-
         if self.ssdp is None or self.upnp_server is None:
             self.upnp_server = UPNPHTTPServer(8088,
                                               friendly_name="JarbasHiveMind Master",
