@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='jarbas_hive_mind',
-    version='0.10.8',
+    version='0.10.9',
     packages=['jarbas_hive_mind',
               'jarbas_hive_mind.nodes',
               'jarbas_hive_mind.configuration',
@@ -27,5 +27,11 @@ setup(
     license='MIT',
     author='jarbasAI',
     author_email='jarbasai@mailfence.com',
-    description='Mesh Networking utilities for mycroft core'
+    description='Mesh Networking utilities for mycroft core',
+    entry_points={
+        'console_scripts': [
+            'HiveMind-server=jarbas_hive_mind.__main__:main',
+            'HiveMind-database=jarbas_hive_mind.database.__main__:main'
+        ]
+    }
 )
