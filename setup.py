@@ -21,7 +21,7 @@ setup(
                       "ovos_utils>=0.0.6",
                       "json_database>=0.2.6",
                       "pycryptodomex",
-                      "upnpclient>=0.0.8"],
+                      "HiveMind_presence~=0.0.2a2"],
     url='https://github.com/JarbasAl/hive_mind',
     license='MIT',
     author='jarbasAI',

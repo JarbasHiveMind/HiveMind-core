@@ -10,11 +10,10 @@ from jarbas_hive_mind.utils import decrypt_from_json, encrypt_as_json
 from jarbas_hive_mind.interface import HiveMindMasterInterface
 import json
 from jarbas_hive_mind.message import HiveMessage, HiveMessageType
-from jarbas_hive_mind.discovery.ssdp import SSDPServer
-from jarbas_hive_mind.discovery.upnp_server import UPNPHTTPServer
 from jarbas_hive_mind.nodes import HiveMindNodeType
 import uuid
 from ovos_utils.messagebus import FakeBus
+from HiveMind_presence import LocalPresence
 
 
 # protocol
@@ -167,35 +166,11 @@ class HiveMind(WebSocketServerFactory):
 
         self.interface = HiveMindMasterInterface(self)
         self.announce = announce
-        self.upnp_server = None
-        self.ssdp = None
+        self.presence = None
 
     def start_announcing(self):
-        device_uuid = uuid.uuid4()
-        local_ip_address = get_ip()
-        hivemind_socket = self.listener.address.replace("0.0.0.0",
-                                                        local_ip_address)
-        if self.ssdp is None or self.upnp_server is None:
-            self.upnp_server = UPNPHTTPServer(8088,
-                                              friendly_name="JarbasHiveMind Master",
-                                              manufacturer='JarbasAI',
-                                              manufacturer_url='https://ai-jarbas.gitbook.io/jarbasai/',
-                                              model_description='Jarbas HiveMind',
-                                              model_name="HiveMind-core",
-                                              model_number="0.9",
-                                              model_url="https://github.com/OpenJarbas/HiveMind-core",
-                                              serial_number=self.protocol.platform,
-                                              uuid=device_uuid,
-                                              presentation_url=hivemind_socket,
-                                              host=local_ip_address)
-            self.upnp_server.start()
-
-            self.ssdp = SSDPServer()
-            self.ssdp.register('local',
-                               'uuid:{}::upnp:HiveMind-websocket'.format(device_uuid),
-                               'upnp:HiveMind-websocket',
-                               self.upnp_server.path)
-            self.ssdp.start()
+        self.presence = LocalPresence(port=self.listener.port, ssl=self.listener.is_secure)
+        self.presence.start()
 
     def bind(self, listener):
         self.listener = listener
@@ -226,6 +201,8 @@ class HiveMind(WebSocketServerFactory):
         self.bus.on('hive.send', self.handle_send)
 
     def shutdown(self):
+        if self.presence:
+            self.presence.stop()
         self.bus.remove('message', self.handle_outgoing_mycroft)
         self.bus.remove('hive.send', self.handle_send)
 
