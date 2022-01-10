@@ -10,6 +10,8 @@ HiveMind's developers have successfully connected to Mycroft from a PinePhone, a
 
 Work in progress documentation can be found in the [wiki](https://github.com/JarbasHiveMind/HiveMind-core/wiki)
 
+You can also join the [Hivemind Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org) for general news, support and chit chat
+
 # Stats:
 
 | [![GitHub stars](https://img.shields.io/github/stars/OpenJarbas/HiveMind-core.svg)](https://github.com/OpenJarbas/HiveMind-core/stargazers)  | [![GitHub last commit](https://img.shields.io/github/last-commit/OpenJarbas/HiveMind-core.svg)](https://github.com/OpenJarbas/HiveMind-core/commits/dev) |
