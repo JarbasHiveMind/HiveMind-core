@@ -1,4 +1,4 @@
-from jarbas_hive_mind.slave.terminal import HiveMindTerminal, \
+from jarbas_hive_mind.nodes.terminal import HiveMindTerminal, \
     HiveMindTerminalProtocol
 from jarbas_hive_mind.message import HiveMessageType, HiveMessage
 from jarbas_hive_mind.nodes import HiveMindNodeType

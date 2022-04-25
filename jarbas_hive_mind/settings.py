@@ -1,5 +1,5 @@
 from os import makedirs
-from os.path import isdir, join, expanduser
+from os.path import isdir, join
 from ovos_utils.xdg_utils import xdg_data_home
 
 DATA_PATH = join(xdg_data_home(), "jarbasHiveMind")

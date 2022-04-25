@@ -11,11 +11,11 @@ license_overrides = {
     'pyxdg': 'GPL-2.0',
     'ptyprocess': 'ISC',
     'psutil': 'BSD3',
-    'setuptools': "MIT",
-    'typing-extensions': "PSFL"
+    'setuptools': "MIT"
 }
 # explicitly allow these packages that would fail otherwise
 whitelist = [
+    'typing-extensions',  # PSFL
     'idna',  # BSD-like
     'python-dateutil',  # 'Simplified BSD'
     'cryptography',  # 'BSD or Apache License, Version 2.0',
@@ -33,24 +33,22 @@ pkg_name = "jarbas_hive_mind"
 
 
 class TestLicensing(unittest.TestCase):
-    @classmethod
-    def setUpClass(self):
-        licheck = LicenseChecker(pkg_name,
-                                 license_overrides=license_overrides,
-                                 whitelisted_packages=whitelist,
-                                 allow_ambiguous=allow_ambiguous,
-                                 allow_unlicense=allow_unlicense,
-                                 allow_unknown=allow_unknown,
-                                 allow_viral=allow_viral,
-                                 allow_nonfree=allow_nonfree)
-        print("Package", pkg_name)
-        print("Version", licheck.version)
-        print("License", licheck.license)
-        print("Transient Requirements (dependencies of dependencies)")
-        pprint(licheck.transient_dependencies)
-        self.licheck = licheck
+    licheck = LicenseChecker(pkg_name,
+                             license_overrides=license_overrides,
+                             whitelisted_packages=whitelist,
+                             allow_ambiguous=allow_ambiguous,
+                             allow_unlicense=allow_unlicense,
+                             allow_unknown=allow_unknown,
+                             allow_viral=allow_viral,
+                             allow_nonfree=allow_nonfree)
 
     def test_license_compliance(self):
+        print("Package", pkg_name)
+        print("Version", self.licheck.version)
+        print("License", self.licheck.license)
+        print("Transient Requirements (dependencies of dependencies)")
+        pprint(self.licheck.transient_dependencies)
+
         print("Package Versions")
         pprint(self.licheck.versions)
 
