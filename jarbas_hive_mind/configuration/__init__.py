@@ -1,8 +1,9 @@
 from json_database import JsonStorageXDG
 from os.path import join, exists, isdir
 from os import makedirs
-from jarbas_hive_mind.settings import DEFAULT_PORT, DATA_PATH, CERTS_PATH, \
+from jarbas_hive_mind.settings import DEFAULT_PORT, DATA_PATH, \
     MYCROFT_WEBSOCKET_CONFIG
+from ovos_utils.xdg_utils import xdg_config_home
 
 
 def default_config():
@@ -15,7 +16,7 @@ def default_config():
             'twisted': False,
             'mycroft_bus': MYCROFT_WEBSOCKET_CONFIG,
             'port': DEFAULT_PORT,
-            'ssl': {'certificates': CERTS_PATH,
+            'ssl': {'certificates': join(DATA_PATH, "certs"),
                     'ssl_certfile': 'HiveMind.crt',
                     'ssl_keyfile': 'HiveMind.key'}
             }
@@ -40,7 +41,11 @@ def _merge_defaults(base, default=None):
     return base
 
 
-CONFIGURATION = JsonStorageXDG("HivemindCore")
+CONFIGURATION = JsonStorageXDG("hivemind",
+                               xdg_folder=xdg_config_home(),
+                               subfolder="jarbasHiveMind",
+                               extension="conf")
+
 CONFIGURATION = _merge_defaults(CONFIGURATION)
 
 # ensure directories exist

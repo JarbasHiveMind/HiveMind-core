@@ -1,21 +1,10 @@
 from os import makedirs
 from os.path import isdir, join, expanduser
+from ovos_utils.xdg_utils import xdg_data_home
 
-DATA_PATH = expanduser("~/jarbasHiveMind")
-
+DATA_PATH = join(xdg_data_home(), "jarbasHiveMind")
 if not isdir(DATA_PATH):
     makedirs(DATA_PATH)
-
-CERTS_PATH = join(DATA_PATH, "certs")
-if not isdir(CERTS_PATH):
-    makedirs(CERTS_PATH)
-
-
-DB_PATH = join(DATA_PATH, "database")
-if not isdir(DB_PATH):
-    makedirs(DB_PATH)
-
-CLIENTS_DB = "sqlite:///" + join(DB_PATH, "clients.db")
 
 DEFAULT_PORT = 5678
 USE_SSL = True

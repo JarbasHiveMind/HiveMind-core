@@ -6,7 +6,7 @@ from socket import gethostname
 
 from OpenSSL import crypto
 import json
-from jarbas_hive_mind.settings import CERTS_PATH, LOG_BLACKLIST
+from jarbas_hive_mind.settings import LOG_BLACKLIST, DATA_PATH
 from jarbas_hive_mind.exceptions import DecryptionKeyError, EncryptionKeyError
 from ovos_utils.log import LOG
 from ovos_utils.security import encrypt, decrypt
@@ -23,7 +23,7 @@ def validate_param(value, name):
         raise ValueError("Missing or empty %s in conf " % name)
 
 
-def create_self_signed_cert(cert_dir=CERTS_PATH, name="jarbas_hivemind"):
+def create_self_signed_cert(cert_dir=join(DATA_PATH, "certs"), name="HiveMind"):
     """
     If name.crt and name.key don't exist in cert_dir, create a new
     self-signed cert and key pair and write them into that directory.

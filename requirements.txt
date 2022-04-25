@@ -1,8 +1,7 @@
 pyopenssl
 service_identity
 autobahn
-# TODO increase ovos_utils to latest release
-ovos_utils>=0.0.6
+ovos_utils>=0.0.17
 json_database>=0.2.6
 pycryptodomex
 HiveMind_presence~=0.0.2a2

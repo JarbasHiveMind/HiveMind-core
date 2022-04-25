@@ -18,7 +18,7 @@ setup(
                       "service_identity",
                       "autobahn",
                       "mycroft-messagebus-client>=0.9.1",
-                      "ovos_utils>=0.0.6",
+                      "ovos_utils>=0.0.17",
                       "json_database>=0.2.6",
                       "pycryptodomex",
                       "HiveMind_presence~=0.0.2a2"],
