@@ -10,6 +10,9 @@ def default_config():
             'database': join(DATA_PATH, "database", "clients.db"),
             'log_blacklist': [],
             'max_connections': -1,
+            # asyncio is used by default
+            # set this to use twisted instead
+            'twisted': False,
             'mycroft_bus': MYCROFT_WEBSOCKET_CONFIG,
             'port': DEFAULT_PORT,
             'ssl': {'certificates': CERTS_PATH,

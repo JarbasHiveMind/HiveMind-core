@@ -1,24 +1,29 @@
 import base64
-from autobahn.twisted.websocket import WebSocketServerProtocol, \
-    WebSocketServerFactory
 from jarbas_hive_mind.database import ClientDatabase
 from jarbas_hive_mind.exceptions import UnauthorizedKeyError
 from ovos_utils.log import LOG
 from ovos_utils.messagebus import Message, get_mycroft_bus
-from ovos_utils import get_ip
 from jarbas_hive_mind.utils import decrypt_from_json, encrypt_as_json
 from jarbas_hive_mind.interface import HiveMindMasterInterface
 import json
 from jarbas_hive_mind.message import HiveMessage, HiveMessageType
 from jarbas_hive_mind.nodes import HiveMindNodeType
-import uuid
 from ovos_utils.messagebus import FakeBus
 from HiveMind_presence import LocalPresence
 
 
 # protocol
-class HiveMindProtocol(WebSocketServerProtocol):
+class HiveMindProtocol:
     platform = "HiveMindV0.7"
+
+    def __new__(cls, *args, **kwargs):
+        # this non sense is changing the base class
+        # this allows subclassing either from twisted or asyncio
+        # but you only know which at runtime
+        from jarbas_hive_mind.backends import WebSocketServerProtocol
+        x = type(cls.__name__, (HiveMindProtocol, WebSocketServerProtocol), {})
+        # print(x, x.__bases__)
+        return super(HiveMindProtocol, cls).__new__(x)
 
     @staticmethod
     def decode_auth(request):
@@ -40,7 +45,6 @@ class HiveMindProtocol(WebSocketServerProtocol):
         return name, key
 
     def onConnect(self, request):
-
         LOG.info("Client connecting: {0}".format(request.peer))
 
         name, key = self.decode_auth(request)
@@ -146,11 +150,20 @@ class HiveMindProtocol(WebSocketServerProtocol):
                             doNotCompress=doNotCompress)
 
 
-class HiveMind(WebSocketServerFactory):
+class HiveMind:
     node_type = HiveMindNodeType.MIND
 
+    def __new__(cls, *args, **kwargs):
+        # this non sense is changing the base class
+        # this allows subclassing either from twisted or asyncio
+        # but you only know which at runtime
+        from jarbas_hive_mind.backends import WebSocketServerFactory
+        x = type(cls.__name__, (HiveMind, WebSocketServerFactory), {})
+        # print(x, x.__bases__)
+        return super(HiveMind, cls).__new__(x)
+
     def __init__(self, bus=None, announce=True, *args, **kwargs):
-        super(HiveMind, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # list of clients
         self.listener = None
         self.clients = {}

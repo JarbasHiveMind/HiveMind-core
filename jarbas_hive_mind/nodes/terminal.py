@@ -1,23 +1,26 @@
 from ovos_utils.log import LOG
-from autobahn.twisted.websocket import WebSocketClientFactory, \
-    WebSocketClientProtocol
-from twisted.internet.protocol import ReconnectingClientFactory
-from jarbas_hive_mind.exceptions import UnauthorizedKeyError, \
-    SecureConnectionFailed, ConnectionError, HiveMindEntryPointNotFound
 from jarbas_hive_mind.message import HiveMessage, HiveMessageType
 from jarbas_hive_mind.utils import encrypt_as_json, decrypt_from_json
 from jarbas_hive_mind.interface import HiveMindSlaveInterface
 from jarbas_hive_mind.nodes import HiveMindNodeType
 from ovos_utils.messagebus import Message
 import json
-from twisted.internet import reactor
 
 
-class HiveMindTerminalProtocol(WebSocketClientProtocol):
+class HiveMindTerminalProtocol:
     platform = "HiveMindTerminalv0.2"
 
+    def __new__(cls, *args, **kwargs):
+        # this non sense is changing the base class
+        # this allows subclassing either from twisted or asyncio
+        # but you only know which at runtime
+        from jarbas_hive_mind.backends import WebSocketClientProtocol
+        x = type(cls.__name__, (HiveMindTerminalProtocol, WebSocketClientProtocol), {})
+        # print(x, x.__bases__)
+        return super(HiveMindTerminalProtocol, cls).__new__(x)
+
     def onConnect(self, response):
-        LOG.info("HiveMind connected: {0}".format(response.peer))
+        LOG.info(f"HiveMind connected: {response.peer}")
         self.factory.client = self
         self.factory.status = "connected"
 
@@ -33,13 +36,13 @@ class HiveMindTerminalProtocol(WebSocketClientProtocol):
         self.factory.handle_incoming_message(data)
 
     def onClose(self, wasClean, code, reason):
-        LOG.warning("HiveMind websocket connection closed: {0}".format(reason))
+        LOG.warning(f"HiveMind websocket connection closed: {reason}")
         self.factory.client = None
         self.factory.status = "disconnected"
         if "WebSocket connection upgrade failed" in reason:
             # key rejected
             LOG.error("Key rejected")
-            #raise UnauthorizedKeyError
+            # raise UnauthorizedKeyError
 
         elif self.factory.connection.is_secure:
             if "WebSocket opening handshake timeout" in reason:
@@ -48,7 +51,6 @@ class HiveMindTerminalProtocol(WebSocketClientProtocol):
 
         else:
             LOG.error("ConnectionError")
-        reactor.stop()
 
     def decode(self, payload):
         payload = payload.decode("utf-8")
@@ -74,10 +76,19 @@ class HiveMindTerminalProtocol(WebSocketClientProtocol):
                             sync=sync, doNotCompress=doNotCompress)
 
 
-class HiveMindTerminal(WebSocketClientFactory, ReconnectingClientFactory):
+class HiveMindTerminal:
     protocol = HiveMindTerminalProtocol
     node_type = HiveMindNodeType.TERMINAL
     announce = False
+
+    def __new__(cls, *args, **kwargs):
+        # this non sense is changing the base class
+        # this allows subclassing either from twisted or asyncio
+        # but you only know which at runtime
+        from jarbas_hive_mind.backends import WebSocketClientFactory
+        x = type(cls.__name__, (HiveMindTerminal, WebSocketClientFactory), {})
+        # print(x, x.__bases__)
+        return super(HiveMindTerminal, cls).__new__(x)
 
     def __init__(self, crypto_key=None, connection=None,
                  auto_reconnect=False, *args, **kwargs):
@@ -210,31 +221,3 @@ class HiveMindTerminal(WebSocketClientFactory, ReconnectingClientFactory):
             self.handle_escalate_message(msg)
         else:
             LOG.error("Unknown HiveMind protocol msg_type")
-
-    def clientConnectionFailed(self, connector, reason):
-        self.status = "disconnected"
-        if "DNS lookup failed:" in str(reason):
-            LOG.error("Could not find the specified HiveMind entry point")
-            LOG.debug("Does this look like a valid address? " +
-                      self.connection.address)
-            raise HiveMindEntryPointNotFound
-        else:
-
-            if self.auto_reconnect:
-                LOG.error("HiveMind client failed: " + str(reason) +
-                          " .. retrying ..")
-                self.retry(connector)
-            else:
-                LOG.error("HiveMind client failed: " + str(reason))
-
-    def clientConnectionLost(self, connector, reason):
-        LOG.error("HiveMind connection lost: " + str(reason) +
-                  " .. retrying ..")
-        self.status = "disconnected"
-        if self.auto_reconnect:
-            LOG.error("HiveMind connection lost: " + str(reason) +
-                      " .. retrying ..")
-            self.retry(connector)
-        else:
-            LOG.error("HiveMind connection lost: " + str(reason))
-
