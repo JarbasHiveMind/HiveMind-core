@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.10.7...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a2...HEAD)
+
+**Implemented enhancements:**
+
+- add minimal database unittests [\#61](https://github.com/JarbasHiveMind/HiveMind-core/pull/61) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.11.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.11.0a2) (2022-04-25)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.10.7...V0.11.0a2)
 
 **Implemented enhancements:**
 
