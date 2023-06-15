@@ -1,8 +1,8 @@
 import json
-from jarbas_hive_mind.configuration import CONFIGURATION
-from json_database import JsonDatabase
-from ovos_utils.log import LOG
 from functools import wraps
+
+from json_database import JsonDatabaseXDG
+from ovos_utils.log import LOG
 
 
 def cast_to_client_obj():
@@ -74,9 +74,9 @@ class Client:
         return str(self.__dict__)
 
 
-class ClientDatabase(JsonDatabase):
-    def __init__(self, path=CONFIGURATION["database"]):
-        super().__init__("clients", path)
+class ClientDatabase(JsonDatabaseXDG):
+    def __init__(self):
+        super().__init__("clients", subfolder="HiveMind")
 
     def update_timestamp(self, key, timestamp):
         user = self.get_client_by_api_key(key)
@@ -118,6 +118,12 @@ class ClientDatabase(JsonDatabase):
         if not user:
             return None
         return user["crypto_key"]
+
+    def get_password(self, api_key):
+        user = self.get_client_by_api_key(api_key)
+        if not user:
+            return None
+        return user["password"]
 
     def change_name(self, new_name, key):
         user = self.get_client_by_api_key(key)
