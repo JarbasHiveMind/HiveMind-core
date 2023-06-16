@@ -51,8 +51,8 @@ def add_client(name, access_key, password, crypto_key):
         print("WARNING: Encryption Key is deprecated, only use if your client does not support password")
 
 
-@hmcore_cmds.command(help="remove credentials for a client", name="delete-client")
-@click.argument("node_id", help="numeric unique ID for this node", required=True, type=int)
+@hmcore_cmds.command(help="remove credentials for a client (numeric unique ID)", name="delete-client")
+@click.argument("node_id", required=True, type=int)
 def delete_client(node_id):
     with ClientDatabase() as db:
         for x in db:
