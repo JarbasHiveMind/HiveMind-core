@@ -76,7 +76,7 @@ class Client:
 
 class ClientDatabase(JsonDatabaseXDG):
     def __init__(self):
-        super().__init__("clients", subfolder="HiveMind")
+        super().__init__("clients", subfolder="hivemind")
 
     def update_timestamp(self, key, timestamp):
         user = self.get_client_by_api_key(key)
