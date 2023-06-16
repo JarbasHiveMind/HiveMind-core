@@ -1,11 +1,11 @@
 import os
 
 import click
+from ovos_utils.xdg_utils import xdg_data_home
 from rich.console import Console
 from rich.table import Table
-from ovos_config import Configuration
+
 from hivemind_core.database import ClientDatabase
-from ovos_utils.xdg_utils import xdg_data_home
 
 
 @click.group()
@@ -14,10 +14,10 @@ def hmcore_cmds():
 
 
 @hmcore_cmds.command(help="add credentials for a client", name="add-client")
-@click.argument("name", required=False)
-@click.argument("access_key", required=False)
-@click.argument("password",  required=False)
-@click.argument("crypto_key",  required=False)
+@click.argument("name", required=False, type=str)
+@click.argument("access_key", required=False, type=str)
+@click.argument("password", required=False, type=str)
+@click.argument("crypto_key", required=False, type=str)
 def add_client(name, access_key, password, crypto_key):
     key = crypto_key
     if key:
@@ -52,7 +52,7 @@ def add_client(name, access_key, password, crypto_key):
 
 
 @hmcore_cmds.command(help="remove credentials for a client", name="delete-client")
-@click.argument("node_id", required=True)
+@click.argument("node_id", help="numeric unique ID for this node", required=True, type=int)
 def delete_client(node_id):
     with ClientDatabase() as db:
         for x in db:
@@ -89,21 +89,15 @@ def list_clients():
 
 
 @hmcore_cmds.command(help="start listening for HiveMind connections", name="listen")
-@click.option("--host", help="HiveMind host", type=str,
-              default=Configuration().get('websocket', {}).get("host", "0.0.0.0"))
-@click.option("--port", help="HiveMind port number", type=int,
-              default=Configuration().get('websocket', {}).get("port", 5678))
-@click.option("--ssl", help="use wss://", type=bool,
-              default=Configuration().get('websocket', {}).get("ssl", False))
-@click.option("--cert_dir", help="HiveMind SSL certificate directory", type=str,
-              default=Configuration().get('websocket', {}).get("cert_dir", f"{xdg_data_home()}/hivemind"))
-@click.option("--cert_name", help="HiveMind SSL certificate file name", type=str,
-              default=Configuration().get('websocket', {}).get("cert_name", "hivemind"))
-def listen(host: str, port: int, ssl: bool, cert_dir: str, cert_name: str):
+@click.option("--port", help="HiveMind port number", type=int, default=5678)
+@click.option("--ssl", help="use wss://", type=bool, default=False)
+@click.option("--cert_dir", help="HiveMind SSL certificate directory", type=str, default=f"{xdg_data_home()}/hivemind")
+@click.option("--cert_name", help="HiveMind SSL certificate file name", type=str, default="hivemind")
+def listen(port: int, ssl: bool, cert_dir: str, cert_name: str):
     from hivemind_core.service import HiveMindService
 
     websocket_config = {
-        "host": host,
+        "host": "0.0.0.0",
         "port": port,
         "ssl": ssl,
         "cert_dir": cert_dir,
@@ -116,4 +110,3 @@ def listen(host: str, port: int, ssl: bool, cert_dir: str, cert_name: str):
 
 if __name__ == "__main__":
     hmcore_cmds()
-
