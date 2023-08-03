@@ -28,14 +28,13 @@ jobs:
           python -m pip install build wheel
       - name: Install repo
         run: |
-          pip install git+https://github.com/JarbasHiveMind/hivemind_websocket_client@rewrite
-          pip install .
+          pip install -e .
       - name: Install test dependencies
         run: |
           pip install pytest pytest-timeout pytest-cov
       - name: Run unittests
         run: |
-          pytest --cov=jarbas_hive_mind --cov-report xml test/unittests
+          pytest --cov=hivemind_core --cov-report xml test/unittests
           # NOTE: additional pytest invocations should also add the --cov-append flag
           #       or they will overwrite previous invocations' coverage reports
           #       (for an example, see OVOS Skill Manager's workflow)
