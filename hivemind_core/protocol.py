@@ -75,7 +75,7 @@ class HiveMindClientConnection:
             return LOG.debug(f"message type {_msg_type} "
                              f"is blacklisted for {self.peer}")
 
-        LOG.info(f"sending to {self.peer}: {message}")
+        LOG.debug(f"sending to {self.peer}: {message}")
         payload = message.serialize()  # json string
         if self.crypto_key and message.msg_type not in [HiveMessageType.HANDSHAKE,
                                                         HiveMessageType.HELLO]:
@@ -84,7 +84,7 @@ class HiveMindClientConnection:
                 payload = encrypt_bin(self.crypto_key, payload)
             else:
                 payload = encrypt_as_json(self.crypto_key, payload)  # still a json string
-            LOG.info(f"encrypted payload: {len(payload)}")
+            LOG.debug(f"encrypted payload: {len(payload)}")
         else:
             LOG.debug(f"sent unencrypted!")
 
@@ -128,7 +128,7 @@ class HiveMindListenerInternalProtocol:
     bus: MessageBusClient
 
     def register_bus_handlers(self):
-        LOG.info("registering internal mycroft bus handlers")
+        LOG.debug("registering internal mycroft bus handlers")
         self.bus.on("hive.send.downstream", self.handle_send)
         self.bus.on("message", self.handle_internal_mycroft)  # catch all
 
@@ -192,12 +192,12 @@ class HiveMindListenerInternalProtocol:
             # ovos-core decides the contents of the Session,
             # let's sync any internal changes
             if new_sess.session_id == client.sess.session_id:
-                LOG.info(f"syncing session from ovos with {peer}")
+                LOG.debug(f"syncing session from ovos with {peer}")
                 client.sess = Session.from_message(message)
 
             if peer in target_peers:
                 # forward internal messages to clients if they are the target
-                LOG.info(f"{message.msg_type} - destination: {peer}")
+                LOG.debug(f"{message.msg_type} - destination: {peer}")
                 message.context["source"] = "hive"
                 msg = HiveMessage(HiveMessageType.BUS,
                                   source_peer=peer,
@@ -234,7 +234,7 @@ class HiveMindListenerProtocol:
         self.internal_protocol.register_bus_handlers()
 
     def handle_new_client(self, client: HiveMindClientConnection):
-        LOG.info(f"new client: {client.peer}")
+        LOG.debug(f"new client: {client.peer}")
         self.clients[client.peer] = client
         message = Message("hive.client.connect",
                           {"ip": client.ip, "session_id": client.sess.session_id},
@@ -250,7 +250,7 @@ class HiveMindListenerProtocol:
                                    # allows any node to verify messages are signed with this
                                    "peer": client.peer,  # this identifies the connected client in ovos message.context
                                    "node_id": self.peer})
-        LOG.info(f"saying HELLO to: {client.peer}")
+        LOG.debug(f"saying HELLO to: {client.peer}")
         client.send(msg)
 
         needs_handshake = not client.crypto_key and self.handshake_enabled
@@ -266,7 +266,7 @@ class HiveMindListenerProtocol:
             "crypto_required": self.require_crypto  # do we allow unencrypted payloads
         }
         msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
-        LOG.info(f"starting {client.peer} HANDSHAKE: {payload}")
+        LOG.debug(f"starting {client.peer} HANDSHAKE: {payload}")
         client.send(msg)
         # if client is in protocol V1 -> self.handle_handshake_message
         # clients can rotate their pubkey or session_key by sending a new handshake
@@ -300,7 +300,7 @@ class HiveMindListenerProtocol:
 
         Process message from client, decide what to do internally here
         """
-        LOG.info(f"message: {message}")
+        LOG.debug(f"message: {message}")
         # update internal peer ID
         message.update_source_peer(client.peer)
 
@@ -340,7 +340,7 @@ class HiveMindListenerProtocol:
 
     def handle_handshake_message(self, message: HiveMessage,
                                  client: HiveMindClientConnection):
-        LOG.info("handshake received, generating session key")
+        LOG.debug("handshake received, generating session key")
         payload = message.payload
         if "pubkey" in payload and client.handshake is not None:
             pub = payload.pop("pubkey")
