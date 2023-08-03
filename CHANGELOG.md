@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
+## [V0.13.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a2) (2023-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a3...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a3...V0.13.0a2)
 
 **Breaking changes:**
 
