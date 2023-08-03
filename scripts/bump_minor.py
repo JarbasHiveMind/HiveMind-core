@@ -2,7 +2,7 @@ import fileinput
 from os.path import join, dirname
 
 
-version_file = join(dirname(dirname(__file__)), "jarbas_hive_mind", "version.py")
+version_file = join(dirname(dirname(__file__)), "hivemind_core", "version.py")
 version_var_name = "VERSION_MINOR"
 build_var_name = "VERSION_BUILD"
 alpha_var_name = "VERSION_ALPHA"
