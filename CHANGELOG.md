@@ -2,7 +2,39 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a2...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a3...HEAD)
+
+**Breaking changes:**
+
+- tornado [\#64](https://github.com/JarbasHiveMind/HiveMind-core/pull/64) ([JarbasAl](https://github.com/JarbasAl))
+
+**Implemented enhancements:**
+
+- binarize handshake [\#73](https://github.com/JarbasHiveMind/HiveMind-core/pull/73) ([JarbasAl](https://github.com/JarbasAl))
+
+**Fixed bugs:**
+
+- Does not close port on exit [\#36](https://github.com/JarbasHiveMind/HiveMind-core/issues/36)
+
+**Closed issues:**
+
+- pyOpenSSL missing from the requirements. [\#67](https://github.com/JarbasHiveMind/HiveMind-core/issues/67)
+- Default port should be different than the Mycroft message bus [\#66](https://github.com/JarbasHiveMind/HiveMind-core/issues/66)
+- "hivemind-client terminal" complains about missing file [\#65](https://github.com/JarbasHiveMind/HiveMind-core/issues/65)
+- Is it a dead project? [\#63](https://github.com/JarbasHiveMind/HiveMind-core/issues/63)
+- Dep issues [\#35](https://github.com/JarbasHiveMind/HiveMind-core/issues/35)
+- Post-intent STT activations don't work [\#23](https://github.com/JarbasHiveMind/HiveMind-core/issues/23)
+- Enforce crypto [\#13](https://github.com/JarbasHiveMind/HiveMind-core/issues/13)
+
+**Merged pull requests:**
+
+- filter allowed\_types [\#71](https://github.com/JarbasHiveMind/HiveMind-core/pull/71) ([emphasize](https://github.com/emphasize))
+- add typehints [\#70](https://github.com/JarbasHiveMind/HiveMind-core/pull/70) ([emphasize](https://github.com/emphasize))
+- \[requirements\] Add missing pyOpenSSL [\#69](https://github.com/JarbasHiveMind/HiveMind-core/pull/69) ([goldyfruit](https://github.com/goldyfruit))
+
+## [V0.11.0a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.11.0a3) (2022-08-07)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a2...V0.11.0a3)
 
 **Implemented enhancements:**
 
