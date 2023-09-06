@@ -77,11 +77,13 @@ class HiveMindClientConnection:
 
         LOG.debug(f"sending to {self.peer}: {message}")
         payload = message.serialize()  # json string
+        is_bin = False
         if self.crypto_key and message.msg_type not in [HiveMessageType.HANDSHAKE,
                                                         HiveMessageType.HELLO]:
             if self.binarize:
-                payload = get_bitstring(message.msg_type, message.payload)
+                payload = get_bitstring(message.msg_type, message.payload).bytes
                 payload = encrypt_bin(self.crypto_key, payload)
+                is_bin = True
             else:
                 payload = encrypt_as_json(self.crypto_key, payload)  # still a json string
             LOG.debug(f"encrypted payload: {len(payload)}")
@@ -89,7 +91,7 @@ class HiveMindClientConnection:
             LOG.debug(f"sent unencrypted!")
 
         self.loop.install()
-        self.socket.write_message(payload)
+        self.socket.write_message(payload, is_bin)
 
     def decode(self, payload: str) -> HiveMessage:
         if self.crypto_key:
