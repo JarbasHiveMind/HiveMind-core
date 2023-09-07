@@ -360,7 +360,11 @@ class HiveMindListenerProtocol:
         elif client.pswd_handshake is not None and "envelope" in payload:
             # while the access key is transmitted, the password never is
             envelope = payload["envelope"]
-            client.binarize = payload.get("binarize", False)
+            # TODO - seems tornado never emits these, they never arrive in client
+            #  closing the listener should futures were never awaited
+            #  until this is debugged force to False
+            # client.binarize = payload.get("binarize", False)
+            client.binarize = False
 
             payload["envelope"] = client.pswd_handshake.generate_handshake()
 
