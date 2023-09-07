@@ -95,19 +95,12 @@ def on_stopping():
 class MessageBusEventHandler(WebSocketHandler):
     protocol: Optional[HiveMindListenerProtocol] = None
 
-    def __init__(self, application, request, **kwargs):
-        super().__init__(application, request, **kwargs)
-        self.emitter = EventEmitter()
-
     @staticmethod
     def decode_auth(auth) -> Tuple[str, str]:
         userpass_encoded = bytes(auth, encoding="utf-8")
         userpass_decoded = base64.b64decode(userpass_encoded).decode("utf-8")
         name, key = userpass_decoded.split(":")
         return name, key
-
-    def on(self, event_name, handler):
-        self.emitter.on(event_name, handler)
 
     def on_message(self, message):
         message = self.client.decode(message)
@@ -163,7 +156,7 @@ class MessageBusEventHandler(WebSocketHandler):
         return True
 
 
-class HiveMindService(Thread):
+class HiveMindService:
     identity = NodeIdentity()
 
     def __init__(self, 
@@ -174,7 +167,6 @@ class HiveMindService(Thread):
                  stopping_hook: Callable = on_stopping,
                  websocket_config: Optional[Dict[str, Any]] = None):
 
-        super().__init__()
         websocket_config = websocket_config or \
                 Configuration().get('hivemind_websocket', {})
         callbacks = StatusCallbackMap(on_started=started_hook,

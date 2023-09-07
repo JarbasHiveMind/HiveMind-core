@@ -226,12 +226,8 @@ class HiveMindListenerProtocol:
     mycroft_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
-    def bind(self, websocket, bus=None):
+    def bind(self, websocket, bus):
         websocket.protocol = self
-        if bus is None:
-            bus = MessageBusClient()
-            bus.run_in_thread()
-            bus.connected_event.wait()
         self.internal_protocol = HiveMindListenerInternalProtocol(bus)
         self.internal_protocol.register_bus_handlers()
 
@@ -361,7 +357,7 @@ class HiveMindListenerProtocol:
             # while the access key is transmitted, the password never is
             envelope = payload["envelope"]
             # TODO - seems tornado never emits these, they never arrive in client
-            #  closing the listener should futures were never awaited
+            #  closing the listener shows futures were never awaited
             #  until this is debugged force to False
             # client.binarize = payload.get("binarize", False)
             client.binarize = False
