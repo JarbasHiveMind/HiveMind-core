@@ -156,7 +156,7 @@ def listen(port: int, ssl: bool, cert_dir: str, cert_name: str):
     }
 
     service = HiveMindService(websocket_config=websocket_config)
-    service.start()
+    service.run()
 
 
 if __name__ == "__main__":
