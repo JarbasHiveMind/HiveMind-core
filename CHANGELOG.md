@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a0...HEAD)
+
+**Implemented enhancements:**
+
+- add site\_id [\#74](https://github.com/JarbasHiveMind/HiveMind-core/pull/74) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.0a0](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a0) (2023-09-08)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a9...V0.13.0a0)
+
 ## [V0.13.0a9](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a9) (2023-09-08)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a8...V0.13.0a9)
