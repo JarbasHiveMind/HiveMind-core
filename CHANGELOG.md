@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a0...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a1...HEAD)
+
+**Implemented enhancements:**
+
+- feat/ggwave [\#75](https://github.com/JarbasHiveMind/HiveMind-core/pull/75) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a1) (2023-09-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a0...V0.13.1a1)
 
 **Implemented enhancements:**
 
