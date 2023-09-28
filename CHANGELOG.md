@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a1...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a2...HEAD)
+
+**Merged pull requests:**
+
+- allow subclasses to pass protocol and bus objects [\#76](https://github.com/JarbasHiveMind/HiveMind-core/pull/76) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a2) (2023-09-15)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a1...V0.13.1a2)
 
 **Implemented enhancements:**
 
