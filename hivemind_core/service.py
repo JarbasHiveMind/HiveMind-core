@@ -168,7 +168,8 @@ class HiveMindService:
                  stopping_hook: Callable = on_stopping,
                  websocket_config: Optional[Dict[str, Any]] = None,
                  protocol=HiveMindListenerProtocol,
-                 bus=None):
+                 bus=None,
+                 ws_handler=MessageBusEventHandler):
 
         websocket_config = websocket_config or \
                 Configuration().get('hivemind_websocket', {})
@@ -178,6 +179,7 @@ class HiveMindService:
                                       on_error=error_hook,
                                       on_stopping=stopping_hook)
         self._proto = protocol
+        self._ws_handler = ws_handler
         if bus:
             self.bus = bus
         else:
@@ -211,11 +213,11 @@ class HiveMindService:
         loop = ioloop.IOLoop.current()
 
         self.protocol = self._proto(loop=loop)
-        self.protocol.bind(MessageBusEventHandler, self.bus)
+        self.protocol.bind(self._ws_handler, self.bus)
         self.status.bind(self.bus)
         self.status.set_started()
 
-        routes: list = [("/", MessageBusEventHandler)]
+        routes: list = [("/", self._ws_handler)]
         application = web.Application(routes)
 
         if self.ssl:
