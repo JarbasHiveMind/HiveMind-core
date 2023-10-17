@@ -76,7 +76,9 @@ class HiveMindClientConnection:
             return LOG.debug(f"message type {_msg_type} "
                              f"is blacklisted for {self.peer}")
 
-        LOG.debug(f"sending to {self.peer}: {_msg_type}")
+        LOG.debug(f"sending to {self.peer}: {message.msg_type}")
+        if message.msg_type == HiveMessageType.BUS:
+            LOG.debug(f"mycroft_type {_msg_type}")
         payload = message.serialize()  # json string
         is_bin = False
         if self.crypto_key and message.msg_type not in [HiveMessageType.HANDSHAKE,
