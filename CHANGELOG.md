@@ -1,5 +1,9 @@
 # Changelog
 
+## [V0.13.1a6](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a6) (2023-10-17)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a5...V0.13.1a6)
+
 ## [V0.13.1a5](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a5) (2023-10-17)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a4...V0.13.1a5)
