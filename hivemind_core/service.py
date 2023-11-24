@@ -6,14 +6,14 @@ import random
 from os import makedirs
 from os.path import exists, join
 from socket import gethostname
-from threading import Thread
 from typing import Callable, Dict, Any, Optional, Tuple
 
 from OpenSSL import crypto
+from ovos_bus_client import MessageBusClient
+from ovos_bus_client.session import Session
 from ovos_config import Configuration
 from ovos_utils.log import LOG
 from ovos_utils.process_utils import ProcessStatus, StatusCallbackMap
-from ovos_bus_client.session import Session
 from ovos_utils.xdg_utils import xdg_data_home
 from poorman_handshake import HandShake, PasswordHandShake
 from pyee import EventEmitter
@@ -22,11 +22,11 @@ from tornado.platform.asyncio import AnyThreadEventLoopPolicy
 from tornado.websocket import WebSocketHandler
 
 from hivemind_bus_client.identity import NodeIdentity
+from hivemind_bus_client.message import HiveMessageType
 from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import HiveMindListenerProtocol, HiveMindClientConnection, HiveMindNodeType
-from hivemind_presence import LocalPresence
 from hivemind_ggwave import GGWaveMaster
-from ovos_bus_client import MessageBusClient
+from hivemind_presence import LocalPresence
 
 
 def create_self_signed_cert(cert_dir=f"{xdg_data_home()}/hivemind",
@@ -105,7 +105,10 @@ class MessageBusEventHandler(WebSocketHandler):
 
     def on_message(self, message):
         message = self.client.decode(message)
-        LOG.info(f"received {self.client.peer} message: {message}")
+        if message.msg_type == HiveMessageType.BUS and message.payload.msg_type == "recognizer_loop:b64_audio":
+            LOG.info(f"received {self.client.peer} sent base64 audio for STT")
+        else:
+            LOG.info(f"received {self.client.peer} message: {message}")
         self.protocol.handle_message(message, self.client)
 
     def open(self):
@@ -163,7 +166,7 @@ class MessageBusEventHandler(WebSocketHandler):
 class HiveMindService:
     identity = NodeIdentity()
 
-    def __init__(self, 
+    def __init__(self,
                  alive_hook: Callable = on_alive,
                  started_hook: Callable = on_started,
                  ready_hook: Callable = on_ready,
@@ -175,7 +178,7 @@ class HiveMindService:
                  ws_handler=MessageBusEventHandler):
 
         websocket_config = websocket_config or \
-                Configuration().get('hivemind_websocket', {})
+                           Configuration().get('hivemind_websocket', {})
         callbacks = StatusCallbackMap(on_started=started_hook,
                                       on_alive=alive_hook,
                                       on_ready=ready_hook,
