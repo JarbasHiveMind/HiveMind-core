@@ -2,7 +2,19 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a9...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a10...HEAD)
+
+**Fixed bugs:**
+
+- fix/clients\_manage\_their\_own\_sessions [\#84](https://github.com/JarbasHiveMind/HiveMind-core/pull/84) ([JarbasAl](https://github.com/JarbasAl))
+
+**Closed issues:**
+
+- Proposal/s: compressing messages, URIs for nodes, and how they relate [\#14](https://github.com/JarbasHiveMind/HiveMind-core/issues/14)
+
+## [V0.13.1a10](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a10) (2024-01-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a9...V0.13.1a10)
 
 **Merged pull requests:**
 
