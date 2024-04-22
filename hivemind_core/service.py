@@ -130,7 +130,7 @@ class MessageBusEventHandler(WebSocketHandler):
             name=name,
             ip=self.request.remote_ip,
             socket=self,
-            sess=Session(),
+            sess=Session(session_id="default"),  # will be re-assigned once client sends it's own
             handshake=handshake,
             loop=self.protocol.loop,
         )
@@ -211,7 +211,8 @@ class HiveMindService:
         if bus:
             self.bus = bus
         else:
-            self.ovos_bus_address = ovos_bus_config.get("address") or "127.0.0.1"
+            ovos_bus_config = ovos_bus_config or Configuration().get("websocket", {})
+            self.ovos_bus_address = ovos_bus_config.get("host") or "127.0.0.1"
             self.ovos_bus_port = ovos_bus_config.get("port") or 8181
             self.bus = MessageBusClient(
                 host=self.ovos_bus_address,

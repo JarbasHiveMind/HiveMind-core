@@ -212,18 +212,19 @@ class HiveMindListenerInternalProtocol:
         if not isinstance(target_peers, list):
             target_peers = [target_peers]
 
-        for peer, client in self.clients.items():
-            if peer in target_peers:
-                # forward internal messages to clients if they are the target
-                LOG.debug(f"{message.msg_type} - destination: {peer}")
-                message.context["source"] = "hive"
-                msg = HiveMessage(
-                    HiveMessageType.BUS,
-                    source_peer=peer,
-                    target_peers=target_peers,
-                    payload=message,
-                )
-                client.send(msg)
+        if target_peers:
+            for peer, client in self.clients.items():
+                if peer in target_peers:
+                    # forward internal messages to clients if they are the target
+                    LOG.debug(f"{message.msg_type} - destination: {peer}")
+                    message.context["source"] = "hive"
+                    msg = HiveMessage(
+                        HiveMessageType.BUS,
+                        source_peer=peer,
+                        target_peers=target_peers,
+                        payload=message,
+                    )
+                    client.send(msg)
 
 
 @dataclass()
@@ -446,8 +447,12 @@ class HiveMindListenerProtocol:
         self, message: HiveMessage, client: HiveMindClientConnection
     ):
         # update the session as received by the client
+        old = client.peer
         client.sess = Session.from_message(message.payload)
         LOG.debug(f"Client session updated: {client.sess.serialize()}")
+        if old != client.peer:
+            LOG.debug(f"Client session_id changed! new peer_id: {client.peer}")
+            self.clients[client.peer] = self.clients.pop(old)
 
         self.handle_inject_mycroft_msg(message.payload, client)
         if self.mycroft_bus_callback:
