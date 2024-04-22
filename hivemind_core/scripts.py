@@ -198,7 +198,7 @@ def listen(
     from hivemind_core.service import HiveMindService
 
     ovos_bus_config = {
-        "address": ovos_bus_address,
+        "host": ovos_bus_address,
         "port": ovos_bus_port,
     }
 
