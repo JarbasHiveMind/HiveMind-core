@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a13...HEAD)
+
+**Implemented enhancements:**
+
+- fix/allow\_audio\_state\_messages\_for\_session [\#85](https://github.com/JarbasHiveMind/HiveMind-core/pull/85) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a13](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a13) (2024-04-22)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a12...V0.13.1a13)
+
 ## [V0.13.1a12](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a12) (2024-04-22)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a11...V0.13.1a12)
@@ -106,15 +118,15 @@
 
 ## [V0.13.0a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a4) (2023-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a3...V0.13.0a4)
-
-## [V0.13.0a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a3) (2023-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a2...V0.13.0a3)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a2...V0.13.0a4)
 
 ## [V0.13.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a2) (2023-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a3...V0.13.0a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.0a3...V0.13.0a2)
+
+## [V0.13.0a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.0a3) (2023-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.11.0a3...V0.13.0a3)
 
 **Breaking changes:**
 
