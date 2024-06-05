@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a14...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a15...HEAD)
+
+**Implemented enhancements:**
+
+- feat/intercom [\#86](https://github.com/JarbasHiveMind/HiveMind-core/pull/86) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a15](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a15) (2024-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a14...V0.13.1a15)
 
 **Implemented enhancements:**
 
