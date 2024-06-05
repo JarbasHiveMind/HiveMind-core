@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a13...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a14...HEAD)
+
+**Implemented enhancements:**
+
+- allow to report SEI to OCP [\#87](https://github.com/JarbasHiveMind/HiveMind-core/pull/87) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a14](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a14) (2024-05-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a13...V0.13.1a14)
 
 **Implemented enhancements:**
 
