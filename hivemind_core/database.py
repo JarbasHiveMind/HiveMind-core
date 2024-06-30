@@ -8,20 +8,13 @@ from ovos_utils.log import LOG
 
 
 def cast_to_client_obj():
-    valid_kwargs: Iterable[str] = (
-        "client_id",
-        "api_key",
-        "name",
-        "description",
-        "is_admin",
-        "last_seen",
-        "blacklist",
-        "allowed_types",
-        "crypto_key",
-        "password",
-        "can_broadcast",
-        "can_escalate",
-        "can_propagate",
+    """
+    Decorator to cast the return value of a function to a Client object or a list of Client objects.
+    """
+    valid_kwargs = (
+        "client_id", "api_key", "name", "description", "is_admin", "last_seen",
+        "blacklist", "allowed_types", "crypto_key", "password", "can_broadcast",
+        "can_escalate", "can_propagate"
     )
 
     def _handler(func):
@@ -32,7 +25,7 @@ def cast_to_client_obj():
                 return [_cast(r) for r in ret]
             if isinstance(ret, dict):
                 if not all((k in valid_kwargs for k in ret.keys())):
-                    raise RuntimeError(f"{func} returned a dict with unknown keys")
+                    raise RuntimeError(f"{func.__name__} returned a dict with unknown keys: {ret.keys()}")
                 return Client(**ret)
 
             raise TypeError(
@@ -88,19 +81,21 @@ class Client:
         self.can_propagate = can_propagate
 
     def __getitem__(self, item: str) -> Any:
-        return self.__dict__.get(item)
+        if item in self.__dict__:
+            return self.__dict__[item]
+        raise KeyError(f"Unknown key: {item}")
 
     def __setitem__(self, key: str, value: Any):
         if hasattr(self, key):
             setattr(self, key, value)
         else:
-            raise ValueError("unknown property")
+            raise ValueError(f"Unknown property: {key}")
 
     def __eq__(self, other: Union[object, dict]) -> bool:
-        if not isinstance(other, dict):
-            other = other.__dict__
-        if self.__dict__ == other:
-            return True
+        if isinstance(other, dict):
+            return self.__dict__ == other
+        if isinstance(other, Client):
+            return self.__dict__ == other.__dict__
         return False
 
     def __repr__(self) -> str:
@@ -142,16 +137,13 @@ class JsonDB(AbstractDB):
         self._db = JsonDatabaseXDG(name="clients", subfolder="hivemind")
 
     def get_item_id(self, client: Client) -> str:
-        client = client.__dict__
-        return self._db.get_item_id(client)
+        return self._db.get_item_id(client.__dict__)
 
     def add_item(self, client: Client):
-        client = client.__dict__
-        self._db.add_item(client)
+        self._db.add_item(client.__dict__)
 
     def update_item(self, item_id: str, client: Client):
-        client = client.__dict__
-        self._db.update_item(item_id, client)
+        self._db.update_item(item_id, client.__dict__)
 
     @cast_to_client_obj()
     def search_by_value(self, key: str, val: str) -> List[Client]:
@@ -161,7 +153,7 @@ class JsonDB(AbstractDB):
         return len(self._db)
 
     def commit(self):
-        self.commit()
+        self._db.commit()
 
 
 class RedisDB(AbstractDB):
@@ -170,46 +162,95 @@ class RedisDB(AbstractDB):
             import redis
             from redis.commands.json.path import Path
             from redis.commands.search.query import Query
+            from redis.commands.search.field import TextField, NumericField
+            from redis.commands.search.indexDefinition import IndexDefinition, IndexType
         except ImportError:
             LOG.error("'pip install redis[hiredis]'")
             raise
+
         self._Path = Path
         self._Query = Query
         # TODO - host/port from config
         self.r = redis.Redis(host="localhost", port=6379)
         self.rs = self.r.ft("idx:clients")
 
+        # Create the search index if it doesn't exist
+        try:
+            self.rs.info()
+        except:
+            schema = (
+                TextField("api_key"),
+                NumericField("client_id")
+            )
+            index_def = IndexDefinition(prefix=["client:"])
+            self.rs.create_index(schema, definition=index_def)
+
     def get_item_id(self, client: Client) -> str:
-        pass  # TODO
+        try:
+            search = self.rs.search(self._Query(f"@api_key:{client.api_key}"))
+            if search.total == 0:
+                raise ValueError("Client not found")
+            return search.docs[0].id
+        except Exception as e:
+            LOG.error(f"Failed to get item ID: {e}")
+            raise
 
     def add_item(self, client: Client):
-        client_id = len(self) + 1
-        self.r.json().set(f"client:{client_id}",
-                          self._Path.root_path(),
-                          client.__dict__)
+        try:
+            client_id = len(self) + 1
+            client_key = f"client:{client_id}"
+            client_data = client.__dict__
+            self.r.json().set(client_key, self._Path.root_path(), client_data)
+            self.rs.add_document(
+                client_key,
+                api_key=client.api_key,
+                client_id=client.client_id
+            )
+        except Exception as e:
+            LOG.error(f"Failed to add item: {e}")
+            raise
 
     def update_item(self, item_id: str, client: Client):
-        self.r.json().set(f"client:{item_id}", self._Path.root_path(), client)
+        try:
+            client_key = f"client:{item_id}"
+            client_data = client.__dict__
+            self.r.json().set(client_key, self._Path.root_path(), client_data)
+            self.rs.update_document(
+                client_key,
+                api_key=client.api_key,
+                client_id=client.client_id
+            )
+        except Exception as e:
+            LOG.error(f"Failed to update item: {e}")
+            raise
 
     @cast_to_client_obj()
     def search_by_value(self, key: str, val: str) -> List[Client]:
-        search = self.rs.search(self._Query(f"@{key}:{val}"))
-        return [json.loads(doc.json) for doc in search.docs]
+        try:
+            search = self.rs.search(self._Query(f"@{key}:{val}"))
+            return [json.loads(doc.json) for doc in search.docs]
+        except Exception as e:
+            LOG.error(f"Search by value failed: {e}")
+            raise
 
     @cast_to_client_obj()
-    def get_all_clients(
-            self, sort_by: str = "id", asc: bool = True
-    ) -> Optional[List[Client]]:
-        clients: List = []
-        search = self.rs.search(self._Query("@id:[0 +inf]").sort_by(sort_by, asc))
-        for client in search.docs:
-            clients.append(json.loads(client.json))
-        return clients
+    def get_all_clients(self, sort_by: str = "client_id", asc: bool = True) -> Optional[List[Client]]:
+        try:
+            search = self.rs.search(self._Query("@client_id:[0 +inf]").sort_by(sort_by, asc))
+            return [json.loads(client.json) for client in search.docs]
+        except Exception as e:
+            LOG.error(f"Failed to get all clients: {e}")
+            raise
 
     def __len__(self):
-        return len(self.get_all_clients())
+        try:
+            return len(self.get_all_clients())
+        except Exception as e:
+            LOG.error(f"Failed to get database length: {e}")
+            return 0
 
     def commit(self):
+        # Redis operations are usually atomic, no explicit commit needed
         pass
 
 
@@ -217,6 +258,9 @@ class ClientDatabase:
     valid_backends = ["json", "redis"]
 
     def __init__(self, backend="json"):
+        """
+        Initialize the client database with the specified backend.
+        """
         if backend not in self.valid_backends:
             raise NotImplementedError(f"{backend} not supported, choose one of {self.valid_backends}")
 
