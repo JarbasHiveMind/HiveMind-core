@@ -2,7 +2,19 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a15...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a16...HEAD)
+
+**Fixed bugs:**
+
+- fix/91 [\#92](https://github.com/JarbasHiveMind/HiveMind-core/pull/92) ([JarbasAl](https://github.com/JarbasAl))
+
+**Closed issues:**
+
+- KeyError: 'VoiceSatelliteV0.3.0:10.233.100.128::default' [\#91](https://github.com/JarbasHiveMind/HiveMind-core/issues/91)
+
+## [V0.13.1a16](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a16) (2024-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a15...V0.13.1a16)
 
 **Implemented enhancements:**
 
