@@ -3,8 +3,8 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import List, Dict, Optional
-import pgpy
 
+import pgpy
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
@@ -13,15 +13,16 @@ from poorman_handshake import HandShake, PasswordHandShake
 from tornado import ioloop
 from tornado.websocket import WebSocketHandler
 
+from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 from hivemind_bus_client.serialization import decode_bitstring, get_bitstring
-from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.util import (
     decrypt_bin,
     encrypt_bin,
     decrypt_from_json,
     encrypt_as_json,
 )
+from hivemind_core.database import ClientDatabase
 
 
 class ProtocolVersion(IntEnum):
@@ -63,9 +64,15 @@ class HiveMindClientConnection:
     pswd_handshake: Optional[PasswordHandShake] = None
     socket: Optional[WebSocketHandler] = None
     crypto_key: Optional[str] = None
-    blacklist: List[str] = field(
+    msg_blacklist: List[str] = field(
         default_factory=list
     )  # list of ovos message_type to never be sent to this client
+    skill_blacklist: List[str] = field(
+        default_factory=list
+    )  # list of skill_id that can't match for this client
+    intent_blacklist: List[str] = field(
+        default_factory=list
+    )  # list of skill_id:intent_name that can't match for this client
     allowed_types: List[str] = field(
         default_factory=list
     )  # list of ovos message_type to allow to be sent from this client
@@ -88,7 +95,7 @@ class HiveMindClientConnection:
         else:
             _msg_type = message.payload.msg_type
 
-        if _msg_type in self.blacklist:
+        if _msg_type in self.msg_blacklist:
             return LOG.debug(
                 f"message type {_msg_type} " f"is blacklisted for {self.peer}"
             )
@@ -673,8 +680,30 @@ class HiveMindListenerProtocol:
         return False
 
     # HiveMind mycroft bus messages -  from slave -> master
+    def _update_blacklist(self, message: Message, client: HiveMindClientConnection):
+        LOG.debug("replacing message metadata with hivemind client session")
+        message.context["session"] = client.sess.serialize()
+
+        # update blacklist from db, to account for changes without requiring a restart
+        with ClientDatabase() as users:
+            user = users.get_client_by_api_key(client.key)
+            client.skill_blacklist = user.blacklist.get("skills", [])
+            client.intent_blacklist = user.blacklist.get("intents", [])
+
+        # inject client specific blacklist into session
+        if "blacklisted_skills" not in message.context["session"]:
+            message.context["session"]["blacklisted_skills"] = []
+        if "blacklisted_intents" not in message.context["session"]:
+            message.context["session"]["blacklisted_intents"] = []
+
+        message.context["session"]["blacklisted_skills"] += [s for s in client.skill_blacklist
+                                                             if s not in message.context["session"]["blacklisted_skills"]]
+        message.context["session"]["blacklisted_intents"] += [s for s in client.intent_blacklist
+                                                              if s not in message.context["session"]["blacklisted_intents"]]
+        return message
+
     def handle_inject_mycroft_msg(
-        self, message: Message, client: HiveMindClientConnection
+            self, message: Message, client: HiveMindClientConnection
     ):
         """
         message (Message): mycroft bus message object
@@ -688,8 +717,7 @@ class HiveMindListenerProtocol:
             return
 
         # ensure client specific session data is injected in query to ovos
-        LOG.debug("replacing message metadata with hivemind client session")
-        message.context["session"] = client.sess.serialize()
+        message = self._update_blacklist(message, client)
         if message.msg_type == "speak":
             message.context["destination"] = ["audio"]  # make audible, this is injected "speak" command
         elif message.context.get("destination") is None:
