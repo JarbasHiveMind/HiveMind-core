@@ -58,12 +58,11 @@ class TestDB(unittest.TestCase):
 
     def test_json_db_implementation(self):
         with ClientDatabase(backend="json") as db:
-            name = f"HiveMind-Node-TestJson"
+            name = "HiveMind-Node-TestJson"
             user = db.add_client(name, self.access_key, crypto_key=self.key, password=self.password)
             self.assertTrue(isinstance(user, Client))
             self.assertEqual(user.name, name)
             self.assertEqual(user.api_key, self.access_key)
-
     def test_delete_and_reuse_client_id(self):
         with ClientDatabase() as db:
             name = "TestNodeForDelete"
