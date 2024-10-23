@@ -2,7 +2,23 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a18...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a19...HEAD)
+
+**Fixed bugs:**
+
+- Messages received by the same client [\#93](https://github.com/JarbasHiveMind/HiveMind-core/issues/93)
+
+**Closed issues:**
+
+- Wakeword sound takes longer to play with "instant\_listen" [\#81](https://github.com/JarbasHiveMind/HiveMind-core/issues/81)
+
+**Merged pull requests:**
+
+- fix:allow b64 by default [\#96](https://github.com/JarbasHiveMind/HiveMind-core/pull/96) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a19](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a19) (2024-07-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a18...V0.13.1a19)
 
 **Implemented enhancements:**
 
