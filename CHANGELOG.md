@@ -2,7 +2,15 @@
 
 ## [Unreleased](https://github.com/JarbasHiveMind/HiveMind-core/tree/HEAD)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a19...HEAD)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a20...HEAD)
+
+**Merged pull requests:**
+
+- fix:binary payloads [\#97](https://github.com/JarbasHiveMind/HiveMind-core/pull/97) ([JarbasAl](https://github.com/JarbasAl))
+
+## [V0.13.1a20](https://github.com/JarbasHiveMind/HiveMind-core/tree/V0.13.1a20) (2024-10-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/V0.13.1a19...V0.13.1a20)
 
 **Fixed bugs:**
 
