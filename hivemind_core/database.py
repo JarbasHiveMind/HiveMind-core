@@ -7,26 +7,36 @@ from ovos_utils.log import LOG
 
 
 def cast_to_client_obj():
-    valid_kwargs: Iterable[str] = ("client_id", "api_key", "name",
-                                   "description", "is_admin", "last_seen",
-                                   "blacklist", "allowed_types", "crypto_key",
-                                   "password")
+    valid_kwargs: Iterable[str] = (
+        "client_id",
+        "api_key",
+        "name",
+        "description",
+        "is_admin",
+        "last_seen",
+        "blacklist",
+        "allowed_types",
+        "crypto_key",
+        "password",
+        "can_broadcast",
+        "can_escalate",
+        "can_propagate",
+    )
 
     def _handler(func):
-
         def _cast(ret):
             if ret is None or isinstance(ret, Client):
                 return ret
             if isinstance(ret, list):
                 return [_cast(r) for r in ret]
             if isinstance(ret, dict):
-                if not all((k in valid_kwargs
-                            for k in ret.keys())):
+                if not all((k in valid_kwargs for k in ret.keys())):
                     raise RuntimeError(f"{func} returned a dict with unknown keys")
                 return Client(**ret)
 
             raise TypeError(
-                "cast_to_client_obj decorator can only be used in functions that return None, dict, Client or a list of those types")
+                "cast_to_client_obj decorator can only be used in functions that return None, dict, Client or a list of those types"
+            )
 
         @wraps(func)
         def call_function(*args, **kwargs):
@@ -39,18 +49,22 @@ def cast_to_client_obj():
 
 
 class Client:
-    def __init__(self, 
-                 client_id: int,
-                 api_key: str,
-                 name: str = "",
-                 description: str = "",
-                 is_admin: bool = False,
-                 last_seen: float = -1,
-                 blacklist: Optional[Dict[str, List[str]]] = None,
-                 allowed_types: Optional[List[str]] = None,
-                 crypto_key: Optional[str] = None,
-                 password: Optional[str] = None):
-
+    def __init__(
+        self,
+        client_id: int,
+        api_key: str,
+        name: str = "",
+        description: str = "",
+        is_admin: bool = False,
+        last_seen: float = -1,
+        blacklist: Optional[Dict[str, List[str]]] = None,
+        allowed_types: Optional[List[str]] = None,
+        crypto_key: Optional[str] = None,
+        password: Optional[str] = None,
+        can_broadcast: bool = True,
+        can_escalate: bool = True,
+        can_propagate: bool = True,
+    ):
         self.client_id = client_id
         self.description = description
         self.api_key = api_key
@@ -59,14 +73,20 @@ class Client:
         self.is_admin = is_admin
         self.crypto_key = crypto_key
         self.password = password
-        self.blacklist = blacklist or {
-            "messages": [],
-            "skills": [],
-            "intents": []
-        }
-        self.allowed_types = allowed_types or ["recognizer_loop:utterance"]
+        self.blacklist = blacklist or {"messages": [], "skills": [], "intents": []}
+        self.allowed_types = allowed_types or ["recognizer_loop:utterance", 
+                                               "recognizer_loop:record_begin", 
+                                               "recognizer_loop:record_end", 
+                                               "recognizer_loop:audio_output_start", 
+                                               "recognizer_loop:audio_output_end",
+                                               'recognizer_loop:b64_transcribe',
+                                               'speak:b64_audio',
+                                               "ovos.common_play.SEI.get.response"]
         if "recognizer_loop:utterance" not in self.allowed_types:
             self.allowed_types.append("recognizer_loop:utterance")
+        self.can_broadcast = can_broadcast
+        self.can_escalate = can_escalate
+        self.can_propagate = can_propagate
 
     def __getitem__(self, item: str) -> Any:
         return self.__dict__.get(item)
@@ -148,9 +168,7 @@ class ClientDatabase(JsonDatabaseXDG):
         self.update_item(item_id, user)
         return True
 
-    def change_blacklist(self,
-                         blacklist: Union[str, Dict[str, Any]],
-                         key: str) -> bool:
+    def change_blacklist(self, blacklist: Union[str, Dict[str, Any]], key: str) -> bool:
         if isinstance(blacklist, dict):
             blacklist = json.dumps(blacklist)
         user = self.get_client_by_api_key(key)
@@ -179,15 +197,16 @@ class ClientDatabase(JsonDatabaseXDG):
         return self.search_by_value("name", name)
 
     @cast_to_client_obj()
-    def add_client(self,
-                   name: str,
-                   key: str = "",
-                   admin: bool = False,
-                   blacklist: Optional[Dict[str, Any]] = None,
-                   allowed_types: Optional[List[str]] = None,
-                   crypto_key: Optional[str] = None,
-                   password: Optional[str] = None) -> Client:
-
+    def add_client(
+        self,
+        name: str,
+        key: str = "",
+        admin: bool = False,
+        blacklist: Optional[Dict[str, Any]] = None,
+        allowed_types: Optional[List[str]] = None,
+        crypto_key: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> Client:
         user = self.get_client_by_api_key(key)
         item_id = self.get_item_id(user)
         if crypto_key is not None:
@@ -207,11 +226,16 @@ class ClientDatabase(JsonDatabaseXDG):
                 user["password"] = password
             self.update_item(item_id, user)
         else:
-            user = Client(api_key=key, name=name,
-                          blacklist=blacklist, crypto_key=crypto_key,
-                          client_id=self.total_clients() + 1,
-                          is_admin=admin, password=password,
-                          allowed_types=allowed_types)
+            user = Client(
+                api_key=key,
+                name=name,
+                blacklist=blacklist,
+                crypto_key=crypto_key,
+                client_id=self.total_clients() + 1,
+                is_admin=admin,
+                password=password,
+                allowed_types=allowed_types,
+            )
             self.add_item(user)
         return user
 
@@ -219,11 +243,11 @@ class ClientDatabase(JsonDatabaseXDG):
         return len(self)
 
     def __enter__(self):
-        """ Context handler """
+        """Context handler"""
         return self
 
     def __exit__(self, _type, value, traceback):
-        """ Commits changes and Closes the session """
+        """Commits changes and Closes the session"""
         try:
             self.commit()
         except Exception as e:
