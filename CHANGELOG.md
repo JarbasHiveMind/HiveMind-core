@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.14.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.14.0a1) (2024-10-30)
+## [0.14.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.14.1a1) (2024-11-13)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.13.1...0.14.0a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.14.0...0.14.1a1)
 
 **Merged pull requests:**
 
-- feat:binary handlers [\#100](https://github.com/JarbasHiveMind/HiveMind-core/pull/100) ([JarbasAl](https://github.com/JarbasAl))
+- fix: requirements.txt [\#102](https://github.com/JarbasHiveMind/HiveMind-core/pull/102) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
