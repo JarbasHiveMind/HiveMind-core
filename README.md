@@ -260,12 +260,11 @@ HiveMind-Core supports multiple database backends to store client credentials an
 
 ### Minds
 
-You must run at least one of these
+This is the "brain" you want to host behind the hivemind protocol, it can be anything you want but by default we assume [OpenVoiceOS](https://openvoiceos.org) is being used
 
 - **HiveMind Core** (this repository): The central hub for managing connections and routing messages between devices.
-  *text* input only
 - [Hivemind Listener](https://github.com/JarbasHiveMind/HiveMind-listener) - an extension of `hivemind-core` for
-  streaming *audio* from satellites **<- you likely want this one**
+  streaming *audio* from satellites
 - [Persona](https://github.com/JarbasHiveMind/HiveMind-persona) - run
   a [persona](https://github.com/OpenVoiceOS/ovos-persona) (eg. LLM). *text* input only
 
@@ -291,7 +290,44 @@ You must run at least one of these
 - [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge)
 
 ---
+## Hivemind Server Comparison
 
+When building your HiveMind servers there are many ways to go about it, with many optional components
+
+Common setups:
+
+- **OVOS Device**, a full OVOS install without hivemind *(for reference only)*
+- **Hivemind Device**, a OVOS device also running hivemind, eg. a Mark2 with it's own satellites.
+- **Hivemind Skills Server**, a minimal HiveMind server that satellites can connect to, supports **text** utterances
+  only
+- **Hivemind Sound Server**, a HiveMind server that supports **text** utterances and **streaming audio**
+- **Hivemind Persona Server**, exposes a `ovos-persona` (eg. an LLM) that satellites can connect to, without
+  running `ovos-core`.
+
+The table below illustrates the most common setups for a OVOS based Mind, each column represents a running OVOS/HiveMind
+service on your server
+
+|                             | **hivemind-core** | **hivemind-listener** | **ovos-core** | **ovos-audio** | **ovos-listener** | **hivemind-persona** |
+|-----------------------------|-------------------|-----------------------|---------------|----------------|-------------------|----------------------|
+| **OVOS Device**             | ❌                 | ❌                     | ✔️            | ✔️             | ✔️                | ❌                    | 
+| **Hivemind Device**         | ✔️                | ❌                     | ✔️            | ✔️             | ✔️                | ❌                    | 
+| **Hivemind Skills Server**  | ✔️                | ❌                     | ✔️            | ❌              | ❌                 | ❌                    | 
+| **Hivemind Sound Server**   | ❌                 | ✔️                    | ✔️            | ❌              | ❌                 | ❌                    | 
+| **Hivemind Persona Server** | ❌                 | ❌                     | ❌             | ❌              | ❌                 | ✔️                   | 
+
+The table below indicates compatibility for each of the setups described above with the most common voice satellites,
+each column corresponds to a different satellite
+
+|                             | **voice satellite** | **voice relay** | **mic satellite** |
+|-----------------------------|---------------------|-----------------|-------------------|
+| **OVOS Device**             | ❌                   | ❌               | ❌                 |
+| **Hivemind Device**         | ✔️                  | ✔️              | ❌                 |
+| **Hivemind Skills Server**  | ✔️                  | ❌               | ❌                 |
+| **Hivemind Sound Server**   | ✔️                  | ✔️              | ✔️                |
+| **Hivemind Persona Server** | ✔️                  | ❌               | ❌                 |
+
+
+---
 ## Voice Satellite Comparison
 
 | Feature                            | **HiveMind Voice Satellite**               | **HiveMind Voice Relay**                                                                  | **HiveMind Microphone Satellite**                            |
@@ -306,6 +342,14 @@ You must run at least one of these
 | **Media Playback Support**         | Yes, with supported plugins                | Yes, with supported plugins                                                               | No                                                           |
 | **PHAL plugins**                   | Supported                                  | Supported                                                                                 | Unsupported                                                  |
 | **Transformer plugins**            | Supported                                  | Supported                                                                                 | Unsupported                                                  |
+
+The table below illustrates how plugins from the OVOS ecosystem relate to the various satellites and where they should be installed and configured
+
+| Supported Plugins                 | **Microphone**   | **VAD**          | **Wake Word**    | **STT**          | **TTS**          | **Media Playback** | **Transformers**   | **PHAL**           |
+|-----------------------------------|------------------|------------------|------------------|------------------|------------------|--------------------|--------------------|--------------------|
+| **HiveMind Voice Satellite**      | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Optional)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   |
+| **HiveMind Voice Relay**          | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Required) | 📡<br>(Remote)   | 📡<br>(Remote)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   |
+| **HiveMind Microphone Satellite** | ✔️<br>(Required) | ✔️<br>(Required) | 📡<br>(Remote)   | 📡<br>(Remote)   | 📡<br>(Remote)   | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) |
 
 ---
 
