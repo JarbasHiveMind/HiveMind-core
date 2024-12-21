@@ -233,7 +233,8 @@ class HiveMindService:
             self.bus.connected_event.wait()
 
         self.status = ProcessStatus("HiveMind", callback_map=callbacks)
-        self.host = websocket_config.get("host") or self.identity.default_master
+        host = websocket_config.get("host") or self.identity.default_master or "0.0.0.0"
+        self.host = host.split("://")[-1]
         self.port = websocket_config.get("port") or self.identity.default_port or 5678
         self.ssl = websocket_config.get("ssl", False)
         self.cert_dir = (
@@ -287,7 +288,7 @@ class HiveMindService:
             application.listen(self.port, self.host, ssl_options=ssl_options)
         else:
             LOG.info("ws connection started")
-            application.listen(self.port, self.host.split("://")[-1])
+            application.listen(self.port, self.host)
 
         self.presence.start()
         if self.ggwave is not None:
