@@ -77,19 +77,20 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  add-client          Add credentials for a client.
-  allow-msg           Allow specific message types from a client.
-  blacklist-intent    Block certain intents for a client.
-  blacklist-skill     Block certain skills for a client.
-  delete-client       Remove client credentials.
-  list-clients        Display a list of registered clients.
-  listen              Start listening for HiveMind connections.
-  unblacklist-intent  Remove intents from a client's blacklist.
-  unblacklist-skill   Remove skills from a client's blacklist.
+  add-client        add credentials for a client
+  allow-intent      remove intents from a client blacklist
+  allow-msg         allow message types to be sent from a client
+  allow-skill       remove skills from a client blacklist
+  blacklist-intent  blacklist intents from being triggered by a client
+  blacklist-msg     blacklist message types from being sent from a client
+  blacklist-skill   blacklist skills from being triggered by a client
+  delete-client     remove credentials for a client
+  list-clients      list clients and credentials
+  listen            start listening for HiveMind connections
+  rename-client     Rename a client in the database
 ```
 
 For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
-
 
 <details>
   <summary>Click for more details</summary>
@@ -105,22 +106,33 @@ $ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --passwo
 ```
 
 - **When to use**:  
-  Use this command when setting up a new HiveMind client device (e.g., a Raspberry Pi or another satellite). You’ll need
-  to provide the credentials for secure communication.
+  Use this command when setting up a new HiveMind client (e.g., Raspberry Pi, IoT device). Provide credentials for secure communication with the server.
 
 ---
 
 ### `list-clients`
 
-List all the registered clients and their credentials.
+List all registered clients and their credentials.
 
 ```bash
 $ hivemind-core list-clients --db-backend json
 ```
 
 - **When to use**:  
-  Use this command to verify which clients are currently registered or to inspect their credentials. This is helpful for
-  debugging or managing connected devices.
+  Use this command to view or inspect all registered clients, helpful for debugging or managing devices connected to HiveMind.
+
+---
+
+### `rename-client`
+
+Rename a registered client.
+
+```bash
+$ hivemind-core rename-client "new name" 1
+```
+
+- **When to use**:  
+  Use this command when you need to change the name of an existing client in the database.
 
 ---
 
@@ -133,12 +145,13 @@ $ hivemind-core delete-client 1
 ```
 
 - **When to use**:  
-  Use this command to revoke access for a specific client. For instance, if a device is lost, no longer in use, or
-  compromised, you can remove it to maintain security.
+  Use this command to revoke a client’s access, for example, when a device is lost, no longer in use, or compromised.
 
 ---
 
 ### `allow-msg`
+
+By default only some messages are allowed, extra messages can be allowed per client
 
 Allow specific message types to be sent by a client.
 
@@ -147,9 +160,20 @@ $ hivemind-core allow-msg "speak"
 ```
 
 - **When to use**:  
-  This command is used to fine-tune the communication protocol by enabling specific message types. This is especially
-  useful in scenarios where certain clients should only perform limited actions (e.g., making another device speak via
-  TTS).
+  Use this command to enable certain message types, particularly when extending a client’s communication capabilities (e.g., allowing TTS commands).
+
+---
+
+### `blacklist-msg`
+
+Block specific message types from being sent by a client.
+
+```bash
+$ hivemind-core allow-msg "speak"
+```
+
+- **When to use**:  
+  Use this command to prevent specific message types from being sent by a client, adding a layer of control over communication.
 
 ---
 
@@ -162,21 +186,20 @@ $ hivemind-core blacklist-skill "skill-weather" 1
 ```
 
 - **When to use**:  
-  Use this command to restrict a client from interacting with a particular skill. For example, a child’s device could be
-  restricted from accessing skills that are not age-appropriate.
+  Use this command to restrict a client’s access to particular skills, such as preventing a device from accessing certain skills for safety or appropriateness.
 
 ---
 
-### `unblacklist-skill`
+### `allow-skill`
 
-Remove a skill from a client’s blacklist.
+Remove a skill from a client’s blacklist, allowing it to be triggered.
 
 ```bash
-$ hivemind-core unblacklist-skill "skill-weather" 1
+$ hivemind-core allow-skill "skill-weather" 1
 ```
 
 - **When to use**:  
-  If restrictions are no longer needed, use this command to restore access to the blacklisted skill.
+  If restrictions on a skill are no longer needed, use this command to reinstate access to the skill.
 
 ---
 
@@ -189,35 +212,33 @@ $ hivemind-core blacklist-intent "intent.check_weather" 1
 ```
 
 - **When to use**:  
-  Use this command when fine-grained control is needed to block individual intents for a specific client, especially in
-  environments with shared skills but different permission levels.
+  Use this command to block a specific intent from being triggered by a client. This is useful for managing permissions in environments with shared skills.
 
 ---
 
-### `unblacklist-intent`
+### `allow-intent`
 
-Remove an intent from a client’s blacklist.
+Remove a specific intent from a client’s blacklist.
 
 ```bash
-$ hivemind-core unblacklist-intent "intent.check_weather" 1
+$ hivemind-core allow-intent "intent.check_weather" 1
 ```
 
 - **When to use**:  
-  This command allows you to reinstate access to previously blocked intents.
+  Use this command to re-enable access to previously blocked intents, restoring functionality for the client.
 
 ---
 
 ### `listen`
 
-Start the HiveMind instance to accept client connections.
+Start the HiveMind instance to listen for client connections.
 
 ```bash
 $ hivemind-core listen --ovos_bus_address "127.0.0.1" --port 5678
 ```
 
 - **When to use**:  
-  Run this command on the central HiveMind instance (e.g., a server or desktop) to start listening for connections from
-  satellite devices. Configure host, port, and security options as needed.
+  Use this command to start the HiveMind instance, enabling it to accept connections from clients (e.g., satellite devices). Configure the host, port, and security options as needed.
 
 ---
 
