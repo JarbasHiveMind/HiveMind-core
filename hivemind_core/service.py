@@ -287,7 +287,7 @@ class HiveMindService:
             application.listen(self.port, self.host, ssl_options=ssl_options)
         else:
             LOG.info("ws connection started")
-            application.listen(self.port, self.host.split("//")[-1])
+            application.listen(self.port, self.host.split("://")[-1])
 
         self.presence.start()
         if self.ggwave is not None:
