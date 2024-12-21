@@ -237,7 +237,7 @@ def list_clients(db_backend, db_name, db_folder, redis_host, redis_port, redis_p
     type=str,
     default="0.0.0.0",
 )
-@click.option("--port", help="HiveMind port number", type=int, default=5678)
+@click.option("--port", help="HiveMind port number", type=int, required=False)
 @click.option("--ssl", help="use wss://", type=bool, default=False)
 @click.option(
     "--cert_dir",
