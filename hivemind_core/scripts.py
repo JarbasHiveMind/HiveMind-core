@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 import click
 from ovos_utils.xdg_utils import xdg_data_home
@@ -7,25 +6,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
-from hivemind_core.database import ClientDatabase
-
-
-def get_db_kwargs(db_backend: str, db_name: str, db_folder: str,
-                  redis_host: str, redis_port: int, redis_password: Optional[str]) -> dict:
-    """Get database configuration kwargs based on backend type."""
-    kwargs = {"backend": db_backend}
-    if db_backend == "redis":
-        kwargs.update({
-            "host": redis_host,
-            "port": redis_port,
-            "password": redis_password
-        })
-    else:
-        kwargs.update({
-            "name": db_name,
-            "subfolder": db_folder
-        })
-    return kwargs
+from hivemind_core.database import ClientDatabase, get_db_kwargs
 
 
 @click.group()
@@ -222,35 +203,13 @@ def list_clients(db_backend, db_name, db_folder, redis_host, redis_port, redis_p
 
 
 @hmcore_cmds.command(help="start listening for HiveMind connections", name="listen")
-@click.option(
-    "--ovos_bus_address",
-    help="Open Voice OS bus address",
-    type=str,
-    default="127.0.0.1",
-)
-@click.option(
-    "--ovos_bus_port", help="Open Voice OS bus port number", type=int, default=8181
-)
-@click.option(
-    "--host",
-    help="HiveMind host",
-    type=str,
-    default="0.0.0.0",
-)
+@click.option("--ovos_bus_address", help="Open Voice OS bus address", type=str, default="127.0.0.1")
+@click.option("--ovos_bus_port", help="Open Voice OS bus port number", type=int, default=8181)
+@click.option("--host", help="HiveMind host", type=str, default="0.0.0.0")
 @click.option("--port", help="HiveMind port number", type=int, required=False)
 @click.option("--ssl", help="use wss://", type=bool, default=False)
-@click.option(
-    "--cert_dir",
-    help="HiveMind SSL certificate directory",
-    type=str,
-    default=f"{xdg_data_home()}/hivemind",
-)
-@click.option(
-    "--cert_name",
-    help="HiveMind SSL certificate file name",
-    type=str,
-    default="hivemind",
-)
+@click.option("--cert_dir", help="HiveMind SSL certificate directory", type=str, default=f"{xdg_data_home()}/hivemind")
+@click.option("--cert_name", help="HiveMind SSL certificate file name", type=str, default="hivemind")
 @click.option("--db-backend", type=click.Choice(['redis', 'json', 'sqlite'], case_sensitive=False), default='json',
               help="Select the database backend to use. Options: redis, sqlite, json.")
 @click.option("--db-name", type=str, default="clients",
