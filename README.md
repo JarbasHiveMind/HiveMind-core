@@ -90,6 +90,10 @@ Commands:
 
 For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
 
+
+<details>
+  <summary>Click for more details</summary>
+
 ---
 
 ### `add-client`
@@ -217,6 +221,8 @@ $ hivemind-core listen --ovos_bus_address "127.0.0.1" --port 5678
 
 ---
 
+</details>
+
 #### Running in Distributed Environments
 
 By default, HiveMind listens for the OpenVoiceOS bus on `127.0.0.1`. When running in distributed environments (e.g.,
@@ -237,7 +243,8 @@ HiveMind-Core supports multiple database backends to store client credentials an
 **How to Choose?**
 
 - For **scalability** or multi-instance setups, use Redis.
-- For **simplicity** or single-device environments, use JSON or SQLite.
+- For **simplicity** or single-device environments, use SQLite.
+- For **development** or to be able to edit the database by hand, use JSON.
 
 ---
 
