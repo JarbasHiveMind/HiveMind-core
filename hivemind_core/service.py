@@ -233,8 +233,9 @@ class HiveMindService:
             self.bus.connected_event.wait()
 
         self.status = ProcessStatus("HiveMind", callback_map=callbacks)
-        self.host = websocket_config.get("host") or "0.0.0.0"
-        self.port = websocket_config.get("port") or 5678
+        host = websocket_config.get("host") or self.identity.default_master or "0.0.0.0"
+        self.host = host.split("://")[-1]
+        self.port = websocket_config.get("port") or self.identity.default_port or 5678
         self.ssl = websocket_config.get("ssl", False)
         self.cert_dir = (
             websocket_config.get("cert_dir") or f"{xdg_data_home()}/hivemind"

@@ -689,3 +689,21 @@ class ClientDatabase:
             self.db.commit()
         except Exception as e:
             LOG.error(e)
+
+
+def get_db_kwargs(db_backend: str, db_name: str, db_folder: str,
+                  redis_host: str, redis_port: int, redis_password: Optional[str]) -> dict:
+    """Get database configuration kwargs based on backend type."""
+    kwargs = {"backend": db_backend}
+    if db_backend == "redis":
+        kwargs.update({
+            "host": redis_host,
+            "port": redis_port,
+            "password": redis_password
+        })
+    else:
+        kwargs.update({
+            "name": db_name,
+            "subfolder": db_folder
+        })
+    return kwargs
