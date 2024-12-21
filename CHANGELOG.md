@@ -1,12 +1,12 @@
 # Changelog
 
-## [0.14.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.14.1a1) (2024-11-13)
+## [0.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.1.1a1) (2024-12-21)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.14.0...0.14.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.0...0.1.1a1)
 
 **Merged pull requests:**
 
-- fix: requirements.txt [\#102](https://github.com/JarbasHiveMind/HiveMind-core/pull/102) ([JarbasAl](https://github.com/JarbasAl))
+- fix: port from identity file [\#1](https://github.com/JarbasHiveMind/HiveMind-core/pull/1) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
