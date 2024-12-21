@@ -272,7 +272,7 @@ This is the "brain" you want to host behind the hivemind protocol, it can be any
 - **HiveMind Core** (this repository): The central hub for managing connections and routing messages between devices.
 - [Hivemind Listener](https://github.com/JarbasHiveMind/HiveMind-listener) - an extension of `hivemind-core` for
   streaming *audio* from satellites
-- [Persona](https://github.com/JarbasHiveMind/HiveMind-persona) - run
+- [Hivemind Persona](https://github.com/JarbasHiveMind/HiveMind-persona) - run
   a [persona](https://github.com/OpenVoiceOS/ovos-persona) (eg. LLM). *text* input only
 
 ### Client Libraries
