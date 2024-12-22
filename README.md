@@ -25,7 +25,7 @@ Demo videos in [youtube](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKS
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 To get started, HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and
 connections.
@@ -65,171 +65,6 @@ $ hivemind-core listen --port 5678
 
 ---
 
-## 🛠️ Commands Overview
-
-HiveMind Core CLI supports the following commands:
-
-```bash
-$ hivemind-core --help
-Usage: hivemind-core [OPTIONS] COMMAND [ARGS]...
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  add-client          Add credentials for a client.
-  allow-msg           Allow specific message types from a client.
-  blacklist-intent    Block certain intents for a client.
-  blacklist-skill     Block certain skills for a client.
-  delete-client       Remove client credentials.
-  list-clients        Display a list of registered clients.
-  listen              Start listening for HiveMind connections.
-  unblacklist-intent  Remove intents from a client's blacklist.
-  unblacklist-skill   Remove skills from a client's blacklist.
-```
-
-For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
-
-
-<details>
-  <summary>Click for more details</summary>
-
----
-
-### `add-client`
-
-Add credentials for a new client that will connect to the HiveMind instance.
-
-```bash
-$ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --password "mypass" --db-backend json
-```
-
-- **When to use**:  
-  Use this command when setting up a new HiveMind client device (e.g., a Raspberry Pi or another satellite). You’ll need
-  to provide the credentials for secure communication.
-
----
-
-### `list-clients`
-
-List all the registered clients and their credentials.
-
-```bash
-$ hivemind-core list-clients --db-backend json
-```
-
-- **When to use**:  
-  Use this command to verify which clients are currently registered or to inspect their credentials. This is helpful for
-  debugging or managing connected devices.
-
----
-
-### `delete-client`
-
-Remove a registered client from the HiveMind instance.
-
-```bash
-$ hivemind-core delete-client 1
-```
-
-- **When to use**:  
-  Use this command to revoke access for a specific client. For instance, if a device is lost, no longer in use, or
-  compromised, you can remove it to maintain security.
-
----
-
-### `allow-msg`
-
-Allow specific message types to be sent by a client.
-
-```bash
-$ hivemind-core allow-msg "speak"
-```
-
-- **When to use**:  
-  This command is used to fine-tune the communication protocol by enabling specific message types. This is especially
-  useful in scenarios where certain clients should only perform limited actions (e.g., making another device speak via
-  TTS).
-
----
-
-### `blacklist-skill`
-
-Prevent a specific skill from being triggered by a client.
-
-```bash
-$ hivemind-core blacklist-skill "skill-weather" 1
-```
-
-- **When to use**:  
-  Use this command to restrict a client from interacting with a particular skill. For example, a child’s device could be
-  restricted from accessing skills that are not age-appropriate.
-
----
-
-### `unblacklist-skill`
-
-Remove a skill from a client’s blacklist.
-
-```bash
-$ hivemind-core unblacklist-skill "skill-weather" 1
-```
-
-- **When to use**:  
-  If restrictions are no longer needed, use this command to restore access to the blacklisted skill.
-
----
-
-### `blacklist-intent`
-
-Block a specific intent from being triggered by a client.
-
-```bash
-$ hivemind-core blacklist-intent "intent.check_weather" 1
-```
-
-- **When to use**:  
-  Use this command when fine-grained control is needed to block individual intents for a specific client, especially in
-  environments with shared skills but different permission levels.
-
----
-
-### `unblacklist-intent`
-
-Remove an intent from a client’s blacklist.
-
-```bash
-$ hivemind-core unblacklist-intent "intent.check_weather" 1
-```
-
-- **When to use**:  
-  This command allows you to reinstate access to previously blocked intents.
-
----
-
-### `listen`
-
-Start the HiveMind instance to accept client connections.
-
-```bash
-$ hivemind-core listen --ovos_bus_address "127.0.0.1" --port 5678
-```
-
-- **When to use**:  
-  Run this command on the central HiveMind instance (e.g., a server or desktop) to start listening for connections from
-  satellite devices. Configure host, port, and security options as needed.
-
----
-
-</details>
-
-#### Running in Distributed Environments
-
-By default, HiveMind listens for the OpenVoiceOS bus on `127.0.0.1`. When running in distributed environments (e.g.,
-Kubernetes), use the `--ovos_bus_address` and `--ovos_bus_port` options to specify the bus address and port.
-
----
-
 ## 📦 Database Backends
 
 HiveMind-Core supports multiple database backends to store client credentials and settings. Each has its own use case:
@@ -248,18 +83,228 @@ HiveMind-Core supports multiple database backends to store client credentials an
 
 ---
 
-## 🔒 Protocol Support
+### 🔑 Role-Based Access Control (RBAC)
 
-| Feature              | Protocol v0 | Protocol v1 |
-|----------------------|-------------|-------------|
-| JSON serialization   | ✅           | ✅           |
-| Binary serialization | ❌           | ✅           |
-| Pre-shared AES key   | ✅           | ✅           |
-| Password handshake   | ❌           | ✅           |
-| PGP handshake        | ❌           | ✅           |
-| Zlib compression     | ❌           | ✅           |
+HiveMind Core uses a flexible **RBAC system** where permissions are assigned directly to each client. 
 
-> **Note**: Some clients (e.g., HiveMind-JS) do not yet support Protocol v1.
+Instead of predefined roles or groups, each client’s configuration determines their access.
+
+1. **Default Permissions**  
+   - **Bus Messages**: Denied by default, except for a core set of universally allowed messages:  
+     ```python
+     ["recognizer_loop:utterance", "recognizer_loop:record_begin",
+      "recognizer_loop:record_end", "recognizer_loop:audio_output_start",
+      "recognizer_loop:audio_output_end", "recognizer_loop:b64_transcribe",
+      "speak:b64_audio", "ovos.common_play.SEI.get.response"]
+     ```  
+     The main message, `recognizer_loop:utterance`, enables universal natural language instructions for seamless integration.
+   - **Skills & Intents**: Allowed by default but can be blacklisted for specific clients.
+
+2. **Granular Controls**  
+   - Per-client **allowlists** for bus messages.  
+   - **Blacklists** for skills or intents to restrict access.  
+
+3. **Emergent Roles**  
+   - While no explicit roles exist, configurations can emulate roles like "basic client" (default permissions) or "restricted client" (blacklisted skills/intents).
+
+#### 👤 Example Use Cases  
+
+1. **General AI Integration**  
+   - A basic client is configured with the default allowed message types, enabling it to send natural language instructions (`recognizer_loop:utterance`).  
+   - This setup allows seamless integration of third-party AI systems or assistants.  
+
+2. **Custom Permissions for Specialized Clients**  
+   - An IoT device is allowed specific bus messages (e.g., `temperature.set`) to control heating systems.  
+   - Sensitive intents, such as `shutdown` or `reboot`, are blacklisted to prevent misuse.  
+
+---
+
+## 🛠️ Commands Overview
+
+HiveMind Core CLI supports the following commands:
+
+```bash
+$ hivemind-core --help
+Usage: hivemind-core [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  add-client        add credentials for a client
+  allow-intent      remove intents from a client blacklist
+  allow-msg         allow message types to be sent from a client
+  allow-skill       remove skills from a client blacklist
+  blacklist-intent  blacklist intents from being triggered by a client
+  blacklist-msg     blacklist message types from being sent from a client
+  blacklist-skill   blacklist skills from being triggered by a client
+  delete-client     remove credentials for a client
+  list-clients      list clients and credentials
+  listen            start listening for HiveMind connections
+  rename-client     Rename a client in the database
+```
+
+For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
+
+> 💡 **Tip**: if you don't specify the numeric client_id in your commands you will be prompted for it interactively
+
+<details>
+  <summary>Click for more details</summary>
+
+---
+
+### `add-client`
+
+Add credentials for a new client that will connect to the HiveMind instance.
+
+```bash
+$ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --password "mypass" --db-backend json
+```
+
+- **When to use**:  
+  Use this command when setting up a new HiveMind client (e.g., Raspberry Pi, IoT device). Provide credentials for secure communication with the server.
+
+---
+
+### `list-clients`
+
+List all registered clients and their credentials.
+
+```bash
+$ hivemind-core list-clients --db-backend json
+```
+
+- **When to use**:  
+  Use this command to view or inspect all registered clients, helpful for debugging or managing devices connected to HiveMind.
+
+---
+
+### `rename-client`
+
+Rename a registered client.
+
+```bash
+$ hivemind-core rename-client "new name" 1
+```
+
+- **When to use**:  
+  Use this command when you need to change the name of an existing client in the database.
+
+---
+
+### `delete-client`
+
+Remove a registered client from the HiveMind instance.
+
+```bash
+$ hivemind-core delete-client 1
+```
+
+- **When to use**:  
+  Use this command to revoke a client’s access, for example, when a device is lost, no longer in use, or compromised.
+
+---
+
+### `allow-msg`
+
+By default only some messages are allowed, extra messages can be allowed per client
+
+Allow specific message types to be sent by a client.
+
+```bash
+$ hivemind-core allow-msg "speak"
+```
+
+- **When to use**:  
+  Use this command to enable certain message types, particularly when extending a client’s communication capabilities (e.g., allowing TTS commands).
+
+---
+
+### `blacklist-msg`
+
+Revoke specific message types from being allowed to be sent by a client.
+
+```bash
+$ hivemind-core blacklist-msg "speak"
+```
+
+- **When to use**:  
+  Use this command to prevent specific message types from being sent by a client, adding a layer of control over communication.
+
+---
+
+### `blacklist-skill`
+
+Prevent a specific skill from being triggered by a client.
+
+```bash
+$ hivemind-core blacklist-skill "skill-weather" 1
+```
+
+- **When to use**:  
+  Use this command to restrict a client’s access to particular skills, such as preventing a device from accessing certain skills for safety or appropriateness.
+
+---
+
+### `allow-skill`
+
+Remove a skill from a client’s blacklist, allowing it to be triggered.
+
+```bash
+$ hivemind-core allow-skill "skill-weather" 1
+```
+
+- **When to use**:  
+  If restrictions on a skill are no longer needed, use this command to reinstate access to the skill.
+
+---
+
+### `blacklist-intent`
+
+Block a specific intent from being triggered by a client.
+
+```bash
+$ hivemind-core blacklist-intent "intent.check_weather" 1
+```
+
+- **When to use**:  
+  Use this command to block a specific intent from being triggered by a client. This is useful for managing permissions in environments with shared skills.
+
+---
+
+### `allow-intent`
+
+Remove a specific intent from a client’s blacklist.
+
+```bash
+$ hivemind-core allow-intent "intent.check_weather" 1
+```
+
+- **When to use**:  
+  Use this command to re-enable access to previously blocked intents, restoring functionality for the client.
+
+---
+
+### `listen`
+
+Start the HiveMind instance to listen for client connections.
+
+```bash
+$ hivemind-core listen --ovos_bus_address "127.0.0.1" --port 5678
+```
+
+- **When to use**:  
+  Use this command to start the HiveMind instance, enabling it to accept connections from clients (e.g., satellite devices). Configure the host, port, and security options as needed.
+
+---
+
+</details>
+
+#### Running in Distributed Environments
+
+By default, HiveMind listens for the OpenVoiceOS bus on `127.0.0.1`. When running in distributed environments (e.g.,
+Kubernetes), use the `--ovos_bus_address` and `--ovos_bus_port` options to specify the bus address and port.
+
 
 ---
 
@@ -345,18 +390,20 @@ Hivemind leverages [ovos-plugin-manager](), bringing compatibility with hundreds
 
 | Plugin Type         | Description                                             | Documentation                                                                                   |
 |---------------------|---------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| Microphone          | Captures voice input                                    | [Microphone Documentation](https://openvoiceos.github.io/ovos-technical-manual/mic_plugins/)    |
-| VAD                 | Voice Activity Detection                                | [VAD Documentation](https://openvoiceos.github.io/ovos-technical-manual/vad_plugins/)           |
-| WakeWord            | Detects wake words for interaction                      | [WakeWord Documentation](https://openvoiceos.github.io/ovos-technical-manual/ww_plugins/)       |
-| STT                 | Speech-to-text (STT)                                    | [STT Documentation](https://openvoiceos.github.io/ovos-technical-manual/stt_plugins/)           |
-| TTS                 | Text-to-speech (TTS)                                    | [TTS Documentation](https://openvoiceos.github.io/ovos-technical-manual/tts_plugins)            |
-| G2P                 | Grapheme-to-phoneme (G2P), used to simulate mouth movements | [G2P Documentation](https://openvoiceos.github.io/ovos-technical-manual/g2p_plugins)           |
-| Media Playback      | Enables media playback (e.g., "play Metallica")         | [Media Playback Documentation](https://openvoiceos.github.io/ovos-technical-manual/media_plugins/) |
-| OCP Plugins         | Provides playback support for URLs (e.g., YouTube)      | [OCP Plugins Documentation](https://openvoiceos.github.io/ovos-technical-manual/ocp_plugins/)   |
-| Audio Transformers  | Processes audio before speech-to-text (STT)             | [Audio Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| Dialog Transformers | Processes text before text-to-speech (TTS)              | [Dialog Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| TTS Transformers    | Processes audio after text-to-speech (TTS)              | [TTS Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| PHAL                | Provides platform-specific support (e.g., Mark 1)       | [PHAL Documentation](https://openvoiceos.github.io/ovos-technical-manual/PHAL/)                |
+| Microphone          | Captures voice input                                    | [Microphone Documentation](https://openvoiceos.github.io/ovos-technical-manual/310-mic_plugins)    |
+| VAD                 | Voice Activity Detection                                | [VAD Documentation](https://openvoiceos.github.io/ovos-technical-manual/311-vad_plugins/)           |
+| WakeWord            | Detects wake words for interaction                      | [WakeWord Documentation](https://openvoiceos.github.io/ovos-technical-manual/312-wake_word_plugins/)       |
+| STT                 | Speech-to-text (STT)                                    | [STT Documentation](https://openvoiceos.github.io/ovos-technical-manual/313-stt_plugins/)           |
+| TTS                 | Text-to-speech (TTS)                                    | [TTS Documentation](https://openvoiceos.github.io/ovos-technical-manual/320-tts_plugins/)            |
+| G2P                 | Grapheme-to-phoneme (G2P)<br>used to simulate mouth movements | [G2P Documentation](https://openvoiceos.github.io/ovos-technical-manual/321-g2p_plugins/)           |
+| Media Playback      | Enables media playback (e.g., "play Metallica")         | [Media Playback Documentation](https://openvoiceos.github.io/ovos-technical-manual/371-media_plugins/) |
+| OCP Plugins         | Provides playback support for URLs (e.g., YouTube)      | [OCP Plugins Documentation](https://openvoiceos.github.io/ovos-technical-manual/370-ocp_plugins/)   |
+| Audio Transformers  | Parse/Modify *audio* before speech-to-text (STT)        | [Audio Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| Utterance Transformers | Parse/Modify *text utterance* before Intent Parsing  | [Utterance Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| Metadata Transformers  | Parse/Modify *Session data* before Intent Parsing    | [Metadata Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| Dialog Transformers | Parse/Modify *text utterance* before text-to-speech (TTS) | [Dialog Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| TTS Transformers    | Parse/Modify *audio* after text-to-speech (TTS)         | [TTS Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| PHAL                | Provides platform-specific support (e.g., Mark 1)       | [PHAL Documentation](https://openvoiceos.github.io/ovos-technical-manual/340-PHAL)                |
 
 ### Client side plugins
 
@@ -448,14 +495,44 @@ be installed and configured
 
 ---
 
+## 🔒 Protocol Support
+
+| Feature              | Protocol v0 | Protocol v1 |
+|----------------------|-------------|-------------|
+| JSON serialization   | ✅           | ✅           |
+| Binary serialization | ❌           | ✅           |
+| Pre-shared AES key   | ✅           | ✅           |
+| Password handshake   | ❌           | ✅           |
+| PGP handshake        | ❌           | ✅           |
+| Zlib compression     | ❌           | ✅           |
+
+> **Note**: Some clients (e.g., HiveMind-JS) do not yet support Protocol v1.
+
+---
+
 ## 🤝 Contributing
 
-Contributions are welcome!
+HiveMind Core is open source and welcomes contributions from the community. If you’d like to contribute, here’s how you can get started:
+
+1. **Fork the Repository**:  
+   Fork the [HiveMind Core GitHub repository](https://github.com/JarbasHiveMind/HiveMind-core).
+
+2. **Open an Issue**:  
+   Report bugs or suggest features by [creating an issue](https://github.com/JarbasHiveMind/HiveMind-core/issues).
+
+3. **Submit Pull Requests**:  
+   Develop your features or bug fixes in a feature branch and submit a pull request to the main repository.
+
+4. **Join the Discussion**:  
+   Participate in the [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org) to share ideas and collaborate with the community.
 
 ---
 
 ## ⚖️ License
 
 HiveMind is open-source software, licensed under the [Apache 2.0 License](LICENSE).
+
+
+
 
 
