@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0a1) (2024-12-22)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.1a1...0.2.0a1)
+
+**Implemented enhancements:**
+
+- Feature request: option to rename client [\#3](https://github.com/JarbasHiveMind/HiveMind-core/issues/3)
+
+**Merged pull requests:**
+
+- feat: more cli commands [\#9](https://github.com/JarbasHiveMind/HiveMind-core/pull/9) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [0.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.1.1a1) (2024-12-21)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.0...0.1.1a1)
