@@ -146,6 +146,8 @@ Commands:
 
 For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
 
+> 💡 **Tip**: if you don't specify the numeric client_id in your commands you will be prompted for it interactively
+
 <details>
   <summary>Click for more details</summary>
 
