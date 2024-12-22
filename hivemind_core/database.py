@@ -277,7 +277,7 @@ class JsonDB(AbstractDB):
     """Database implementation using JSON files."""
 
     def __init__(self, name="clients", subfolder="hivemind-core"):
-        self._db: Dict[int, ClientDict] = JsonStorageXDG(name, subfolder=subfolder, xdg_folder=xdg_data_home())
+        self._db = JsonStorageXDG(name, subfolder=subfolder, xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
     def add_item(self, client: Client) -> bool:
@@ -290,6 +290,7 @@ class JsonDB(AbstractDB):
         Returns:
             True if the addition was successful, False otherwise.
         """
+        self._db.reload()  # ensure any updates are synced before updating db
         self._db[client.client_id] = client.__dict__
         return True
 
@@ -304,6 +305,7 @@ class JsonDB(AbstractDB):
         Returns:
             A list of clients that match the search criteria.
         """
+        self._db.reload()  # ensure any updates are synced before searching db
         res = []
         if key == "client_id":
             v = self._db.get(val)
@@ -323,6 +325,7 @@ class JsonDB(AbstractDB):
         Returns:
             The number of clients in the database.
         """
+        self._db.reload()  # ensure any updates are synced before reading db
         return len(self._db)
 
     def __iter__(self) -> Iterable['Client']:
@@ -332,6 +335,7 @@ class JsonDB(AbstractDB):
         Returns:
             An iterator over the clients in the database.
         """
+        self._db.reload()  # ensure any updates are synced before reading db
         for item in self._db.values():
             yield Client.deserialize(item)
 
