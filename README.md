@@ -402,20 +402,20 @@ Hivemind leverages [ovos-plugin-manager](), bringing compatibility with hundreds
 
 | Plugin Type         | Description                                             | Documentation                                                                                   |
 |---------------------|---------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| Microphone          | Captures voice input                                    | [Microphone Documentation](https://openvoiceos.github.io/ovos-technical-manual/mic_plugins/)    |
-| VAD                 | Voice Activity Detection                                | [VAD Documentation](https://openvoiceos.github.io/ovos-technical-manual/vad_plugins/)           |
-| WakeWord            | Detects wake words for interaction                      | [WakeWord Documentation](https://openvoiceos.github.io/ovos-technical-manual/ww_plugins/)       |
-| STT                 | Speech-to-text (STT)                                    | [STT Documentation](https://openvoiceos.github.io/ovos-technical-manual/stt_plugins/)           |
-| TTS                 | Text-to-speech (TTS)                                    | [TTS Documentation](https://openvoiceos.github.io/ovos-technical-manual/tts_plugins)            |
-| G2P                 | Grapheme-to-phoneme (G2P)<br>used to simulate mouth movements | [G2P Documentation](https://openvoiceos.github.io/ovos-technical-manual/g2p_plugins)           |
-| Media Playback      | Enables media playback (e.g., "play Metallica")         | [Media Playback Documentation](https://openvoiceos.github.io/ovos-technical-manual/media_plugins/) |
-| OCP Plugins         | Provides playback support for URLs (e.g., YouTube)      | [OCP Plugins Documentation](https://openvoiceos.github.io/ovos-technical-manual/ocp_plugins/)   |
-| Audio Transformers  | Parse/Modify *audio* before speech-to-text (STT)        | [Audio Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| Utterance Transformers | Parse/Modify *text utterance* before Intent Parsing  | [Utterance Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| Metadata Transformers  | Parse/Modify *Session data* before Intent Parsing    | [Metadata Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| Dialog Transformers | Parse/Modify *text utterance* before text-to-speech (TTS) | [Dialog Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| TTS Transformers    | Parse/Modify *audio* after text-to-speech (TTS)         | [TTS Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
-| PHAL                | Provides platform-specific support (e.g., Mark 1)       | [PHAL Documentation](https://openvoiceos.github.io/ovos-technical-manual/PHAL/)                |
+| Microphone          | Captures voice input                                    | [Microphone Documentation](https://openvoiceos.github.io/ovos-technical-manual/310-mic_plugins)    |
+| VAD                 | Voice Activity Detection                                | [VAD Documentation](https://openvoiceos.github.io/ovos-technical-manual/311-vad_plugins/)           |
+| WakeWord            | Detects wake words for interaction                      | [WakeWord Documentation](https://openvoiceos.github.io/ovos-technical-manual/312-wake_word_plugins/)       |
+| STT                 | Speech-to-text (STT)                                    | [STT Documentation](https://openvoiceos.github.io/ovos-technical-manual/313-stt_plugins/)           |
+| TTS                 | Text-to-speech (TTS)                                    | [TTS Documentation](https://openvoiceos.github.io/ovos-technical-manual/320-tts_plugins/)            |
+| G2P                 | Grapheme-to-phoneme (G2P)<br>used to simulate mouth movements | [G2P Documentation](https://openvoiceos.github.io/ovos-technical-manual/321-g2p_plugins/)           |
+| Media Playback      | Enables media playback (e.g., "play Metallica")         | [Media Playback Documentation](https://openvoiceos.github.io/ovos-technical-manual/371-media_plugins/) |
+| OCP Plugins         | Provides playback support for URLs (e.g., YouTube)      | [OCP Plugins Documentation](https://openvoiceos.github.io/ovos-technical-manual/370-ocp_plugins/)   |
+| Audio Transformers  | Parse/Modify *audio* before speech-to-text (STT)        | [Audio Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| Utterance Transformers | Parse/Modify *text utterance* before Intent Parsing  | [Utterance Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| Metadata Transformers  | Parse/Modify *Session data* before Intent Parsing    | [Metadata Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| Dialog Transformers | Parse/Modify *text utterance* before text-to-speech (TTS) | [Dialog Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| TTS Transformers    | Parse/Modify *audio* after text-to-speech (TTS)         | [TTS Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
+| PHAL                | Provides platform-specific support (e.g., Mark 1)       | [PHAL Documentation](https://openvoiceos.github.io/ovos-technical-manual/340-PHAL)                |
 
 ### Client side plugins
 
