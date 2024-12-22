@@ -65,6 +65,40 @@ $ hivemind-core listen --port 5678
 
 ---
 
+### 🔑 Role-Based Access Control (RBAC)
+
+HiveMind Core uses a flexible **RBAC system** where permissions are assigned directly to each client. 
+
+Instead of predefined roles or groups, each client’s configuration determines their access.
+
+1. **Default Permissions**  
+   - **Bus Messages**: Denied by default, except for a core set of universally allowed messages:  
+     ```python
+     ["recognizer_loop:utterance", "recognizer_loop:record_begin",
+      "recognizer_loop:record_end", "recognizer_loop:audio_output_start",
+      "recognizer_loop:audio_output_end", "recognizer_loop:b64_transcribe",
+      "speak:b64_audio", "ovos.common_play.SEI.get.response"]
+     ```  
+     The main message, `recognizer_loop:utterance`, enables universal natural language instructions for seamless integration.
+   - **Skills & Intents**: Allowed by default but can be blacklisted for specific clients.
+
+2. **Granular Controls**  
+   - Per-client **allowlists** for bus messages.  
+   - **Blacklists** for skills or intents to restrict access.  
+
+3. **Emergent Roles**  
+   - While no explicit roles exist, configurations can emulate roles like "basic client" (default permissions) or "restricted client" (blacklisted skills/intents).
+
+#### 👤 Example Use Cases  
+
+1. **General AI Integration**  
+   - A basic client is configured with the default allowed message types, enabling it to send natural language instructions (`recognizer_loop:utterance`).  
+   - This setup allows seamless integration of third-party AI systems or assistants.  
+
+2. **Custom Permissions for Specialized Clients**  
+   - An IoT device is allowed specific bus messages (e.g., `temperature.set`) to control heating systems.  
+   - Sensitive intents, such as `shutdown` or `reboot`, are blacklisted to prevent misuse.  
+
 ## 🛠️ Commands Overview
 
 HiveMind Core CLI supports the following commands:
@@ -471,12 +505,27 @@ be installed and configured
 
 ## 🤝 Contributing
 
-Contributions are welcome!
+HiveMind Core is open source and welcomes contributions from the community. If you’d like to contribute, here’s how you can get started:
+
+1. **Fork the Repository**:  
+   Fork the [HiveMind Core GitHub repository](https://github.com/JarbasHiveMind/HiveMind-core).
+
+2. **Open an Issue**:  
+   Report bugs or suggest features by [creating an issue](https://github.com/JarbasHiveMind/HiveMind-core/issues).
+
+3. **Submit Pull Requests**:  
+   Develop your features or bug fixes in a feature branch and submit a pull request to the main repository.
+
+4. **Join the Discussion**:  
+   Participate in the [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org) to share ideas and collaborate with the community.
 
 ---
 
 ## ⚖️ License
 
 HiveMind is open-source software, licensed under the [Apache 2.0 License](LICENSE).
+
+
+
 
 
