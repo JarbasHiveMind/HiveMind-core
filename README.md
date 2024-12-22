@@ -99,6 +99,8 @@ Instead of predefined roles or groups, each client’s configuration determines 
    - An IoT device is allowed specific bus messages (e.g., `temperature.set`) to control heating systems.  
    - Sensitive intents, such as `shutdown` or `reboot`, are blacklisted to prevent misuse.  
 
+---
+
 ## 🛠️ Commands Overview
 
 HiveMind Core CLI supports the following commands:
