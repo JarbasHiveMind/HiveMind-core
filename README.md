@@ -222,10 +222,10 @@ $ hivemind-core allow-msg "speak"
 
 ### `blacklist-msg`
 
-Block specific message types from being sent by a client.
+Revoke specific message types from being allowed to be sent by a client.
 
 ```bash
-$ hivemind-core allow-msg "speak"
+$ hivemind-core blacklist-msg "speak"
 ```
 
 - **When to use**:  
