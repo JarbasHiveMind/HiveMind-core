@@ -303,7 +303,6 @@ def blacklist_msg(msg_type, node_id,
                     print(f"Blacklisted '{msg_type}' for {client.name}")
                     return
                 print(f"Client '{client.name}' message already blacklisted: '{msg_type}'")
-                client.allowed_types.append(msg_type)
                 break
 
 
