@@ -411,6 +411,8 @@ Hivemind leverages [ovos-plugin-manager](), bringing compatibility with hundreds
 | Media Playback      | Enables media playback (e.g., "play Metallica")         | [Media Playback Documentation](https://openvoiceos.github.io/ovos-technical-manual/media_plugins/) |
 | OCP Plugins         | Provides playback support for URLs (e.g., YouTube)      | [OCP Plugins Documentation](https://openvoiceos.github.io/ovos-technical-manual/ocp_plugins/)   |
 | Audio Transformers  | Processes audio before speech-to-text (STT)             | [Audio Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
+| Utterance Transformers | Processes text utterance before Intent Parsing       | [Utterance Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
+| Metadata Transformers  | Processes Session data before Intent Parsing         | [Metadata Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
 | Dialog Transformers | Processes text before text-to-speech (TTS)              | [Dialog Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
 | TTS Transformers    | Processes audio after text-to-speech (TTS)              | [TTS Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/transformer_plugins/) |
 | PHAL                | Provides platform-specific support (e.g., Mark 1)       | [PHAL Documentation](https://openvoiceos.github.io/ovos-technical-manual/PHAL/)                |
