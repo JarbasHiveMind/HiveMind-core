@@ -464,7 +464,7 @@ be installed and configured
 | Supported Plugins           | **Microphone**     | **VAD**            | **Wake Word**      | **STT**            |
 |-----------------------------|--------------------|--------------------|--------------------|--------------------|
 | **Hivemind Skills Server**  | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | 
-| **Hivemind Sound Server**   | ✔️<br>(Required)   | ✔️<br>(Required)   | ✔️<br>(Required)   | ✔️<br>(Required)   | 
+| **Hivemind Sound Server**   | ❌<br>(Unsupported) | ✔️<br>(Required)   | ✔️<br>(Required)   | ✔️<br>(Required)   | 
 | **Hivemind Persona Server** | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | 
 
 **Audio output**:
