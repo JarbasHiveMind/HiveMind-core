@@ -25,7 +25,7 @@ Demo videos in [youtube](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKS
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 To get started, HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and
 connections.
@@ -62,6 +62,24 @@ Start the HiveMind Core server to accept connections:
 ```bash
 $ hivemind-core listen --port 5678
 ```
+
+---
+
+## 📦 Database Backends
+
+HiveMind-Core supports multiple database backends to store client credentials and settings. Each has its own use case:
+
+| Backend            | Use Case                                       | Default Location                            | Command Line options                               |
+|--------------------|------------------------------------------------|---------------------------------------------|----------------------------------------------------|
+| **JSON** (default) | Simple, file-based setup for local use         | `~/.local/share/hivemind-core/clients.json` | Configurable via `--db-name` and `--db-folder`     |
+| **SQLite**         | Lightweight relational DB for single instances | `~/.local/share/hivemind-core/clients.db`   | Configurable via `--db-name` and `--db-folder`     |
+| **Redis**          | Distributed, high-performance environments     | `localhost:6379`                            | Configurable via `--redis-host` and `--redis-port` |
+
+**How to Choose?**
+
+- For **scalability** or multi-instance setups, use Redis.
+- For **simplicity** or single-device environments, use SQLite.
+- For **development** or to be able to edit the database by hand, use JSON.
 
 ---
 
@@ -285,38 +303,6 @@ $ hivemind-core listen --ovos_bus_address "127.0.0.1" --port 5678
 By default, HiveMind listens for the OpenVoiceOS bus on `127.0.0.1`. When running in distributed environments (e.g.,
 Kubernetes), use the `--ovos_bus_address` and `--ovos_bus_port` options to specify the bus address and port.
 
----
-
-## 📦 Database Backends
-
-HiveMind-Core supports multiple database backends to store client credentials and settings. Each has its own use case:
-
-| Backend            | Use Case                                       | Default Location                            | Command Line options                               |
-|--------------------|------------------------------------------------|---------------------------------------------|----------------------------------------------------|
-| **JSON** (default) | Simple, file-based setup for local use         | `~/.local/share/hivemind-core/clients.json` | Configurable via `--db-name` and `--db-folder`     |
-| **SQLite**         | Lightweight relational DB for single instances | `~/.local/share/hivemind-core/clients.db`   | Configurable via `--db-name` and `--db-folder`     |
-| **Redis**          | Distributed, high-performance environments     | `localhost:6379`                            | Configurable via `--redis-host` and `--redis-port` |
-
-**How to Choose?**
-
-- For **scalability** or multi-instance setups, use Redis.
-- For **simplicity** or single-device environments, use SQLite.
-- For **development** or to be able to edit the database by hand, use JSON.
-
----
-
-## 🔒 Protocol Support
-
-| Feature              | Protocol v0 | Protocol v1 |
-|----------------------|-------------|-------------|
-| JSON serialization   | ✅           | ✅           |
-| Binary serialization | ❌           | ✅           |
-| Pre-shared AES key   | ✅           | ✅           |
-| Password handshake   | ❌           | ✅           |
-| PGP handshake        | ❌           | ✅           |
-| Zlib compression     | ❌           | ✅           |
-
-> **Note**: Some clients (e.g., HiveMind-JS) do not yet support Protocol v1.
 
 ---
 
@@ -504,6 +490,21 @@ be installed and configured
 | **Hivemind Persona Server** | ❌<br>(Unsupported)           | ❌<br>(Unsupported) |
 
 </details>
+
+---
+
+## 🔒 Protocol Support
+
+| Feature              | Protocol v0 | Protocol v1 |
+|----------------------|-------------|-------------|
+| JSON serialization   | ✅           | ✅           |
+| Binary serialization | ❌           | ✅           |
+| Pre-shared AES key   | ✅           | ✅           |
+| Password handshake   | ❌           | ✅           |
+| PGP handshake        | ❌           | ✅           |
+| Zlib compression     | ❌           | ✅           |
+
+> **Note**: Some clients (e.g., HiveMind-JS) do not yet support Protocol v1.
 
 ---
 
