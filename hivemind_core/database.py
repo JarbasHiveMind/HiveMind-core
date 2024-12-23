@@ -263,6 +263,10 @@ class AbstractDB(abc.ABC):
         """
         pass
 
+    def sync(self):
+        """update db from disk if needed"""
+        pass
+
     def commit(self) -> bool:
         """
         Commit changes to the database.
@@ -280,6 +284,10 @@ class JsonDB(AbstractDB):
         self._db = JsonStorageXDG(name, subfolder=subfolder, xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
+    def sync(self):
+        """update db from disk if needed"""
+        self._db.reload()
+
     def add_item(self, client: Client) -> bool:
         """
         Add a client to the JSON database.
@@ -290,7 +298,6 @@ class JsonDB(AbstractDB):
         Returns:
             True if the addition was successful, False otherwise.
         """
-        self._db.reload()  # ensure any updates are synced before updating db
         self._db[client.client_id] = client.__dict__
         return True
 
@@ -305,7 +312,6 @@ class JsonDB(AbstractDB):
         Returns:
             A list of clients that match the search criteria.
         """
-        self._db.reload()  # ensure any updates are synced before searching db
         res = []
         if key == "client_id":
             v = self._db.get(val)
@@ -325,7 +331,6 @@ class JsonDB(AbstractDB):
         Returns:
             The number of clients in the database.
         """
-        self._db.reload()  # ensure any updates are synced before reading db
         return len(self._db)
 
     def __iter__(self) -> Iterable['Client']:
@@ -335,7 +340,6 @@ class JsonDB(AbstractDB):
         Returns:
             An iterator over the clients in the database.
         """
-        self._db.reload()  # ensure any updates are synced before reading db
         for item in self._db.values():
             yield Client.deserialize(item)
 
@@ -370,6 +374,7 @@ class SQLiteDB(AbstractDB):
         self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
         self._initialize_database()
+
 
     def _initialize_database(self):
         """Initialize the database schema."""
@@ -613,6 +618,10 @@ class ClientDatabase:
             self.db = SQLiteDB(**backend_kwargs)
         else:
             raise NotImplementedError(f"{backend} not supported, valid databases: {self.valid_backends}")
+
+    def sync(self):
+        """update db from disk if needed"""
+        self.db.sync()
 
     def delete_client(self, key: str) -> bool:
         user = self.get_client_by_api_key(key)

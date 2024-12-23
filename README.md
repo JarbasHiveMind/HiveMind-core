@@ -19,7 +19,7 @@ Demo videos in [youtube](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKS
 
 ## 📖 Documentation & Community
 
-- 📚 **Documentation**: [HiveMind Docs (WIP)](https://jarbashivemind.github.io/HiveMind-community-docs)
+- 📚 **Documentation**: [HiveMind Docs](https://jarbashivemind.github.io/HiveMind-community-docs)
 - 💬 **Chat**: Join the [HiveMind Matrix Chat](https://matrix.to/#/#jarbashivemind:matrix.org) for news, support, and
   discussion.
 
@@ -83,9 +83,9 @@ HiveMind-Core supports multiple database backends to store client credentials an
 
 ---
 
-### 🔑 Role-Based Access Control (RBAC)
+### 🔑 Permissions
 
-HiveMind Core uses a flexible **RBAC system** where permissions are assigned directly to each client. 
+HiveMind Core uses a flexible **RBAC inspired system** where permissions are assigned directly to each client. 
 
 Instead of predefined roles or groups, each client’s configuration determines their access.
 

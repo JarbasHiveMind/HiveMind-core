@@ -141,6 +141,7 @@ class MessageBusEventHandler(WebSocketHandler):
             self.close()
             raise RuntimeError("Database was not initialized!")  # let it propagate, this is developer error most likely
 
+        self.protocol.db.sync()
         user = self.protocol.db.get_client_by_api_key(key)
 
         if not user:
