@@ -1,13 +1,12 @@
 # Changelog
 
-## [0.2.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0a2) (2024-12-23)
+## [0.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.2a1) (2024-12-23)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.0...0.2.0a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.1...0.2.2a1)
 
 **Merged pull requests:**
 
-- performance: speed up b64 operations [\#12](https://github.com/JarbasHiveMind/HiveMind-core/pull/12) ([JarbasAl](https://github.com/JarbasAl))
-- fix: json db live updates [\#11](https://github.com/JarbasHiveMind/HiveMind-core/pull/11) ([JarbasAl](https://github.com/JarbasAl))
+- fix/jsondb again [\#15](https://github.com/JarbasHiveMind/HiveMind-core/pull/15) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
