@@ -1,24 +1,13 @@
 # Changelog
 
-## [0.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0a1) (2024-12-22)
+## [0.2.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0a2) (2024-12-23)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.1a1...0.2.0a1)
-
-**Implemented enhancements:**
-
-- Feature request: option to rename client [\#3](https://github.com/JarbasHiveMind/HiveMind-core/issues/3)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.0...0.2.0a2)
 
 **Merged pull requests:**
 
-- feat: more cli commands [\#9](https://github.com/JarbasHiveMind/HiveMind-core/pull/9) ([JarbasAl](https://github.com/JarbasAl))
-
-## [0.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.1.1a1) (2024-12-21)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.0...0.1.1a1)
-
-**Merged pull requests:**
-
-- fix: port from identity file [\#1](https://github.com/JarbasHiveMind/HiveMind-core/pull/1) ([JarbasAl](https://github.com/JarbasAl))
+- performance: speed up b64 operations [\#12](https://github.com/JarbasHiveMind/HiveMind-core/pull/12) ([JarbasAl](https://github.com/JarbasAl))
+- fix: json db live updates [\#11](https://github.com/JarbasHiveMind/HiveMind-core/pull/11) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
