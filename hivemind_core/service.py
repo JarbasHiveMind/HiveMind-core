@@ -1,5 +1,5 @@
 import asyncio
-import base64
+import pybase64
 import os
 import os.path
 import random
@@ -103,7 +103,7 @@ class MessageBusEventHandler(WebSocketHandler):
     @staticmethod
     def decode_auth(auth) -> Tuple[str, str]:
         userpass_encoded = bytes(auth, encoding="utf-8")
-        userpass_decoded = base64.b64decode(userpass_encoded).decode("utf-8")
+        userpass_decoded = pybase64.b64decode(userpass_encoded).decode("utf-8")
         name, key = userpass_decoded.split(":")
         return name, key
 
