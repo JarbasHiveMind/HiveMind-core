@@ -17,10 +17,10 @@ except ImportError:
 
 ClientDict = Dict[str, Union[str, int, float, List[str]]]
 ClientTypes = Union[None, 'Client',
-str,  # json
-ClientDict,  # dict
-List[Union[str, ClientDict, 'Client']]  # list of dicts/json/Client
-]
+                    str,  # json
+                    ClientDict,  # dict
+                    List[Union[str, ClientDict, 'Client']]  # list of dicts/json/Client
+                ]
 
 
 def cast2client(ret: ClientTypes) -> Optional[Union['Client', List['Client']]]:
