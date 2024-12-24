@@ -1,29 +1,26 @@
 import abc
 import json
 import os.path
+import sqlite3
 from dataclasses import dataclass, field
 from typing import List, Dict, Union, Any, Optional, Iterable
 
-from json_database import JsonStorageXDG
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_data_home
+
+from json_database import EncryptedJsonStorageXDG, JsonStorageXDG
 
 try:
     import redis
 except ImportError:
     redis = None
 
-try:
-    import sqlite3
-except ImportError:
-    sqlite3 = None
-
 ClientDict = Dict[str, Union[str, int, float, List[str]]]
 ClientTypes = Union[None, 'Client',
-                    str,  # json
-                    ClientDict,  # dict
-                    List[Union[str, ClientDict, 'Client']]  # list of dicts/json/Client
-                ]
+str,  # json
+ClientDict,  # dict
+List[Union[str, ClientDict, 'Client']]  # list of dicts/json/Client
+]
 
 
 def cast2client(ret: ClientTypes) -> Optional[Union['Client', List['Client']]]:
@@ -280,8 +277,17 @@ class AbstractDB(abc.ABC):
 class JsonDB(AbstractDB):
     """Database implementation using JSON files."""
 
-    def __init__(self, name="clients", subfolder="hivemind-core"):
-        self._db = JsonStorageXDG(name, subfolder=subfolder, xdg_folder=xdg_data_home())
+    def __init__(self, name="clients", subfolder="hivemind-core",
+                 password: Optional[str] = None):
+        if password:
+            self._db = EncryptedJsonStorageXDG(encrypt_key=password,
+                                               name=name,
+                                               subfolder=subfolder,
+                                               xdg_folder=xdg_data_home())
+        else:
+            self._db = JsonStorageXDG(name=name,
+                                      subfolder=subfolder,
+                                      xdg_folder=xdg_data_home())
         LOG.debug(f"json database path: {self._db.path}")
 
     def sync(self):
@@ -365,8 +371,6 @@ class SQLiteDB(AbstractDB):
         """
         Initialize the SQLiteDB connection.
         """
-        if sqlite3 is None:
-            raise ImportError("pip install sqlite3")
         db_path = os.path.join(xdg_data_home(), subfolder, name + ".db")
         LOG.debug(f"sqlite database path: {db_path}")
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -374,7 +378,6 @@ class SQLiteDB(AbstractDB):
         self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
         self._initialize_database()
-
 
     def _initialize_database(self):
         """Initialize the database schema."""
@@ -505,7 +508,8 @@ class SQLiteDB(AbstractDB):
 class RedisDB(AbstractDB):
     """Database implementation using Redis with RediSearch support."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 6379, password: Optional[str] = None, redis_db: int = 0):
+    def __init__(self, host: str = "127.0.0.1", port: int = 6379,
+                 password: Optional[str] = None, redis_db: int = 0):
         """
         Initialize the RedisDB connection.
 
@@ -705,14 +709,20 @@ class ClientDatabase:
 
 
 def get_db_kwargs(db_backend: str, db_name: str, db_folder: str,
-                  redis_host: str, redis_port: int, redis_password: Optional[str]) -> dict:
+                  redis_host: str, redis_port: int, db_password: Optional[str]) -> dict:
     """Get database configuration kwargs based on backend type."""
     kwargs = {"backend": db_backend}
-    if db_backend == "redis":
+    if db_backend in "redis":
         kwargs.update({
             "host": redis_host,
             "port": redis_port,
-            "password": redis_password
+            "password": db_password
+        })
+    elif db_password == "json":
+        kwargs.update({
+            "name": db_name,
+            "subfolder": db_folder,
+            "password": db_password
         })
     else:
         kwargs.update({
