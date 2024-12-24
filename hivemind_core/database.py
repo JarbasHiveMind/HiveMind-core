@@ -718,7 +718,7 @@ def get_db_kwargs(db_backend: str, db_name: str, db_folder: str,
             "port": redis_port,
             "password": db_password
         })
-    elif db_password == "json":
+    elif db_backend == "json":
         kwargs.update({
             "name": db_name,
             "subfolder": db_folder,
