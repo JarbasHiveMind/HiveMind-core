@@ -122,9 +122,11 @@ class HiveMindClientConnection:
                                         payload=message.payload,
                                         hivemeta=message.metadata,
                                         binary_type=message.bin_type).bytes
+                LOG.debug(f"unencrypted binary payload: {len(payload)}")
                 payload = encrypt_bin(self.crypto_key, payload)
                 is_bin = True
             else:
+                LOG.debug(f"unencrypted payload: {len(message.payload.serialize())}")
                 payload = encrypt_as_json(
                     self.crypto_key, message.serialize()  # json string
                 )  # json string

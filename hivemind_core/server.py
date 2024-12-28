@@ -164,8 +164,8 @@ class HiveMindTornadoWebSocket(WebSocketHandler):
         Handle a new client connection and perform authorization.
         """
         auth = self.request.uri.split("/?authorization=")[-1]
-        name, key = self.decode_auth(auth)
-        LOG.info(f"Authorizing client: {name}")
+        useragent, key = self.decode_auth(auth)
+        LOG.info(f"Authorizing client - {useragent}:{key}")
 
         def do_send(payload: str, is_bin: bool):
             self.loop.install()  # TODO is this needed?
@@ -180,7 +180,7 @@ class HiveMindTornadoWebSocket(WebSocketHandler):
             disconnect=do_disconnect,
             send_msg=do_send,
             sess=Session(session_id="default"),  # will be re-assigned once client sends handshake
-            name=name,
+            name=useragent,
             hm_protocol=self.hm_protocol
         )
         self.hm_protocol.db.sync()
@@ -192,6 +192,7 @@ class HiveMindTornadoWebSocket(WebSocketHandler):
             self.close()
             return
 
+        self.client.name = f"{useragent}::{user.client_id}::{user.name}"
         self.client.crypto_key = user.crypto_key
         self.client.msg_blacklist = user.message_blacklist or []
         self.client.skill_blacklist = user.skill_blacklist or []
