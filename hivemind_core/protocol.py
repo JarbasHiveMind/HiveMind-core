@@ -1,17 +1,18 @@
+import abc
+import dataclasses
 import json
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import List, Dict, Optional
+from typing import Dict, Any, Union, List, Optional, Callable
 
 import pgpy
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
+from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
 from poorman_handshake import HandShake, PasswordHandShake
-from tornado import ioloop
-from tornado.websocket import WebSocketHandler
 
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
@@ -53,16 +54,16 @@ class HiveMindNodeType(str, Enum):
 @dataclass
 class HiveMindClientConnection:
     """represents a connection to the hivemind listener"""
-
     key: str
-    ip: str
-    loop: ioloop.IOLoop
-    sess: Session  # unique session per client
+    send_msg: Callable[[str, bool], None]
+    disconnect: Callable[[], None]
+
+    sess: Session = dataclasses.field(default_factory=Session)  # unique session per client
     name: str = "AnonClient"
     node_type: HiveMindNodeType = HiveMindNodeType.CANDIDATE_NODE
     handshake: Optional[HandShake] = None
     pswd_handshake: Optional[PasswordHandShake] = None
-    socket: Optional[WebSocketHandler] = None
+
     crypto_key: Optional[str] = None
     msg_blacklist: List[str] = field(
         default_factory=list
@@ -82,11 +83,16 @@ class HiveMindClientConnection:
     can_escalate: bool = True
     can_propagate: bool = True
 
+    hm_protocol: Optional['HiveMindListenerProtocol'] = None
+
+    def __post_init__(self):
+        self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
+
     @property
     def peer(self) -> str:
         # friendly id that ovos components can use to refer to this connection
         # this is how ovos refers to connected nodes in message.context
-        return f"{self.name}:{self.ip}::{self.sess.session_id}"
+        return f"{self.name}::{self.sess.session_id}"
 
     def send(self, message: HiveMessage):
         is_bin = message.msg_type == HiveMessageType.BINARY
@@ -116,9 +122,11 @@ class HiveMindClientConnection:
                                         payload=message.payload,
                                         hivemeta=message.metadata,
                                         binary_type=message.bin_type).bytes
+                LOG.debug(f"unencrypted binary payload: {len(payload)}")
                 payload = encrypt_bin(self.crypto_key, payload)
                 is_bin = True
             else:
+                LOG.debug(f"unencrypted payload: {len(message.payload.serialize())}")
                 payload = encrypt_as_json(
                     self.crypto_key, message.serialize()  # json string
                 )  # json string
@@ -127,8 +135,7 @@ class HiveMindClientConnection:
             payload = message.serialize()
             LOG.debug(f"sent unencrypted!")
 
-        self.loop.install()
-        self.socket.write_message(payload, is_bin)
+        self.send_msg(payload, is_bin)
 
     def decode(self, payload: str) -> HiveMessage:
         if self.crypto_key:
@@ -161,124 +168,76 @@ class HiveMindClientConnection:
         return True
 
 
-@dataclass()
-class HiveMindListenerInternalProtocol:
-    """this class handles all interactions between a hivemind listener and a ovos-core messagebus"""
+@dataclass
+class _SubProtocol:
+    config: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    hm_protocol: Optional['HiveMindListenerProtocol'] = None
 
-    bus: MessageBusClient
+    @property
+    def identity(self) -> NodeIdentity:
+        return self.hm_protocol.identity
 
-    def register_bus_handlers(self):
-        LOG.debug("registering internal mycroft bus handlers")
-        self.bus.on("hive.send.downstream", self.handle_send)
-        self.bus.on("message", self.handle_internal_mycroft)  # catch all
+    @property
+    def database(self) -> ClientDatabase:
+        return self.hm_protocol.db
 
     @property
     def clients(self) -> Dict[str, HiveMindClientConnection]:
-        return HiveMindListenerProtocol.clients
-
-    # mycroft handlers  - from master -> slave
-    def handle_send(self, message: Message):
-        """ovos wants to send a HiveMessage
-
-        a device can be both a master and a slave, downstream messages are handled here
-
-        HiveMindSlaveInternalProtocol will handle requests meant to go upstream
-        """
-
-        payload = message.data.get("payload")
-        peer = message.data.get("peer")
-        msg_type = message.data["msg_type"]
-
-        hmessage = HiveMessage(msg_type, payload=payload, target_peers=[peer])
-
-        if msg_type in [HiveMessageType.PROPAGATE, HiveMessageType.BROADCAST]:
-            # this message is meant to be sent to all slave nodes
-            for peer in self.clients:
-                self.clients[peer].send(hmessage)
-        elif msg_type == HiveMessageType.ESCALATE:
-            # only slaves can escalate, ignore silently
-            #   if this device is also a slave to something,
-            #   HiveMindSlaveInternalProtocol will handle the request
-            pass
-
-        # NOT a protocol specific message, send directly to requested peer
-        # ovos component is asking explicitly to send a message to a peer
-        elif peer:
-            if peer in self.clients:
-                # send message to client
-                client = self.clients[peer]
-                client.send(hmessage)
-            else:
-                LOG.error("That client is not connected")
-                self.bus.emit(
-                    message.forward(
-                        "hive.client.send.error",
-                        {"error": "That client is not connected", "peer": peer},
-                    )
-                )
-
-    def handle_internal_mycroft(self, message: str):
-        """forward internal messages to clients if they are the target
-        here is where the client isolation happens,
-        clients only get responses to their own messages"""
-
-        # "message" event is a special case in ovos-bus-client that is not deserialized
-        message = Message.deserialize(message)
-        target_peers = message.context.get("destination") or []
-        if not isinstance(target_peers, list):
-            target_peers = [target_peers]
-
-        if target_peers:
-            for peer, client in self.clients.items():
-                if peer in target_peers:
-                    # forward internal messages to clients if they are the target
-                    LOG.debug(f"{message.msg_type} - destination: {peer}")
-                    message.context["source"] = "hive"
-                    msg = HiveMessage(
-                        HiveMessageType.BUS,
-                        source_peer=peer,
-                        target_peers=target_peers,
-                        payload=message,
-                    )
-                    client.send(msg)
+        return self.hm_protocol.clients
 
 
-@dataclass()
+@dataclass
+class AgentProtocol(_SubProtocol):
+    bus: Union[FakeBus, MessageBusClient] = dataclasses.field(default_factory=FakeBus)
+    config: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    hm_protocol: Optional['HiveMindListenerProtocol'] = None
+
+
+@dataclass
+class NetworkProtocol(_SubProtocol):
+    config: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    hm_protocol: Optional['HiveMindListenerProtocol'] = None
+
+    @abc.abstractmethod
+    def run(self):
+        pass
+
+
+@dataclass
 class HiveMindListenerProtocol:
-    loop: ioloop.IOLoop
-    clients = {}
-    internal_protocol: Optional[HiveMindListenerInternalProtocol] = None
+    agent_protocol: Optional[AgentProtocol] = None
     peer: str = "master:0.0.0.0"
 
     require_crypto: bool = True  # throw error if crypto key not available
     handshake_enabled: bool = True  # generate a key per session if not pre-shared
-    identity: Optional[NodeIdentity] = None
-    db: Optional[ClientDatabase] = None
+    identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
+    db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
+
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
     illegal_callback = None  # slave asked to broadcast payload (illegal action)
     propagate_callback = None  # slave asked to propagate payload
     broadcast_callback = None  # slave asked to broadcast payload
-    mycroft_bus_callback = None  # slave asked to inject payload into mycroft bus
+    agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
-    def bind(self, websocket, bus, identity, db: ClientDatabase):
-        self.identity = identity
-        self.db = db
-        websocket.protocol = self
-        self.internal_protocol = HiveMindListenerInternalProtocol(bus)
-        self.internal_protocol.register_bus_handlers()
+    clients = {} # class object
 
-    def get_bus(self, client: HiveMindClientConnection):
+
+    def __post_init__(self):
+        self.agent_protocol.hm_protocol = self
+
+    def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
-        return self.internal_protocol.bus
+        return self.agent_protocol.bus
 
     def handle_new_client(self, client: HiveMindClientConnection):
         LOG.debug(f"new client: {client.peer}")
         message = Message(
             "hive.client.connect",
-            {"ip": client.ip, "session_id": client.sess.session_id},
+            {"key": client.key,
+             "session_id": client.sess.session_id},
             {"source": client.peer},
         )
 
@@ -327,10 +286,10 @@ class HiveMindListenerProtocol:
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         if client.peer in self.clients:
             self.clients.pop(client.peer)
-        client.socket.close()
+        client.disconnect()
         message = Message(
             "hive.client.disconnect",
-            {"ip": client.ip},
+            {"key": client.key},
             {"source": client.peer, "session": client.sess.serialize()},
         )
         bus = self.get_bus(client)
@@ -340,7 +299,7 @@ class HiveMindListenerProtocol:
         LOG.error("Client provided an invalid api key")
         message = Message(
             "hive.client.connection.error",
-            {"error": "invalid api key", "peer": client.peer},
+            {"error": "invalid access key", "peer": client.peer},
             {"source": client.peer},
         )
         bus = self.get_bus(client)
@@ -375,7 +334,7 @@ class HiveMindListenerProtocol:
         elif message.msg_type == HiveMessageType.BUS:
             self.handle_bus_message(message, client)
         elif message.msg_type == HiveMessageType.SHARED_BUS:
-            self.handle_client_bus(message.payload, client)
+            self.handle_client_shared_bus(message.payload, client)
 
         # HiveMessage handlers
         elif message.msg_type == HiveMessageType.PROPAGATE:
@@ -449,10 +408,10 @@ class HiveMindListenerProtocol:
         LOG.warning(f"Ignoring received binary STT input: {len(bin_data)} bytes")
 
     def handle_stt_handle_request(self, bin_data: bytes,
-                                      sample_rate: int,
-                                      sample_width: int,
-                                      lang: str,
-                                      client: HiveMindClientConnection):
+                                  sample_rate: int,
+                                  sample_width: int,
+                                  lang: str,
+                                  client: HiveMindClientConnection):
         LOG.warning(f"Ignoring received binary STT input: {len(bin_data)} bytes")
 
     def handle_numpy_image(self, bin_data: bytes,
@@ -509,7 +468,7 @@ class HiveMindListenerProtocol:
             # if not client.pswd_handshake.receive_and_verify(envelope):
             #     # TODO - different handles for invalid access key / invalid password
             #     self.handle_invalid_key_connected(client)
-            #     client.socket.close()
+            #     client.disconnect()
             #     return
 
             # key is derived safely from password in both sides
@@ -523,7 +482,7 @@ class HiveMindListenerProtocol:
             # self.crypto_key = self.pswd_handshake.secret
         else:
             # TODO - invalid handshake handler
-            client.socket.close()
+            client.disconnect()
             return
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
@@ -557,9 +516,9 @@ class HiveMindListenerProtocol:
             client.sess = sess
             LOG.debug(f"Client session updated from payload: {sess.serialize()}")
 
-        self.handle_inject_mycroft_msg(message.payload, client)
-        if self.mycroft_bus_callback:
-            self.mycroft_bus_callback(message.payload)
+        self.handle_inject_agent_msg(message.payload, client)
+        if self.agent_bus_callback:
+            self.agent_bus_callback(message.payload)
 
     def handle_broadcast_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -746,7 +705,7 @@ class HiveMindListenerProtocol:
             self.handle_binary_message(message, client)
             return True
         elif message.msg_type == HiveMessageType.SHARED_BUS:
-            self.handle_client_bus(message.payload, client)
+            self.handle_client_shared_bus(message.payload, client)
             return True
 
         return False
@@ -770,12 +729,14 @@ class HiveMindListenerProtocol:
             message.context["session"]["blacklisted_intents"] = []
 
         message.context["session"]["blacklisted_skills"] += [s for s in client.skill_blacklist
-                                                             if s not in message.context["session"]["blacklisted_skills"]]
+                                                             if
+                                                             s not in message.context["session"]["blacklisted_skills"]]
         message.context["session"]["blacklisted_intents"] += [s for s in client.intent_blacklist
-                                                              if s not in message.context["session"]["blacklisted_intents"]]
+                                                              if s not in message.context["session"][
+                                                                  "blacklisted_intents"]]
         return message
 
-    def handle_inject_mycroft_msg(
+    def handle_inject_agent_msg(
             self, message: Message, client: HiveMindClientConnection
     ):
         """
@@ -797,17 +758,17 @@ class HiveMindListenerProtocol:
             message.context["destination"] = "skills"  # ensure not treated as a broadcast
 
         # send client message to internal mycroft bus
-        LOG.info(f"Forwarding message to mycroft bus from client: {client.peer}")
+        LOG.info(f"Forwarding message to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
         message.context["source"] = client.peer
 
         bus = self.get_bus(client)
         bus.emit(message)
 
-        if self.mycroft_bus_callback:
-            self.mycroft_bus_callback(message)
+        if self.agent_bus_callback:
+            self.agent_bus_callback(message)
 
-    def handle_client_bus(self, message: Message, client: HiveMindClientConnection):
+    def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
         # this message is going inside the client bus
         # take any metrics you need
         LOG.info("Monitoring bus from client: " + client.peer)
