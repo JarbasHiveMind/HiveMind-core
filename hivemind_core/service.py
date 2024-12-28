@@ -9,7 +9,8 @@ from hivemind_bus_client.identity import NodeIdentity
 from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import (
     HiveMindListenerProtocol,
-    HiveMindNodeType
+    HiveMindNodeType,
+    ClientCallbacks
 )
 from hivemind_plugin_manager.protocols import NetworkProtocol, BinaryDataHandlerProtocol, AgentProtocol
 
@@ -68,6 +69,7 @@ class HiveMindService:
 
     identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
+    callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
     alive_hook: Callable[[], None] = on_alive
     started_hook: Callable[[], None] = on_started
@@ -127,6 +129,7 @@ class HiveMindService:
         # start hivemind protocol that will handle HiveMessages
         hm_protocol = self.hm_protocol(identity=self.identity,
                                        db=self.db,
+                                       callbacks=self.callbacks,
                                        binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
 
