@@ -227,7 +227,10 @@ def listen(ovos_bus_address: str, ovos_bus_port: int, host: str, port: int,
            db_backend, db_name, db_folder,
            redis_host, redis_port, redis_password):
     kwargs = get_db_kwargs(db_backend, db_name, db_folder, redis_host, redis_port, redis_password)
+    # TODO - configurable in the future when pluginified
     from hivemind_core.service import HiveMindService
+    from hivemind_core.agents import OVOSProtocol
+    from hivemind_core.server import HiveMindWebsocketProtocol
 
     ovos_bus_config = {
         "host": ovos_bus_address,
@@ -241,11 +244,11 @@ def listen(ovos_bus_address: str, ovos_bus_port: int, host: str, port: int,
         "cert_dir": cert_dir,
         "cert_name": cert_name,
     }
-    service = HiveMindService(
-        ovos_bus_config=ovos_bus_config,
-        websocket_config=websocket_config,
-        db=ClientDatabase(**kwargs)
-    )
+    service = HiveMindService(agent_protocol=OVOSProtocol,
+                              agent_config=ovos_bus_config,
+                              network_protocol=HiveMindWebsocketProtocol,
+                              network_config=websocket_config,
+                              db=ClientDatabase(**kwargs))
     service.run()
 
 
