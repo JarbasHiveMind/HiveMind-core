@@ -121,12 +121,14 @@ class HiveMindService:
 
         self._status.bind(agent_protocol.bus)
 
+        # binary data handling protocol
+        bin_protocol = self.binary_data_protocol(agent_protocol=agent_protocol)
+
         # start hivemind protocol that will handle HiveMessages
         hm_protocol = self.hm_protocol(identity=self.identity,
                                        db=self.db,
-                                       binary_data_protocol=self.binary_data_protocol(),
+                                       binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
-        agent_protocol.hm_protocol = hm_protocol # allow it to reference clients/database/identity
 
         # start network protocol that will deliver HiveMessages
         network_protocol = self.network_protocol(hm_protocol=hm_protocol,

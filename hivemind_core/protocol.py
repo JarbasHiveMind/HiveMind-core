@@ -171,7 +171,7 @@ class HiveMindClientConnection:
 @dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
-    binary_data_protocol: BinaryDataHandlerProtocol = dataclasses.field(default_factory=BinaryDataHandlerProtocol)
+    binary_data_protocol: Optional[BinaryDataHandlerProtocol] = None
     peer: str = "master:0.0.0.0"
 
     require_crypto: bool = True  # throw error if crypto key not available
@@ -188,12 +188,20 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
+    # TODO - add more useful client callbacks
+    disconnect_client_callback = None
+
     clients = {} # class object
 
 
     def __post_init__(self):
         self.agent_protocol.hm_protocol = self
-        self.binary_data_protocol.hm_protocol = self
+        if not self.binary_data_protocol:
+            # just logs received messages
+            self.binary_data_protocol = BinaryDataHandlerProtocol(hm_protocol=self,
+                                                                  agent_protocol=self.agent_protocol)
+        else:
+            self.binary_data_protocol.hm_protocol = self
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
@@ -251,6 +259,12 @@ class HiveMindListenerProtocol:
         # clients can rotate their pubkey or session_key by sending a new handshake
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
+        if self.disconnect_client_callback:
+            try:
+                self.disconnect_client_callback(client)
+            except:
+                pass
+
         if client.peer in self.clients:
             self.clients.pop(client.peer)
         client.disconnect()
