@@ -365,6 +365,7 @@ class HiveMindListenerProtocol:
     ):
         assert message.msg_type == HiveMessageType.BINARY
         bin_data = message.payload
+        # TODO - split binary handlers protocol too
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
