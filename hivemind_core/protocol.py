@@ -1,10 +1,9 @@
-import abc
 import dataclasses
 import json
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Dict, Any, Union, List, Optional, Callable
+from typing import Union, List, Optional, Callable
 
 import pgpy
 from ovos_bus_client import MessageBusClient
@@ -24,6 +23,7 @@ from hivemind_bus_client.util import (
     encrypt_as_json,
 )
 from hivemind_core.database import ClientDatabase
+from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol
 
 
 class ProtocolVersion(IntEnum):
@@ -169,43 +169,9 @@ class HiveMindClientConnection:
 
 
 @dataclass
-class _SubProtocol:
-    config: Dict[str, Any] = dataclasses.field(default_factory=dict)
-    hm_protocol: Optional['HiveMindListenerProtocol'] = None
-
-    @property
-    def identity(self) -> NodeIdentity:
-        return self.hm_protocol.identity
-
-    @property
-    def database(self) -> ClientDatabase:
-        return self.hm_protocol.db
-
-    @property
-    def clients(self) -> Dict[str, HiveMindClientConnection]:
-        return self.hm_protocol.clients
-
-
-@dataclass
-class AgentProtocol(_SubProtocol):
-    bus: Union[FakeBus, MessageBusClient] = dataclasses.field(default_factory=FakeBus)
-    config: Dict[str, Any] = dataclasses.field(default_factory=dict)
-    hm_protocol: Optional['HiveMindListenerProtocol'] = None
-
-
-@dataclass
-class NetworkProtocol(_SubProtocol):
-    config: Dict[str, Any] = dataclasses.field(default_factory=dict)
-    hm_protocol: Optional['HiveMindListenerProtocol'] = None
-
-    @abc.abstractmethod
-    def run(self):
-        pass
-
-
-@dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
+    binary_data_protocol: BinaryDataHandlerProtocol = dataclasses.field(default_factory=BinaryDataHandlerProtocol)
     peer: str = "master:0.0.0.0"
 
     require_crypto: bool = True  # throw error if crypto key not available
@@ -227,6 +193,8 @@ class HiveMindListenerProtocol:
 
     def __post_init__(self):
         self.agent_protocol.hm_protocol = self
+        self.binary_data_protocol.hm_protocol = self
+        self.binary_data_protocol.agent_protocol = self.agent_protocol
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
@@ -369,68 +337,31 @@ class HiveMindListenerProtocol:
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
-            self.handle_microphone_input(bin_data, sr, sw, client)
+            self.binary_data_protocol.handle_microphone_input(bin_data, sr, sw, client)
         elif message.bin_type == HiveMindBinaryPayloadType.STT_AUDIO_TRANSCRIBE:
             lang = message.metadata.get("lang")
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
-            self.handle_stt_transcribe_request(bin_data, sr, sw, lang, client)
+            self.binary_data_protocol.handle_stt_transcribe_request(bin_data, sr, sw, lang, client)
         elif message.bin_type == HiveMindBinaryPayloadType.STT_AUDIO_HANDLE:
             lang = message.metadata.get("lang")
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
-            self.handle_stt_handle_request(bin_data, sr, sw, lang, client)
+            self.binary_data_protocol.handle_stt_handle_request(bin_data, sr, sw, lang, client)
         elif message.bin_type == HiveMindBinaryPayloadType.TTS_AUDIO:
             lang = message.metadata.get("lang")
             utt = message.metadata.get("utterance")
             file_name = message.metadata.get("file_name")
-            self.handle_receive_tts(bin_data, utt, lang, file_name, client)
+            self.binary_data_protocol.handle_receive_tts(bin_data, utt, lang, file_name, client)
         elif message.bin_type == HiveMindBinaryPayloadType.FILE:
             file_name = message.metadata.get("file_name")
-            self.handle_receive_file(bin_data, file_name, client)
+            self.binary_data_protocol.handle_receive_file(bin_data, file_name, client)
         elif message.bin_type == HiveMindBinaryPayloadType.NUMPY_IMAGE:
             # TODO - convert to numpy array
             camera_id = message.metadata.get("camera_id")
-            self.handle_numpy_image(bin_data, camera_id, client)
+            self.binary_data_protocol.handle_numpy_image(bin_data, camera_id, client)
         else:
             LOG.warning(f"Ignoring received untyped binary data: {len(bin_data)} bytes")
-
-    def handle_microphone_input(self, bin_data: bytes,
-                                sample_rate: int,
-                                sample_width: int,
-                                client: HiveMindClientConnection):
-        LOG.warning(f"Ignoring received binary audio input: {len(bin_data)} bytes at sample_rate: {sample_rate}")
-
-    def handle_stt_transcribe_request(self, bin_data: bytes,
-                                      sample_rate: int,
-                                      sample_width: int,
-                                      lang: str,
-                                      client: HiveMindClientConnection):
-        LOG.warning(f"Ignoring received binary STT input: {len(bin_data)} bytes")
-
-    def handle_stt_handle_request(self, bin_data: bytes,
-                                  sample_rate: int,
-                                  sample_width: int,
-                                  lang: str,
-                                  client: HiveMindClientConnection):
-        LOG.warning(f"Ignoring received binary STT input: {len(bin_data)} bytes")
-
-    def handle_numpy_image(self, bin_data: bytes,
-                           camera_id: str,
-                           client: HiveMindClientConnection):
-        LOG.warning(f"Ignoring received binary image: {len(bin_data)} bytes")
-
-    def handle_receive_tts(self, bin_data: bytes,
-                           utterance: str,
-                           lang: str,
-                           file_name: str,
-                           client: HiveMindClientConnection):
-        LOG.warning(f"Ignoring received binary TTS audio: {utterance} with {len(bin_data)} bytes")
-
-    def handle_receive_file(self, bin_data: bytes,
-                            file_name: str,
-                            client: HiveMindClientConnection):
-        LOG.warning(f"Ignoring received binary file: {file_name} with {len(bin_data)} bytes")
 
     def handle_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -759,7 +690,7 @@ class HiveMindListenerProtocol:
             message.context["destination"] = "skills"  # ensure not treated as a broadcast
 
         # send client message to internal mycroft bus
-        LOG.info(f"Forwarding message to agent bus from client: {client.peer}")
+        LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
         message.context["source"] = client.peer
 

@@ -16,7 +16,7 @@ class HiveMindFakeCroftProtocol(HiveMindListenerProtocol):
     peer: str = "fakecroft:0.0.0.0"
 
     def bind(self, websocket, bus=None):
-        websocket.protocol = self
+        websocket.hm_protocol = self
         if bus is None:
             bus = FakeBus()
         self.internal_protocol = HiveMindListenerInternalProtocol(bus)
@@ -27,7 +27,7 @@ class HiveMindFakeCroftProtocol(HiveMindListenerProtocol):
         """
         message (Message): mycroft bus message object
         """
-        super().handle_inject_mycroft_msg(message, client)
+        super().handle_inject_agent_msg(message, client)
         answer = "mycroft is dead! long live mycroft!"
 
         payload = HiveMessage(

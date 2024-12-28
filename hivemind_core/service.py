@@ -9,10 +9,9 @@ from hivemind_bus_client.identity import NodeIdentity
 from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import (
     HiveMindListenerProtocol,
-    HiveMindNodeType,
-    NetworkProtocol, AgentProtocol
+    HiveMindNodeType
 )
-from hivemind_core.server import HiveMindWebsocketProtocol
+from hivemind_plugin_manager.protocols import NetworkProtocol, AgentProtocol
 
 
 def on_ready():

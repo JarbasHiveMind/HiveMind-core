@@ -7,6 +7,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from hivemind_core.database import ClientDatabase, get_db_kwargs
+from hivemind_core.service import HiveMindService
 
 
 def prompt_node_id(db: ClientDatabase) -> int:
@@ -228,9 +229,8 @@ def listen(ovos_bus_address: str, ovos_bus_port: int, host: str, port: int,
            redis_host, redis_port, redis_password):
     kwargs = get_db_kwargs(db_backend, db_name, db_folder, redis_host, redis_port, redis_password)
     # TODO - configurable in the future when pluginified
-    from hivemind_core.service import HiveMindService
-    from hivemind_core.agents import OVOSProtocol
-    from hivemind_core.server import HiveMindWebsocketProtocol
+    from ovos_bus_client.hpm import OVOSProtocol
+    from hivemind_websocket_protocol import HiveMindWebsocketProtocol
 
     ovos_bus_config = {
         "host": ovos_bus_address,
