@@ -194,7 +194,6 @@ class HiveMindListenerProtocol:
     def __post_init__(self):
         self.agent_protocol.hm_protocol = self
         self.binary_data_protocol.hm_protocol = self
-        self.binary_data_protocol.agent_protocol = self.agent_protocol
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client

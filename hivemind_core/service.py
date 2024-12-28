@@ -11,7 +11,7 @@ from hivemind_core.protocol import (
     HiveMindListenerProtocol,
     HiveMindNodeType
 )
-from hivemind_plugin_manager.protocols import NetworkProtocol, AgentProtocol
+from hivemind_plugin_manager.protocols import NetworkProtocol, BinaryDataHandlerProtocol, AgentProtocol
 
 
 def on_ready():
@@ -60,6 +60,7 @@ class HiveMindService:
     # TODO - pluginify
     agent_protocol: Type[AgentProtocol]
     network_protocol: Type[NetworkProtocol]
+    binary_data_protocol: Type[BinaryDataHandlerProtocol] = BinaryDataHandlerProtocol
     hm_protocol: Type[HiveMindListenerProtocol] = HiveMindListenerProtocol
     agent_config: Dict[str, Any] = dataclasses.field(default_factory=dict)
     hm_config: Dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -123,6 +124,7 @@ class HiveMindService:
         # start hivemind protocol that will handle HiveMessages
         hm_protocol = self.hm_protocol(identity=self.identity,
                                        db=self.db,
+                                       binary_data_protocol=self.binary_data_protocol(),
                                        agent_protocol=agent_protocol)
         agent_protocol.hm_protocol = hm_protocol # allow it to reference clients/database/identity
 
