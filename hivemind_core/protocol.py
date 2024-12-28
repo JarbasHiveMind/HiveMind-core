@@ -188,9 +188,6 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
-    # TODO - add more useful client callbacks
-    disconnect_client_callback = None
-
     clients = {} # class object
 
 
@@ -259,12 +256,6 @@ class HiveMindListenerProtocol:
         # clients can rotate their pubkey or session_key by sending a new handshake
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
-        if self.disconnect_client_callback:
-            try:
-                self.disconnect_client_callback(client)
-            except:
-                pass
-
         if client.peer in self.clients:
             self.clients.pop(client.peer)
         client.disconnect()
