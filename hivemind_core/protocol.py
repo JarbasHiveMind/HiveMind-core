@@ -168,6 +168,27 @@ class HiveMindClientConnection:
         return True
 
 
+def on_disconnect(client: HiveMindClientConnection):
+    LOG.debug(f"client disconnected: {client}")
+
+def on_connect(client: HiveMindClientConnection):
+    LOG.debug(f"client connected: {client}")
+
+def on_invalid_key(client: HiveMindClientConnection):
+    LOG.debug(f"invalid access key: {client}")
+
+def on_invalid_protocol(client: HiveMindClientConnection):
+    LOG.debug(f"protocol requirements failure: {client}")
+
+
+@dataclass
+class ClientCallbacks:
+    on_connect: Callable[[HiveMindClientConnection], None] = on_connect
+    on_disconnect: Callable[[HiveMindClientConnection], None] = on_disconnect
+    on_invalid_key: Callable[[HiveMindClientConnection], None] = on_invalid_key
+    on_invalid_protocol: Callable[[HiveMindClientConnection], None] = on_invalid_protocol
+
+
 @dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
@@ -178,6 +199,7 @@ class HiveMindListenerProtocol:
     handshake_enabled: bool = True  # generate a key per session if not pre-shared
     identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
+    callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
@@ -189,7 +211,6 @@ class HiveMindListenerProtocol:
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
     clients = {} # class object
-
 
     def __post_init__(self):
         self.agent_protocol.hm_protocol = self
@@ -205,6 +226,11 @@ class HiveMindListenerProtocol:
         return self.agent_protocol.bus
 
     def handle_new_client(self, client: HiveMindClientConnection):
+        try:
+            self.callbacks.on_connect(client)
+        except:
+            LOG.exception("error on connect callback")
+
         LOG.debug(f"new client: {client.peer}")
         message = Message(
             "hive.client.connect",
@@ -256,6 +282,10 @@ class HiveMindListenerProtocol:
         # clients can rotate their pubkey or session_key by sending a new handshake
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
+        try:
+            self.callbacks.on_disconnect(client)
+        except:
+            LOG.exception("error on disconnect callback")
         if client.peer in self.clients:
             self.clients.pop(client.peer)
         client.disconnect()
@@ -268,6 +298,10 @@ class HiveMindListenerProtocol:
         bus.emit(message)
 
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
+        try:
+            self.callbacks.on_invalid_key(client)
+        except:
+            LOG.exception("error on invalid_key callback")
         LOG.error("Client provided an invalid api key")
         message = Message(
             "hive.client.connection.error",
@@ -278,6 +312,10 @@ class HiveMindListenerProtocol:
         bus.emit(message)
 
     def handle_invalid_protocol_version(self, client: HiveMindClientConnection):
+        try:
+            self.callbacks.on_invalid_protocol(client)
+        except:
+            LOG.exception("error on invalid_protocol callback")
         LOG.error("Client does not satisfy protocol requirements")
         message = Message(
             "hive.client.connection.error",
