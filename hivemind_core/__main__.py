@@ -1,6 +1,6 @@
 from hivemind_core.service import HiveMindService
-from hivemind_core.agents import OVOSProtocol
-from hivemind_core.server import HiveMindWebsocketProtocol
+from ovos_bus_client.hpm import OVOSProtocol
+from hivemind_websocket_protocol import HiveMindWebsocketProtocol
 
 def main():
 

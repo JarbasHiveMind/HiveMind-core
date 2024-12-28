@@ -10,9 +10,9 @@ from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import (
     HiveMindListenerProtocol,
     HiveMindNodeType,
-    NetworkProtocol, AgentProtocol
+    ClientCallbacks
 )
-from hivemind_core.server import HiveMindWebsocketProtocol
+from hivemind_plugin_manager.protocols import NetworkProtocol, BinaryDataHandlerProtocol, AgentProtocol
 
 
 def on_ready():
@@ -61,6 +61,7 @@ class HiveMindService:
     # TODO - pluginify
     agent_protocol: Type[AgentProtocol]
     network_protocol: Type[NetworkProtocol]
+    binary_data_protocol: Type[BinaryDataHandlerProtocol] = BinaryDataHandlerProtocol
     hm_protocol: Type[HiveMindListenerProtocol] = HiveMindListenerProtocol
     agent_config: Dict[str, Any] = dataclasses.field(default_factory=dict)
     hm_config: Dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -68,6 +69,7 @@ class HiveMindService:
 
     identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
+    callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
     alive_hook: Callable[[], None] = on_alive
     started_hook: Callable[[], None] = on_started
@@ -121,11 +123,15 @@ class HiveMindService:
 
         self._status.bind(agent_protocol.bus)
 
+        # binary data handling protocol
+        bin_protocol = self.binary_data_protocol(agent_protocol=agent_protocol)
+
         # start hivemind protocol that will handle HiveMessages
         hm_protocol = self.hm_protocol(identity=self.identity,
                                        db=self.db,
+                                       callbacks=self.callbacks,
+                                       binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
-        agent_protocol.hm_protocol = hm_protocol # allow it to reference clients/database/identity
 
         # start network protocol that will deliver HiveMessages
         network_protocol = self.network_protocol(hm_protocol=hm_protocol,

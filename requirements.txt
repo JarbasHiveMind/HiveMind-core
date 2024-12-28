@@ -1,13 +1,17 @@
-tornado
 click
 click_default_group
 rich
-pyOpenSSL
 pycryptodomex
 poorman_handshake>=0.1.0
-hivemind-ggwave
 hivemind_bus_client>=0.1.0,<1.0.0
 HiveMind_presence>=0.0.2a3,<1.0.0
 ovos_utils>=0.0.33,<1.0.0
-ovos-bus-client>=0.0.6,<2.0.0
+ovos-bus-client>=1.3.0,<2.0.0
 pybase64
+json-database>=0.9.0,<1.0.0
+hivemind-plugin-manager>=0.0.2,<1.0.0
+
+# TODO - for backwards compat, will be removed in a future release
+hivemind-websocket-protocol>=0.0.1,<1.0.0
+hivemind-redis-database>=0.0.1,<1.0.0
+hivemind-sqlite-database>=0.0.1,<1.0.0
