@@ -1,17 +1,12 @@
 # Changelog
 
-## [1.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.0a1) (2024-12-28)
+## [1.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.1a1) (2024-12-28)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.2...1.0.0a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.0...1.0.1a1)
 
-**Breaking changes:**
+**Merged pull requests:**
 
-- refactor!: uncouple agent and network protocol from hivemind protocol [\#24](https://github.com/JarbasHiveMind/HiveMind-core/pull/24) ([JarbasAl](https://github.com/JarbasAl))
-
-**Implemented enhancements:**
-
-- refactor: abstract agent specific logic away from hivemind-core [\#22](https://github.com/JarbasHiveMind/HiveMind-core/issues/22)
-- refactor: abstract HM protocol away from websockets implementation [\#21](https://github.com/JarbasHiveMind/HiveMind-core/issues/21)
+- fix: bind hm\_protocol to agent\_protocol [\#26](https://github.com/JarbasHiveMind/HiveMind-core/pull/26) ([JarbasAl](https://github.com/JarbasAl))
 
 
 

@@ -125,6 +125,9 @@ class HiveMindService:
         hm_protocol = self.hm_protocol(identity=self.identity,
                                        db=self.db,
                                        agent_protocol=agent_protocol)
+        agent_protocol.hm_protocol = hm_protocol # allow it to reference clients/database/identity
+
+        # start network protocol that will deliver HiveMessages
         network_protocol = self.network_protocol(hm_protocol=hm_protocol,
                                                  config=self.network_config)
 
@@ -133,7 +136,6 @@ class HiveMindService:
         self._presence.start()
         self._status.set_ready()
 
-        # start network protocol that will deliver HiveMessages
         network_protocol.run()  # blocking
 
         self._status.set_stopping()
