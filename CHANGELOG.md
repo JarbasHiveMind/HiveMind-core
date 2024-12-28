@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.1a1) (2024-12-28)
+## [1.0.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.2a1) (2024-12-28)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.0...1.0.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.1...1.0.2a1)
 
 **Merged pull requests:**
 
-- fix: bind hm\_protocol to agent\_protocol [\#26](https://github.com/JarbasHiveMind/HiveMind-core/pull/26) ([JarbasAl](https://github.com/JarbasAl))
+- feat: hivemind-plugin-manager [\#28](https://github.com/JarbasHiveMind/HiveMind-core/pull/28) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
