@@ -1,32 +1,23 @@
 from typing import List, Optional, Iterable
 
-from hivemind_redis_database import RedisDB
-from hivemind_sqlite_database import SQLiteDB
 from ovos_utils.log import LOG
 
+from hivemind_core.config import get_server_config
+from hivemind_plugin_manager import DatabaseFactory
 from hivemind_plugin_manager.database import Client
-from json_database.hpm import JsonDB
 
 
 class ClientDatabase:
-    valid_backends = ["json", "redis", "sqlite"]
 
-    def __init__(self, backend="json", **backend_kwargs):
+    def __init__(self, config=None):
         """
         Initialize the client database with the specified backend.
         """
-        backend_kwargs = backend_kwargs or {}
-        if backend not in self.valid_backends:
-            raise NotImplementedError(f"{backend} not supported, choose one of {self.valid_backends}")
-
-        if backend == "json":
-            self.db = JsonDB(**backend_kwargs)
-        elif backend == "redis":
-            self.db = RedisDB(**backend_kwargs)
-        elif backend == "sqlite":
-            self.db = SQLiteDB(**backend_kwargs)
-        else:
-            raise NotImplementedError(f"{backend} not supported, valid databases: {self.valid_backends}")
+        config = config or get_server_config()["database"]
+        name = config["module"]
+        db_class = DatabaseFactory.get_class(name)
+        LOG.info(f"Database: {db_class.__name__}")
+        self.db = db_class(**config.get(name, {}))
 
     def sync(self):
         """update db from disk if needed"""
@@ -114,21 +105,3 @@ class ClientDatabase:
             self.db.commit()
         except Exception as e:
             LOG.error(e)
-
-
-def get_db_kwargs(db_backend: str, db_name: str, db_folder: str,
-                  redis_host: str, redis_port: int, redis_password: Optional[str]) -> dict:
-    """Get database configuration kwargs based on backend type."""
-    kwargs = {"backend": db_backend}
-    if db_backend == "redis":
-        kwargs.update({
-            "host": redis_host,
-            "port": redis_port,
-            "password": redis_password
-        })
-    else:
-        kwargs.update({
-            "name": db_name,
-            "subfolder": db_folder
-        })
-    return kwargs
