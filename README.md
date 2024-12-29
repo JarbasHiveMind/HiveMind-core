@@ -45,13 +45,12 @@ Plugin Manager**.
 
 ## 📖 Anatomy of a HiveMind Server
 
-The HiveMind architecture revolves around **defining and routing communication**. A HiveMind server uses configurable
-protocols for key components:
+In addition to implementing the [hivemind protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/), a HiveMind server uses configurable plugins for other key components:
 
 1. **Database**: Stores client credentials and settings (e.g., JSON, SQLite, Redis).
 2. **Network Protocol**: Determines how devices connect to the server (e.g., Websockets, HTTP).
 3. **Agent Protocol**: Defines how the server processes and responds to messages (e.g., OVOS, Persona).
-4. **Binary Protocol**: Specifies what to do you the received binary data, eg. process incoming audio.
+4. **Binary Protocol**: Specifies what to do you the received binary data (e.g., process incoming audio).
 
 Each component can be extended or replaced using plugins, providing unparalleled flexibility for your specific use case.
 
