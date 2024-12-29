@@ -23,7 +23,7 @@ from hivemind_bus_client.util import (
     encrypt_as_json,
 )
 from hivemind_core.database import ClientDatabase
-from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol
+from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 
 
 class ProtocolVersion(IntEnum):
@@ -168,27 +168,6 @@ class HiveMindClientConnection:
         return True
 
 
-def on_disconnect(client: HiveMindClientConnection):
-    LOG.debug(f"client disconnected: {client}")
-
-def on_connect(client: HiveMindClientConnection):
-    LOG.debug(f"client connected: {client}")
-
-def on_invalid_key(client: HiveMindClientConnection):
-    LOG.debug(f"invalid access key: {client}")
-
-def on_invalid_protocol(client: HiveMindClientConnection):
-    LOG.debug(f"protocol requirements failure: {client}")
-
-
-@dataclass
-class ClientCallbacks:
-    on_connect: Callable[[HiveMindClientConnection], None] = on_connect
-    on_disconnect: Callable[[HiveMindClientConnection], None] = on_disconnect
-    on_invalid_key: Callable[[HiveMindClientConnection], None] = on_invalid_key
-    on_invalid_protocol: Callable[[HiveMindClientConnection], None] = on_invalid_protocol
-
-
 @dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
@@ -210,7 +189,7 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
-    clients = {} # class object
+    clients = {}  # class object
 
     def __post_init__(self):
         self.agent_protocol.hm_protocol = self
@@ -230,6 +209,16 @@ class HiveMindListenerProtocol:
             self.callbacks.on_connect(client)
         except:
             LOG.exception("error on connect callback")
+
+        try:  # let the binary protocol know about it
+            self.binary_data_protocol.callbacks.on_connect(client)
+        except:
+            LOG.exception("error on connect binary callback")
+
+        try:  # let the agent protocol know about it
+            self.agent_protocol.callbacks.on_connect(client)
+        except:
+            LOG.exception("error on connect agent callback")
 
         LOG.debug(f"new client: {client.peer}")
         message = Message(
@@ -286,6 +275,17 @@ class HiveMindListenerProtocol:
             self.callbacks.on_disconnect(client)
         except:
             LOG.exception("error on disconnect callback")
+
+        try:  # let the binary protocol know about it
+            self.binary_data_protocol.callbacks.on_disconnect(client)
+        except:
+            LOG.exception("error on disconnect binary callback")
+
+        try:  # let the agent protocol know about it
+            self.agent_protocol.callbacks.on_disconnect(client)
+        except:
+            LOG.exception("error on disconnect agent callback")
+
         if client.peer in self.clients:
             self.clients.pop(client.peer)
         client.disconnect()
@@ -302,6 +302,17 @@ class HiveMindListenerProtocol:
             self.callbacks.on_invalid_key(client)
         except:
             LOG.exception("error on invalid_key callback")
+
+        try:  # let the binary protocol know about it
+            self.binary_data_protocol.callbacks.on_invalid_key(client)
+        except:
+            LOG.exception("error on invalid_key binary callback")
+
+        try:  # let the agent protocol know about it
+            self.agent_protocol.callbacks.on_invalid_key(client)
+        except:
+            LOG.exception("error on invalid_key agent callback")
+
         LOG.error("Client provided an invalid api key")
         message = Message(
             "hive.client.connection.error",
@@ -316,6 +327,17 @@ class HiveMindListenerProtocol:
             self.callbacks.on_invalid_protocol(client)
         except:
             LOG.exception("error on invalid_protocol callback")
+
+        try:  # let the binary protocol know about it
+            self.binary_data_protocol.callbacks.on_invalid_protocol(client)
+        except:
+            LOG.exception("error on invalid_protocol binary callback")
+
+        try:  # let the agent protocol know about it
+            self.agent_protocol.callbacks.on_invalid_protocol(client)
+        except:
+            LOG.exception("error on invalid_protocol agent callback")
+
         LOG.error("Client does not satisfy protocol requirements")
         message = Message(
             "hive.client.connection.error",
