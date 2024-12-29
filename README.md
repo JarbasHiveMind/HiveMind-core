@@ -36,25 +36,14 @@ our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/)
 HiveMind is designed to be modular, allowing you to customize its behavior through plugins managed by the **HiveMind
 Plugin Manager**.
 
-- **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins**.
-- **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins**.
-- **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins**.
-- **Database**: 🗃️ how client credentials are stored is implemented via **database plugins**
+- **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins** (e.g., Websockets, HTTP).
+- **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins** (e.g., OVOS, Persona).
+- **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins** (e.g., process incoming audio).
+- **Database**: 🗃️ how client credentials are stored is implemented via **database plugins** (e.g., JSON, SQLite, Redis).
 
 ---
 
-## 📖 Anatomy of a HiveMind Server
-
-In addition to implementing the [hivemind protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/), a HiveMind server uses configurable plugins for other key components:
-
-1. **Database**: Stores client credentials and settings (e.g., JSON, SQLite, Redis).
-2. **Network Protocol**: Determines how devices connect to the server (e.g., Websockets, HTTP).
-3. **Agent Protocol**: Defines how the server processes and responds to messages (e.g., OVOS, Persona).
-4. **Binary Protocol**: Specifies what to do you the received binary data (e.g., process incoming audio).
-
-Each component can be extended or replaced using plugins, providing unparalleled flexibility for your specific use case.
-
-### Protocol Configuration
+## 📖 Protocol Configuration
 
 HiveMind Core now supports a configuration file, making it easier for users to define server settings and reduce the need for complex command-line arguments. 
 
