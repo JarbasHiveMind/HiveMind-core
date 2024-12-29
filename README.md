@@ -27,7 +27,7 @@ our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/)
 - **[Fine-Grained Permissions](https://jarbashivemind.github.io/HiveMind-community-docs/16_permissions/)**: Control
   access to skills, intents, and message types for each satellite.
 - **Multi-Agent Support**: Integrate various AI assistants, such as [OpenVoiceOS](https://github.com/OpenVoiceOS/)
-  or [LLMs](https://github.com/JarbasHiveMind/hivemind-persona).
+  or [LLMs](https://github.com/OpenVoiceOS/ovos-persona).
 
 ---
 
