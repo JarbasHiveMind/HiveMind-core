@@ -1,12 +1,12 @@
 # Changelog
 
-## [1.0.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.2a1) (2024-12-28)
+## [3.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.0a1) (2024-12-29)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.1...1.0.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/2.0.0...3.0.0a1)
 
-**Merged pull requests:**
+**Breaking changes:**
 
-- feat: hivemind-plugin-manager [\#28](https://github.com/JarbasHiveMind/HiveMind-core/pull/28) ([JarbasAl](https://github.com/JarbasAl))
+- feat!: config file + dynamic plugins [\#30](https://github.com/JarbasHiveMind/HiveMind-core/pull/30) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
