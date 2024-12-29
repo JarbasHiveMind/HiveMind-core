@@ -1,31 +1,104 @@
 # HiveMind Core
 
-HiveMind is an extension of [OpenVoiceOS (OVOS)](https://github.com/OpenVoiceOS/), the open-source voice assistant
-platform. It enables you to extend a single instance of `ovos-core` across multiple devices, even those with limited
-hardware capabilities that can't typically run OVOS.
+HiveMind is a flexible [protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/) that
+facilitates communication and collaboration among devices and AI agents within a
+unified network. It enables lightweight devices, called **satellites**, to connect to a central hub, with customizable
+permissions and centralized control.
 
-Demo videos in [youtube](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/)
+HiveMind also
+supports [hierarchical hub-to-hub connections](https://jarbashivemind.github.io/HiveMind-community-docs/15_nested/),
+creating powerful,
+scalable smart environments.
+
+Initially developed as part of the [OpenVoiceOS (OVOS)](https://github.com/OpenVoiceOS/) ecosystem, HiveMind is
+adaptable to various AI backend systems.
+
+For more details and demonstrations, check
+our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/).
 
 ---
 
 ## 🌟 Key Features
 
-- **Expand Your Ecosystem**: Seamlessly connect lightweight or legacy devices as satellites to a central OVOS hub.
-- **Centralized Control**: Manage and monitor all connected devices from a single hivemind-core instance.
-- **Fine-Grained Permissions**: Control skills, intents, and message access per client.
-- **Flexible Database Support**: Choose from JSON, SQLite, or Redis to fit your setup.
+- **Modular Design**: Easily extend functionality with plugins for different protocols and behaviors.
+- **Protocol Flexibility**: Use HiveMind with different **network**, **agent**, and **binary protocols**.
+- **Customizable Database Options**: Support for JSON, SQLite, and Redis.
+- **Centralized Control**: Manage and monitor devices from a single hub.
+- **[Fine-Grained Permissions](https://jarbashivemind.github.io/HiveMind-community-docs/16_permissions/)**: Control
+  access to skills, intents, and message types for each satellite.
+- **Multi-Agent Support**: Integrate various AI assistants, such as [OpenVoiceOS](https://github.com/OpenVoiceOS/)
+  or [LLMs](https://github.com/JarbasHiveMind/hivemind-persona).
 
 ---
 
-## 📖 Documentation & Community
+## 🔌 Modular Design with Plugins
 
-- 📚 **Documentation**: [HiveMind Docs](https://jarbashivemind.github.io/HiveMind-community-docs)
-- 💬 **Chat**: Join the [HiveMind Matrix Chat](https://matrix.to/#/#jarbashivemind:matrix.org) for news, support, and
-  discussion.
+HiveMind is designed to be modular, allowing you to customize its behavior through plugins managed by the **HiveMind
+Plugin Manager**.
+
+- **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins**.
+- **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins**.
+- **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins**.
+- **Database**: 🗃️ how client credentials are stored is implemented via **database plugins**
 
 ---
 
-## 🚀 Quick Start
+## 📖 Anatomy of a HiveMind Server
+
+The HiveMind architecture revolves around **defining and routing communication**. A HiveMind server uses configurable
+protocols for key components:
+
+1. **Database**: Stores client credentials and settings (e.g., JSON, SQLite, Redis).
+2. **Network Protocol**: Determines how devices connect to the server (e.g., Websockets, HTTP).
+3. **Agent Protocol**: Defines how the server processes and responds to messages (e.g., OVOS, Persona).
+4. **Binary Protocol**: Specifies what to do you the received binary data, eg. process incoming audio.
+
+Each component can be extended or replaced using plugins, providing unparalleled flexibility for your specific use case.
+
+### Protocol Configuration
+
+HiveMind Core now supports a configuration file, making it easier for users to define server settings and reduce the need for complex command-line arguments. 
+
+> 💡 The configuration file is stored at `~/.config/hivemind-core/server.json`
+
+The default configuration
+
+```json
+{
+  "agent_protocol": {
+    "module": "hivemind-ovos-agent-plugin",
+    "hivemind-ovos-agent-plugin": {
+      "host": "127.0.0.1",
+      "port": 8181
+    }
+  },
+  "binary_protocol": {
+    "module": null
+  },
+  "network_protocol": {
+    "module": "hivemind-websocket-plugin",
+    "hivemind-websocket-plugin": {
+      "host": "0.0.0.0",
+      "port": 5678,
+      "ssl": false,
+      "cert_dir": "/path/to/xdg/data/hivemind",
+      "cert_name": "hivemind"
+    }
+  },
+  "database": {
+    "module": "hivemind-json-db-plugin",
+    "hivemind-json-db-plugin": {
+      "name": "clients",
+      "folder": "hivemind-core"
+    }
+  }
+}
+```
+
+
+---
+
+## 🛰️  Quick Start
 
 To get started, HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and
 connections.
@@ -36,9 +109,9 @@ connections.
 pip install hivemind-core
 ```
 
-### Adding a satellite
+### Adding a Satellite
 
-Add credentials for each satellite device
+Add credentials for each satellite device:
 
 ```bash
 $ hivemind-core add-client --db-backend sqlite 
@@ -53,69 +126,41 @@ Encryption Key: f46351c54f61a715
 WARNING: Encryption Key is deprecated, only use if your client does not support password
 ```
 
-**NOTE**: you will need to provide this info on the client devices in order to connect
+**NOTE**: You will need to provide this information on the client devices to connect.
 
 ### Running the Server
 
 Start the HiveMind Core server to accept connections:
 
 ```bash
-$ hivemind-core listen --port 5678
+$ hivemind-core listen
 ```
 
 ---
 
-## 📦 Database Backends
+## 🧩 Plugins Overview
 
-HiveMind-Core supports multiple database backends to store client credentials and settings. Each has its own use case:
+| **Category**         | **Plugin**                                                                                   | **Description**                                                                                                                                                                                          |
+|----------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Network Protocol** | [hivemind-websocket-protocol](https://github.com/JarbasHiveMind/hivemind-websocket-protocol) | Provides WebSocket-based communication for Hivemind, enabling real-time data exchange.                                                                                                                   |
+| **Binary Protocol**  | [hivemind-listener](https://github.com/JarbasHiveMind/hivemind-listener)                     | Listens for incoming audio and processes it using the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), enabling seamless interaction between Hivemind and audio input systems. |
+| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, facilitated by [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client), enabling seamless communication with OVOS systems.                                       |
+|                      | [Persona](https://github.com/JarbasHiveMind/hivemind-persona)                                | LLM (Large Language Model) integration powered by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona), works with all OpenAI server compatible projects.                                         |
+| **Database**         | [hivemind-sqlite-database](https://github.com/JarbasHiveMind/hivemind-sqlite-database)       | SQLite-based database solution for managing local data within Hivemind applications.                                                                                                                     |
+|                      | [hivemind-redis-database](https://github.com/JarbasHiveMind/hivemind-redis-database)         | Redis integration for scalable, in-memory database solutions with fast data access.                                                                                                                      |
+|                      | [hivemind-json-database](https://github.com/TigreGotico/json_database/pull/7)                | A JSON-based database plugin provided by [json-database](https://github.com/TigreGotico/json_database), offering lightweight storage and retrieval using JSON format.                                    |
 
-| Backend            | Use Case                                       | Default Location                            | Command Line options                               |
-|--------------------|------------------------------------------------|---------------------------------------------|----------------------------------------------------|
-| **JSON** (default) | Simple, file-based setup for local use         | `~/.local/share/hivemind-core/clients.json` | Configurable via `--db-name` and `--db-folder`     |
-| **SQLite**         | Lightweight relational DB for single instances | `~/.local/share/hivemind-core/clients.db`   | Configurable via `--db-name` and `--db-folder`     |
-| **Redis**          | Distributed, high-performance environments     | `localhost:6379`                            | Configurable via `--redis-host` and `--redis-port` |
+## 💬 Clients Overview
 
-**How to Choose?**
-
-- For **scalability** or multi-instance setups, use Redis.
-- For **simplicity** or single-device environments, use SQLite.
-- For **development** or to be able to edit the database by hand, use JSON.
-
----
-
-### 🔑 Permissions
-
-HiveMind Core uses a flexible **RBAC inspired system** where permissions are assigned directly to each client. 
-
-Instead of predefined roles or groups, each client’s configuration determines their access.
-
-1. **Default Permissions**  
-   - **Bus Messages**: Denied by default, except for a core set of universally allowed messages:  
-     ```python
-     ["recognizer_loop:utterance", "recognizer_loop:record_begin",
-      "recognizer_loop:record_end", "recognizer_loop:audio_output_start",
-      "recognizer_loop:audio_output_end", "recognizer_loop:b64_transcribe",
-      "speak:b64_audio", "ovos.common_play.SEI.get.response"]
-     ```  
-     The main message, `recognizer_loop:utterance`, enables universal natural language instructions for seamless integration.
-   - **Skills & Intents**: Allowed by default but can be blacklisted for specific clients.
-
-2. **Granular Controls**  
-   - Per-client **allowlists** for bus messages.  
-   - **Blacklists** for skills or intents to restrict access.  
-
-3. **Emergent Roles**  
-   - While no explicit roles exist, configurations can emulate roles like "basic client" (default permissions) or "restricted client" (blacklisted skills/intents).
-
-#### 👤 Example Use Cases  
-
-1. **General AI Integration**  
-   - A basic client is configured with the default allowed message types, enabling it to send natural language instructions (`recognizer_loop:utterance`).  
-   - This setup allows seamless integration of third-party AI systems or assistants.  
-
-2. **Custom Permissions for Specialized Clients**  
-   - An IoT device is allowed specific bus messages (e.g., `temperature.set`) to control heating systems.  
-   - Sensitive intents, such as `shutdown` or `reboot`, are blacklisted to prevent misuse.  
+| **Category**   | **Client**                                                                      | **Description**                                                                                              |
+|----------------|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| **Satellites** | [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)             | Standalone OVOS *local* audio stack for Hivemind.                                                            |
+|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite, STT/TTS processed *server* side, **requires** `hivemind-listener`.              |
+|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on device, audio streamed and fully processed *server* side, **requires** `hivemind-listener`. |
+|                | [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat)                      | *Client-side* browser Hivemind connection for web-based communication.                                       |
+| **Bridges**    | [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)   | Bridge for talking to Hivemind via Mattermost                                                                |
+|                | [Matrix Bridge](https://github.com/JarbasHiveMind/HiveMind-matrix-bridge)       | Bridge for talking to Hivemind via Matrix                                                                    |
+|                | [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge) | Bridge for talking to Hivemind via DeltaChat                                                                 |
 
 ---
 
@@ -158,11 +203,12 @@ For detailed help on each command, use `--help` (e.g., `hivemind-core add-client
 Add credentials for a new client that will connect to the HiveMind instance.
 
 ```bash
-$ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --password "mypass" --db-backend json
+$ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --password "mypass"
 ```
 
 - **When to use**:  
-  Use this command when setting up a new HiveMind client (e.g., Raspberry Pi, IoT device). Provide credentials for secure communication with the server.
+  Use this command when setting up a new HiveMind client (e.g., Raspberry Pi, IoT device). Provide credentials for
+  secure communication with the server.
 
 ---
 
@@ -171,11 +217,12 @@ $ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --passwo
 List all registered clients and their credentials.
 
 ```bash
-$ hivemind-core list-clients --db-backend json
+$ hivemind-core list-clients
 ```
 
 - **When to use**:  
-  Use this command to view or inspect all registered clients, helpful for debugging or managing devices connected to HiveMind.
+  Use this command to view or inspect all registered clients, helpful for debugging or managing devices connected to
+  HiveMind.
 
 ---
 
@@ -216,7 +263,8 @@ $ hivemind-core allow-msg "speak"
 ```
 
 - **When to use**:  
-  Use this command to enable certain message types, particularly when extending a client’s communication capabilities (e.g., allowing TTS commands).
+  Use this command to enable certain message types, particularly when extending a client’s communication capabilities (
+  e.g., allowing TTS commands).
 
 ---
 
@@ -229,7 +277,8 @@ $ hivemind-core blacklist-msg "speak"
 ```
 
 - **When to use**:  
-  Use this command to prevent specific message types from being sent by a client, adding a layer of control over communication.
+  Use this command to prevent specific message types from being sent by a client, adding a layer of control over
+  communication.
 
 ---
 
@@ -242,7 +291,8 @@ $ hivemind-core blacklist-skill "skill-weather" 1
 ```
 
 - **When to use**:  
-  Use this command to restrict a client’s access to particular skills, such as preventing a device from accessing certain skills for safety or appropriateness.
+  Use this command to restrict a client’s access to particular skills, such as preventing a device from accessing
+  certain skills for safety or appropriateness.
 
 ---
 
@@ -268,7 +318,8 @@ $ hivemind-core blacklist-intent "intent.check_weather" 1
 ```
 
 - **When to use**:  
-  Use this command to block a specific intent from being triggered by a client. This is useful for managing permissions in environments with shared skills.
+  Use this command to block a specific intent from being triggered by a client. This is useful for managing permissions
+  in environments with shared skills.
 
 ---
 
@@ -290,229 +341,32 @@ $ hivemind-core allow-intent "intent.check_weather" 1
 Start the HiveMind instance to listen for client connections.
 
 ```bash
-$ hivemind-core listen --ovos_bus_address "127.0.0.1" --port 5678
+$ hivemind-core listen
 ```
 
 - **When to use**:  
-  Use this command to start the HiveMind instance, enabling it to accept connections from clients (e.g., satellite devices). Configure the host, port, and security options as needed.
+  Use this command to start the HiveMind instance, enabling it to accept connections from clients (e.g., satellite
+  devices). Configure the host, port, and security options as needed.
 
 ---
 
 </details>
 
-#### Running in Distributed Environments
-
-By default, HiveMind listens for the OpenVoiceOS bus on `127.0.0.1`. When running in distributed environments (e.g.,
-Kubernetes), use the `--ovos_bus_address` and `--ovos_bus_port` options to specify the bus address and port.
-
 
 ---
 
-## 🧩 HiveMind Ecosystem
+## 🚀 Next Steps
 
-### Minds
-
-This is the "brain" you want to host behind the hivemind protocol, it can be anything you want but by default we
-assume [OpenVoiceOS](https://openvoiceos.org) is being used
-
-- **HiveMind Core** (this repository): The central hub for managing connections and routing messages between devices.
-- [Hivemind Listener](https://github.com/JarbasHiveMind/HiveMind-listener) - an extension of `hivemind-core` for
-  streaming *audio* from satellites
-- [Persona](https://github.com/JarbasHiveMind/HiveMind-persona) - run
-  a [persona](https://github.com/OpenVoiceOS/ovos-persona) (eg. LLM). *text* input only
-
-### Client Libraries
-
-- [HiveMind WebSocket Client](https://github.com/JarbasHiveMind/hivemind_websocket_client)
-- [HiveMind JS](https://github.com/JarbasHiveMind/HiveMind-js)
-
-### Terminals
-
-- [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)  (standalone OVOS *local* audio stack)
-- [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)  (lightweight audio satellite, STT/TTS
-  processed *server* side, **requires** `hivemind-listener`)
-- [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite) (only VAD runs on device, audio streamed
-  and fully processed *server* side, **requires** `hivemind-listener`)
-- [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat) (*client-side* browser hivemind connection)
-- [Flask Chatroom](https://github.com/JarbasHiveMind/HiveMind-flask-template)  (**boilerplate template** - *server-side*
-  hivemind connection)
-
-### Bridges
-
-- [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)
-- [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge)
-
----
-
-## Hivemind Server Comparison
-
-When building your HiveMind servers there are many ways to go about it, with many optional components
-
-Common setups:
-
-- **OVOS Device**, a full OVOS install without hivemind *(for reference only)*
-- **Hivemind Device**, a OVOS device also running hivemind, eg. a Mark2 with it's own satellites.
-- **Hivemind Skills Server**, a minimal HiveMind server that satellites can connect to, supports **text** utterances
-  only
-- **Hivemind Sound Server**, a HiveMind server that supports **text** utterances and **streaming audio**
-- **Hivemind Persona Server**, exposes a `ovos-persona` (eg. an LLM) that satellites can connect to, without
-  running `ovos-core`.
-
-The table below illustrates the most common setups for a OVOS based Mind, each column represents a running OVOS/HiveMind
-service on your server
-
-|                             | **hivemind-core** | **hivemind-listener** | **ovos-core** | **ovos-audio** | **ovos-listener** | **hivemind-persona** |
-|-----------------------------|-------------------|-----------------------|---------------|----------------|-------------------|----------------------|
-| **OVOS Device**             | ❌                 | ❌                     | ✔️            | ✔️             | ✔️                | ❌                    | 
-| **Hivemind Device**         | ✔️                | ❌                     | ✔️            | ✔️             | ✔️                | ❌                    | 
-| **Hivemind Skills Server**  | ✔️                | ❌                     | ✔️            | ❌              | ❌                 | ❌                    | 
-| **Hivemind Sound Server**   | ❌                 | ✔️                    | ✔️            | ❌              | ❌                 | ❌                    | 
-| **Hivemind Persona Server** | ❌                 | ❌                     | ❌             | ❌              | ❌                 | ✔️                   | 
-
-The table below indicates compatibility for each of the setups described above with the most common voice satellites,
-each column corresponds to a different satellite
-
-|                             | **voice satellite** | **voice relay** | **mic satellite** |
-|-----------------------------|---------------------|-----------------|-------------------|
-| **OVOS Device**             | ❌                   | ❌               | ❌                 |
-| **Hivemind Device**         | ✔️                  | ✔️              | ❌                 |
-| **Hivemind Skills Server**  | ✔️                  | ❌               | ❌                 |
-| **Hivemind Sound Server**   | ✔️                  | ✔️              | ✔️                |
-| **Hivemind Persona Server** | ✔️                  | ❌               | ❌                 |
-
----
-
-## OVOS Plugins Compatibility
-
-Hivemind leverages [ovos-plugin-manager](), bringing compatibility with hundreds of plugins.
-
-> 💡 **Tip**: OVOS plugins can be used both on *client* and *server* side
-
-| Plugin Type         | Description                                             | Documentation                                                                                   |
-|---------------------|---------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| Microphone          | Captures voice input                                    | [Microphone Documentation](https://openvoiceos.github.io/ovos-technical-manual/310-mic_plugins)    |
-| VAD                 | Voice Activity Detection                                | [VAD Documentation](https://openvoiceos.github.io/ovos-technical-manual/311-vad_plugins/)           |
-| WakeWord            | Detects wake words for interaction                      | [WakeWord Documentation](https://openvoiceos.github.io/ovos-technical-manual/312-wake_word_plugins/)       |
-| STT                 | Speech-to-text (STT)                                    | [STT Documentation](https://openvoiceos.github.io/ovos-technical-manual/313-stt_plugins/)           |
-| TTS                 | Text-to-speech (TTS)                                    | [TTS Documentation](https://openvoiceos.github.io/ovos-technical-manual/320-tts_plugins/)            |
-| G2P                 | Grapheme-to-phoneme (G2P)<br>used to simulate mouth movements | [G2P Documentation](https://openvoiceos.github.io/ovos-technical-manual/321-g2p_plugins/)           |
-| Media Playback      | Enables media playback (e.g., "play Metallica")         | [Media Playback Documentation](https://openvoiceos.github.io/ovos-technical-manual/371-media_plugins/) |
-| OCP Plugins         | Provides playback support for URLs (e.g., YouTube)      | [OCP Plugins Documentation](https://openvoiceos.github.io/ovos-technical-manual/370-ocp_plugins/)   |
-| Audio Transformers  | Parse/Modify *audio* before speech-to-text (STT)        | [Audio Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
-| Utterance Transformers | Parse/Modify *text utterance* before Intent Parsing  | [Utterance Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
-| Metadata Transformers  | Parse/Modify *Session data* before Intent Parsing    | [Metadata Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
-| Dialog Transformers | Parse/Modify *text utterance* before text-to-speech (TTS) | [Dialog Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
-| TTS Transformers    | Parse/Modify *audio* after text-to-speech (TTS)         | [TTS Transformers Documentation](https://openvoiceos.github.io/ovos-technical-manual/330-transformer_plugins/) |
-| PHAL                | Provides platform-specific support (e.g., Mark 1)       | [PHAL Documentation](https://openvoiceos.github.io/ovos-technical-manual/340-PHAL)                |
-
-### Client side plugins
-
-The tables below illustrates how plugins from the OVOS ecosystem relate to the various satellites and where they should
-be installed and configured
-
-<details>
-  <summary>Click for more details</summary>
-
-
-**Audio input**:
-
-| Supported Plugins                 | **Microphone**   | **VAD**          | **Wake Word**      | **STT**          |
-|-----------------------------------|------------------|------------------|--------------------|------------------|
-| **HiveMind Voice Satellite**      | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Required *) | ✔️<br>(Required) | 
-| **HiveMind Voice Relay**          | ✔️<br>(Required) | ✔️<br>(Required) | ✔️<br>(Required)   | 📡<br>(Remote)   | 
-| **HiveMind Microphone Satellite** | ✔️<br>(Required) | ✔️<br>(Required) | 📡<br>(Remote)     | 📡<br>(Remote)   | 
-
-* can be skipped
-  with [continuous listening mode](https://openvoiceos.github.io/ovos-technical-manual/speech_service/#modes-of-operation)
-
-**Audio output**:
-
-| Supported Plugins                 | **TTS**          | **Media Playback** | **OCP extractors** | 
-|-----------------------------------|------------------|--------------------|--------------------| 
-| **HiveMind Voice Satellite**      | ✔️<br>(Required) | ✔️<br>(Optional)   | ✔️<br>(Optional)   |  
-| **HiveMind Voice Relay**          | 📡<br>(Remote)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   | 
-| **HiveMind Microphone Satellite** | 📡<br>(Remote)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   |  
-
-**Transformers**:
-
-| Supported Plugins                 | **Audio**          | **Utterance**      | **Metadata**       | **Dialog**         | **TTS**            |
-|-----------------------------------|--------------------|--------------------|--------------------|--------------------|--------------------|
-| **HiveMind Voice Satellite**      | ✔️<br>(Optional)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   |
-| **HiveMind Voice Relay**          | ❌<br>(Unsupported) | 🚧<br>(TODO)       | 🚧<br>(TODO)       | 🚧<br>(TODO)       | ❌<br>(Unsupported) |
-| **HiveMind Microphone Satellite** | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) |
-
-**Other**:
-
-| Supported Plugins                 | **G2P**<br>(mouth movements) | **PHAL**         |
-|-----------------------------------|------------------------------|------------------|
-| **HiveMind Voice Satellite**      | ✔️<br>(Optional)             | ✔️<br>(Optional) |
-| **HiveMind Voice Relay**          | ❌<br>(Unsupported)           | ✔️<br>(Optional) |
-| **HiveMind Microphone Satellite** | ❌<br>(Unsupported)           | ✔️<br>(Optional) |
-
-</details>
-
-### Server side plugins
-
-The tables below illustrates how plugins from the OVOS ecosystem relate to the various server setups and where they should
-be installed and configured
-
-<details>
-  <summary>Click for more details</summary>
-
-**Audio input**:
-
-| Supported Plugins           | **Microphone**     | **VAD**            | **Wake Word**      | **STT**            |
-|-----------------------------|--------------------|--------------------|--------------------|--------------------|
-| **Hivemind Skills Server**  | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | 
-| **Hivemind Sound Server**   | ❌<br>(Unsupported) | ✔️<br>(Required)   | ✔️<br>(Required)   | ✔️<br>(Required)   | 
-| **Hivemind Persona Server** | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | 
-
-**Audio output**:
-
-| Supported Plugins           | **TTS**            | **Media Playback** | **OCP extractors** | 
-|-----------------------------|--------------------|--------------------|--------------------| 
-| **Hivemind Skills Server**  | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ✔️<br>(Optional)   |  
-| **Hivemind Sound Server**   | ✔️<br>(Required)   | ❌<br>(Unsupported) | ✔️<br>(Optional)   | 
-| **Hivemind Persona Server** | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) |  
-
-**Transformers**:
-
-| Supported Plugins           | **Audio**          | **Utterance**      | **Metadata**       | **Dialog**         | **TTS**            |
-|-----------------------------|--------------------|--------------------|--------------------|--------------------|--------------------|
-| **Hivemind Skills Server**  | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) | ❌<br>(Unsupported) |
-| **Hivemind Sound Server**   | 🚧<br>(TODO)       | ✔️<br>(Optional)   | ✔️<br>(Optional)   | ✔️<br>(Optional)   | 🚧<br>(TODO)       |
-| **Hivemind Persona Server** | ❌<br>(Unsupported) | 🚧<br>(TODO)       | ❌<br>(Unsupported) | 🚧<br>(TODO)       | ❌<br>(Unsupported) |
-
-**Other**:
-
-| Supported Plugins           | **G2P**<br>(mouth movements) | **PHAL**           |
-|-----------------------------|------------------------------|--------------------|
-| **Hivemind Skills Server**  | ❌<br>(Unsupported)           | ❌<br>(Unsupported) |
-| **Hivemind Sound Server**   | ❌<br>(Unsupported)           | ❌<br>(Unsupported) |
-| **Hivemind Persona Server** | ❌<br>(Unsupported)           | ❌<br>(Unsupported) |
-
-</details>
-
----
-
-## 🔒 Protocol Support
-
-| Feature              | Protocol v0 | Protocol v1 |
-|----------------------|-------------|-------------|
-| JSON serialization   | ✅           | ✅           |
-| Binary serialization | ❌           | ✅           |
-| Pre-shared AES key   | ✅           | ✅           |
-| Password handshake   | ❌           | ✅           |
-| PGP handshake        | ❌           | ✅           |
-| Zlib compression     | ❌           | ✅           |
-
-> **Note**: Some clients (e.g., HiveMind-JS) do not yet support Protocol v1.
+- Visit the [documentation](https://jarbashivemind.github.io/HiveMind-community-docs) for detailed guides.
+- Join the [HiveMind Matrix Chat](https://matrix.to/#/#jarbashivemind:matrix.org) for support and updates.
+- Explore additional plugins and expand your HiveMind ecosystem.
 
 ---
 
 ## 🤝 Contributing
 
-HiveMind Core is open source and welcomes contributions from the community. If you’d like to contribute, here’s how you can get started:
+HiveMind Core is open source and welcomes contributions from the community. If you’d like to contribute, here’s how you
+can get started:
 
 1. **Fork the Repository**:  
    Fork the [HiveMind Core GitHub repository](https://github.com/JarbasHiveMind/HiveMind-core).
@@ -524,7 +378,22 @@ HiveMind Core is open source and welcomes contributions from the community. If y
    Develop your features or bug fixes in a feature branch and submit a pull request to the main repository.
 
 4. **Join the Discussion**:  
-   Participate in the [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org) to share ideas and collaborate with the community.
+   Participate in the [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org) to share ideas and collaborate with
+   the community.
+
+As HiveMind continues to grow, there are several exciting projects on the horizon that could benefit from community
+involvement. 
+
+🚧 Here are some beginner-friendly projects where you can contribute: 🚧
+
+- **Wyoming Binary Protocol** 🏡: Translate binary payloads to the Wyoming protocol, using Wyoming servers instead of
+  OVOS plugins.
+- **Assist Protocol Agent** 🏡: Develop an agent that communicates with Home Assistant, enabling seamless integration of
+  HiveMind satellites with Home Assistant.
+- **HTTP / MQTT Network Protocols** 🌐: Implement network protocols specifically designed for IoT devices, enhancing
+  connectivity and communication within smart environments.
+- **GGWave Network Protocol** 🎶: Create a solution for HiveMind communication via sound, allowing for networkless
+  systems to interact using audio signals.
 
 ---
 
