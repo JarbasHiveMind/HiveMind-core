@@ -77,7 +77,7 @@ The default configuration
     "module": "hivemind-json-db-plugin",
     "hivemind-json-db-plugin": {
       "name": "clients",
-      "folder": "hivemind-core"
+      "subfolder": "hivemind-core"
     }
   }
 }
