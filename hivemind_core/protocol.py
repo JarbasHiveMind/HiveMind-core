@@ -498,7 +498,9 @@ class HiveMindListenerProtocol:
             client.sess.site_id = client.site_id = payload["site_id"]
         if "pubkey" in payload:
             client.pub_key = payload["pubkey"]
-            LOG.debug(f"client public key: {client.pub_key}")
+            LOG.debug(f"client sent public key")
+        else:
+            LOG.warning(f"client did NOT send public key")
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
         if client.sess.session_id != "default":
