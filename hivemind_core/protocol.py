@@ -1,11 +1,11 @@
 import dataclasses
 import json
 import uuid
-import pybase64
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable
 
+import pybase64
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
@@ -66,6 +66,8 @@ class HiveMindClientConnection:
     pswd_handshake: Optional[PasswordHandShake] = None
 
     crypto_key: Optional[str] = None
+    pub_key: Optional[str] = None  # TODO add field to database
+
     msg_blacklist: List[str] = field(
         default_factory=list
     )  # list of ovos message_type to never be sent to this client
@@ -362,6 +364,8 @@ class HiveMindListenerProtocol:
 
         if message.msg_type == HiveMessageType.HANDSHAKE:
             self.handle_handshake_message(message, client)
+        elif message.msg_type == HiveMessageType.HELLO:
+            self.handle_hello_message(message, client)
 
         # mycroft Message handlers
         elif message.msg_type == HiveMessageType.BUS:
@@ -482,15 +486,26 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
+        msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
+        client.send(msg)  # client can recreate crypto_key on his side now
+
+    def handle_hello_message(self, message: HiveMessage, client: HiveMindClientConnection):
+        LOG.debug("client Hello received, syncing personal session data")
+        payload = message.payload
+        if "session" in payload:
+            client.sess = Session.deserialize(payload["session"])
+        if "site_id" in payload:
+            client.sess.site_id = client.site_id = payload["site_id"]
+        if "public_key" in payload:
+            client.pub_key = payload["public_key"]
+            LOG.debug(f"client public key: {client.pub_key}")
+
         LOG.debug(f"client site_id: {client.sess.site_id}")
         if client.sess.session_id != "default":
             LOG.debug(f"client session_id: {client.sess.session_id}")
             self.clients[client.peer] = client
         else:
-            LOG.warning("client did not send a session in it's handshake")
-
-        msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
-        client.send(msg)  # client can recreate crypto_key on his side now
+            LOG.warning("client did not send a session after it's handshake")
 
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
