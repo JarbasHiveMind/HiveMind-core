@@ -496,8 +496,8 @@ class HiveMindListenerProtocol:
             client.sess = Session.deserialize(payload["session"])
         if "site_id" in payload:
             client.sess.site_id = client.site_id = payload["site_id"]
-        if "public_key" in payload:
-            client.pub_key = payload["public_key"]
+        if "pubkey" in payload:
+            client.pub_key = payload["pubkey"]
             LOG.debug(f"client public key: {client.pub_key}")
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
