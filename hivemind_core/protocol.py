@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import uuid
+from binascii import unhexlify
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable
@@ -10,8 +11,6 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
-from poorman_handshake import HandShake, PasswordHandShake
-from poorman_handshake.asymmetric.utils import verify_RSA, decrypt_RSA, encrypt_RSA, load_RSA_key
 
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
@@ -24,6 +23,8 @@ from hivemind_bus_client.util import (
 )
 from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from poorman_handshake import HandShake, PasswordHandShake
+from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
 
 class ProtocolVersion(IntEnum):
@@ -671,13 +672,12 @@ class HiveMindListenerProtocol:
         pload = message.payload
         if isinstance(pload, dict) and "ciphertext" in pload:
             try:
-                from binascii import unhexlify
                 ciphertext = unhexlify(pload["ciphertext"])
                 signature = unhexlify(pload["signature"])
 
                 # TODO - allow verifying, we need to store trusted pubkeys before this can be done
-                #pub = ""
-                #verified = verify_RSA(pub, ciphertext, signature)
+                # pub = ""
+                # verified = verify_RSA(pub, ciphertext, signature)
 
                 private_key = load_RSA_key(self.identity.private_key)
 
