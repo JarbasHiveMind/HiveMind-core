@@ -1,12 +1,17 @@
 # Changelog
 
-## [3.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.0a1) (2024-12-29)
+## [3.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.1a1) (2025-01-01)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/2.0.0...3.0.0a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.0...3.0.1a1)
 
-**Breaking changes:**
+**Implemented enhancements:**
 
-- feat!: config file + dynamic plugins [\#30](https://github.com/JarbasHiveMind/HiveMind-core/pull/30) ([JarbasAl](https://github.com/JarbasAl))
+- feat: hivemind-plugin-manager [\#23](https://github.com/JarbasHiveMind/HiveMind-core/issues/23)
+- security: encrypted databases [\#14](https://github.com/JarbasHiveMind/HiveMind-core/issues/14)
+
+**Merged pull requests:**
+
+- fix: INTERCOM messages RSA [\#32](https://github.com/JarbasHiveMind/HiveMind-core/pull/32) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
