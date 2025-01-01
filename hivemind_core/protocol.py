@@ -1,17 +1,16 @@
 import dataclasses
 import json
 import uuid
+import pybase64
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable
 
-import pgpy
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
-from poorman_handshake import HandShake, PasswordHandShake
 
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
@@ -24,6 +23,8 @@ from hivemind_bus_client.util import (
 )
 from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from poorman_handshake import HandShake, PasswordHandShake
+from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
 
 class ProtocolVersion(IntEnum):
@@ -671,12 +672,16 @@ class HiveMindListenerProtocol:
         pload = message.payload
         if isinstance(pload, dict) and "ciphertext" in pload:
             try:
-                message_from_blob = pgpy.PGPMessage.from_blob(pload["ciphertext"])
+                ciphertext = pybase64.b64decode(pload["ciphertext"])
+                signature = pybase64.b64decode(pload["signature"])
 
-                with open(self.identity.private_key, "r") as f:
-                    private_key = pgpy.PGPKey.from_blob(f.read())
+                # TODO - allow verifying, we need to store trusted pubkeys before this can be done
+                # pub = ""
+                # verified = verify_RSA(pub, ciphertext, signature)
 
-                decrypted: str = private_key.decrypt(message_from_blob)
+                private_key = load_RSA_key(self.identity.private_key)
+
+                decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
                 message._payload = HiveMessage.deserialize(decrypted)
             except:
                 if k:
