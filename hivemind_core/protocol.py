@@ -507,6 +507,9 @@ class HiveMindListenerProtocol:
         else:
             LOG.warning("client did not send a session after it's handshake")
 
+        msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
+        client.send(msg)  # client can recreate crypto_key on his side now
+
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
