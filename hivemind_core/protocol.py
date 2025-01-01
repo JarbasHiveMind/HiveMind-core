@@ -1,7 +1,7 @@
 import dataclasses
 import json
 import uuid
-from binascii import unhexlify
+import pybase64
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable
@@ -672,8 +672,8 @@ class HiveMindListenerProtocol:
         pload = message.payload
         if isinstance(pload, dict) and "ciphertext" in pload:
             try:
-                ciphertext = unhexlify(pload["ciphertext"])
-                signature = unhexlify(pload["signature"])
+                ciphertext = pybase64.b64decode(pload["ciphertext"])
+                signature = pybase64.b64decode(pload["signature"])
 
                 # TODO - allow verifying, we need to store trusted pubkeys before this can be done
                 # pub = ""
