@@ -5,13 +5,12 @@ from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable
 
-import pgpy
+import pybase64
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
-from poorman_handshake import HandShake, PasswordHandShake
 
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
@@ -24,6 +23,8 @@ from hivemind_bus_client.util import (
 )
 from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from poorman_handshake import HandShake, PasswordHandShake
+from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
 
 class ProtocolVersion(IntEnum):
@@ -65,6 +66,8 @@ class HiveMindClientConnection:
     pswd_handshake: Optional[PasswordHandShake] = None
 
     crypto_key: Optional[str] = None
+    pub_key: Optional[str] = None  # TODO add field to database
+
     msg_blacklist: List[str] = field(
         default_factory=list
     )  # list of ovos message_type to never be sent to this client
@@ -361,6 +364,8 @@ class HiveMindListenerProtocol:
 
         if message.msg_type == HiveMessageType.HANDSHAKE:
             self.handle_handshake_message(message, client)
+        elif message.msg_type == HiveMessageType.HELLO:
+            self.handle_hello_message(message, client)
 
         # mycroft Message handlers
         elif message.msg_type == HiveMessageType.BUS:
@@ -431,14 +436,9 @@ class HiveMindListenerProtocol:
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
         LOG.debug("handshake received, generating session key")
-        payload = message.payload
-        if "session" in payload:
-            client.sess = Session.deserialize(payload["session"])
-        if "site_id" in payload:
-            client.sess.site_id = client.site_id = payload["site_id"]
-        if "pubkey" in payload and client.handshake is not None:
-            pub = payload.pop("pubkey")
-            payload["envelope"] = client.handshake.generate_handshake(pub)
+        if "pubkey" in message.payload and client.handshake is not None:
+            pub = message.payload.pop("pubkey")
+            envelope_out = client.handshake.generate_handshake(pub)
             client.crypto_key = client.handshake.secret  # start using new key
 
             # client side
@@ -449,16 +449,16 @@ class HiveMindListenerProtocol:
             # else:  # implicitly trust server
             #   self.handshake.receive_handshake(payload["envelope"], pub)
             # self.crypto_key = self.handshake.secret
-        elif client.pswd_handshake is not None and "envelope" in payload:
+        elif client.pswd_handshake is not None and "envelope" in message.payload:
             # while the access key is transmitted, the password never is
-            envelope = payload["envelope"]
+            envelope = message.payload["envelope"]
             # TODO - seems tornado never emits these, they never arrive in client
             #  closing the listener shows futures were never awaited
             #  until this is debugged force to False
             # client.binarize = payload.get("binarize", False)
             client.binarize = False
 
-            payload["envelope"] = client.pswd_handshake.generate_handshake()
+            envelope_out = client.pswd_handshake.generate_handshake()
 
             client.pswd_handshake.receive_handshake(envelope)
             # if not client.pswd_handshake.receive_and_verify(envelope):
@@ -481,15 +481,28 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
+        msg = HiveMessage(HiveMessageType.HANDSHAKE, {"envelope": envelope_out})
+        client.send(msg)  # client can recreate crypto_key on his side now
+
+    def handle_hello_message(self, message: HiveMessage, client: HiveMindClientConnection):
+        LOG.debug("client Hello received, syncing personal session data")
+        payload = message.payload
+        if "session" in payload:
+            client.sess = Session.deserialize(payload["session"])
+        if "site_id" in payload:
+            client.sess.site_id = client.site_id = payload["site_id"]
+        if "pubkey" in payload:
+            client.pub_key = payload["pubkey"]
+            LOG.debug(f"client sent public key")
+        else:
+            LOG.warning(f"client did NOT send public key")
+
         LOG.debug(f"client site_id: {client.sess.site_id}")
         if client.sess.session_id != "default":
             LOG.debug(f"client session_id: {client.sess.session_id}")
             self.clients[client.peer] = client
         else:
-            LOG.warning("client did not send a session in it's handshake")
-
-        msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
-        client.send(msg)  # client can recreate crypto_key on his side now
+            LOG.warning("client did not send a session after it's handshake")
 
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -671,12 +684,16 @@ class HiveMindListenerProtocol:
         pload = message.payload
         if isinstance(pload, dict) and "ciphertext" in pload:
             try:
-                message_from_blob = pgpy.PGPMessage.from_blob(pload["ciphertext"])
+                ciphertext = pybase64.b64decode(pload["ciphertext"])
+                signature = pybase64.b64decode(pload["signature"])
 
-                with open(self.identity.private_key, "r") as f:
-                    private_key = pgpy.PGPKey.from_blob(f.read())
+                # TODO - allow verifying, we need to store trusted pubkeys before this can be done
+                # pub = ""
+                # verified = verify_RSA(pub, ciphertext, signature)
 
-                decrypted: str = private_key.decrypt(message_from_blob)
+                private_key = load_RSA_key(self.identity.private_key)
+
+                decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
                 message._payload = HiveMessage.deserialize(decrypted)
             except:
                 if k:

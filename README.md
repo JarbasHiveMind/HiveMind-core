@@ -36,25 +36,14 @@ our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/)
 HiveMind is designed to be modular, allowing you to customize its behavior through plugins managed by the **HiveMind
 Plugin Manager**.
 
-- **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins**.
-- **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins**.
-- **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins**.
-- **Database**: 🗃️ how client credentials are stored is implemented via **database plugins**
+- **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins** (e.g., Websockets, HTTP).
+- **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins** (e.g., OVOS, Persona).
+- **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins** (e.g., process incoming audio).
+- **Database**: 🗃️ how client credentials are stored is implemented via **database plugins** (e.g., JSON, SQLite, Redis).
 
 ---
 
-## 📖 Anatomy of a HiveMind Server
-
-In addition to implementing the [hivemind protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/), a HiveMind server uses configurable plugins for other key components:
-
-1. **Database**: Stores client credentials and settings (e.g., JSON, SQLite, Redis).
-2. **Network Protocol**: Determines how devices connect to the server (e.g., Websockets, HTTP).
-3. **Agent Protocol**: Defines how the server processes and responds to messages (e.g., OVOS, Persona).
-4. **Binary Protocol**: Specifies what to do you the received binary data (e.g., process incoming audio).
-
-Each component can be extended or replaced using plugins, providing unparalleled flexibility for your specific use case.
-
-### Protocol Configuration
+## 📖 Protocol Configuration
 
 HiveMind Core now supports a configuration file, making it easier for users to define server settings and reduce the need for complex command-line arguments. 
 
@@ -88,7 +77,7 @@ The default configuration
     "module": "hivemind-json-db-plugin",
     "hivemind-json-db-plugin": {
       "name": "clients",
-      "folder": "hivemind-core"
+      "subfolder": "hivemind-core"
     }
   }
 }
@@ -134,32 +123,6 @@ Start the HiveMind Core server to accept connections:
 ```bash
 $ hivemind-core listen
 ```
-
----
-
-## 🧩 Plugins Overview
-
-| **Category**         | **Plugin**                                                                                   | **Description**                                                                                                                                                                                          |
-|----------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Network Protocol** | [hivemind-websocket-protocol](https://github.com/JarbasHiveMind/hivemind-websocket-protocol) | Provides WebSocket-based communication for Hivemind, enabling real-time data exchange.                                                                                                                   |
-| **Binary Protocol**  | [hivemind-listener](https://github.com/JarbasHiveMind/hivemind-listener)                     | Listens for incoming audio and processes it using the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), enabling seamless interaction between Hivemind and audio input systems. |
-| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, facilitated by [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client), enabling seamless communication with OVOS systems.                                       |
-|                      | [Persona](https://github.com/JarbasHiveMind/hivemind-persona)                                | LLM (Large Language Model) integration powered by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona), works with all OpenAI server compatible projects.                                         |
-| **Database**         | [hivemind-sqlite-database](https://github.com/JarbasHiveMind/hivemind-sqlite-database)       | SQLite-based database solution for managing local data within Hivemind applications.                                                                                                                     |
-|                      | [hivemind-redis-database](https://github.com/JarbasHiveMind/hivemind-redis-database)         | Redis integration for scalable, in-memory database solutions with fast data access.                                                                                                                      |
-|                      | [hivemind-json-database](https://github.com/TigreGotico/json_database/pull/7)                | A JSON-based database plugin provided by [json-database](https://github.com/TigreGotico/json_database), offering lightweight storage and retrieval using JSON format.                                    |
-
-## 💬 Clients Overview
-
-| **Category**   | **Client**                                                                      | **Description**                                                                                              |
-|----------------|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
-| **Satellites** | [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)             | Standalone OVOS *local* audio stack for Hivemind.                                                            |
-|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite, STT/TTS processed *server* side, **requires** `hivemind-listener`.              |
-|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on device, audio streamed and fully processed *server* side, **requires** `hivemind-listener`. |
-|                | [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat)                      | *Client-side* browser Hivemind connection for web-based communication.                                       |
-| **Bridges**    | [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)   | Bridge for talking to Hivemind via Mattermost                                                                |
-|                | [Matrix Bridge](https://github.com/JarbasHiveMind/HiveMind-matrix-bridge)       | Bridge for talking to Hivemind via Matrix                                                                    |
-|                | [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge) | Bridge for talking to Hivemind via DeltaChat                                                                 |
 
 ---
 
@@ -351,6 +314,34 @@ $ hivemind-core listen
 
 </details>
 
+
+---
+
+## 🧩 Plugins Overview
+
+| **Category**         | **Plugin**                                                                                   | **Description**                                                                                                                                                                                          |
+|----------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Network Protocol** | [hivemind-websocket-protocol](https://github.com/JarbasHiveMind/hivemind-websocket-protocol) | Provides WebSocket-based communication for Hivemind, enabling real-time data exchange.                                                                                                                   |
+| **Binary Protocol**  | [hivemind-listener](https://github.com/JarbasHiveMind/hivemind-listener)                     | Listens for incoming audio and processes it using the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), enabling seamless interaction between Hivemind and audio input systems. |
+| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, facilitated by [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client), enabling seamless communication with OVOS systems.                                       |
+|                      | [Persona](https://github.com/JarbasHiveMind/hivemind-persona)                                | LLM (Large Language Model) integration powered by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona), works with all OpenAI server compatible projects.                                         |
+| **Database**         | [hivemind-sqlite-database](https://github.com/JarbasHiveMind/hivemind-sqlite-database)       | SQLite-based database solution for managing local data within Hivemind applications.                                                                                                                     |
+|                      | [hivemind-redis-database](https://github.com/JarbasHiveMind/hivemind-redis-database)         | Redis integration for scalable, in-memory database solutions with fast data access.                                                                                                                      |
+|                      | [hivemind-json-database](https://github.com/TigreGotico/json_database/pull/7)                | A JSON-based database plugin provided by [json-database](https://github.com/TigreGotico/json_database), offering lightweight storage and retrieval using JSON format.                                    |
+
+---
+
+## 💬 Clients Overview
+
+| **Category**   | **Client**                                                                      | **Description**                                                                                              |
+|----------------|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| **Satellites** | [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)             | Standalone OVOS *local* audio stack for Hivemind.                                                            |
+|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite, STT/TTS processed *server* side, **requires** `hivemind-listener`.              |
+|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on device, audio streamed and fully processed *server* side, **requires** `hivemind-listener`. |
+|                | [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat)                      | *Client-side* browser Hivemind connection for web-based communication.                                       |
+| **Bridges**    | [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)   | Bridge for talking to Hivemind via Mattermost                                                                |
+|                | [Matrix Bridge](https://github.com/JarbasHiveMind/HiveMind-matrix-bridge)       | Bridge for talking to Hivemind via Matrix                                                                    |
+|                | [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge) | Bridge for talking to Hivemind via DeltaChat                                                                 |
 
 ---
 
