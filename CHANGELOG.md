@@ -1,29 +1,12 @@
 # Changelog
 
-## [3.0.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.2a1) (2025-01-02)
+## [3.0.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.3a1) (2025-01-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.1a1...3.0.2a1)
-
-**Closed issues:**
-
-- security: session leaked in handshake [\#35](https://github.com/JarbasHiveMind/HiveMind-core/issues/35)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.2...3.0.3a1)
 
 **Merged pull requests:**
 
-- fix: dont leak session data / implement client HELLO [\#36](https://github.com/JarbasHiveMind/HiveMind-core/pull/36) ([JarbasAl](https://github.com/JarbasAl))
-
-## [3.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.1a1) (2025-01-01)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.0...3.0.1a1)
-
-**Implemented enhancements:**
-
-- feat: hivemind-plugin-manager [\#23](https://github.com/JarbasHiveMind/HiveMind-core/issues/23)
-- security: encrypted databases [\#14](https://github.com/JarbasHiveMind/HiveMind-core/issues/14)
-
-**Merged pull requests:**
-
-- fix: INTERCOM messages RSA [\#32](https://github.com/JarbasHiveMind/HiveMind-core/pull/32) ([JarbasAl](https://github.com/JarbasAl))
+- fix:requirements.txt [\#38](https://github.com/JarbasHiveMind/HiveMind-core/pull/38) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
