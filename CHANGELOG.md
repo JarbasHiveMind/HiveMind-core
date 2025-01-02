@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.0.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.2a1) (2025-01-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.1a1...3.0.2a1)
+
+**Closed issues:**
+
+- security: session leaked in handshake [\#35](https://github.com/JarbasHiveMind/HiveMind-core/issues/35)
+
+**Merged pull requests:**
+
+- fix: dont leak session data / implement client HELLO [\#36](https://github.com/JarbasHiveMind/HiveMind-core/pull/36) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [3.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.1a1) (2025-01-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.0...3.0.1a1)
