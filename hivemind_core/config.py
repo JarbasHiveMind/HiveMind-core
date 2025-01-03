@@ -5,6 +5,9 @@ from ovos_utils.xdg_utils import xdg_config_home, xdg_data_home
 
 
 _DEFAULT = {
+    # enable the hivemind binarization protocol
+    "binarize": False,  # default False because of a bug in old hivemind-bus-client versions
+
     # sort encodings by order of preference
     "allowed_encodings": ["JSON-Z85B", "JSON-B64", "JSON-HEX"],
     "allowed_ciphers": ["CHACHA20-POLY1305", 'AES-GCM'],
