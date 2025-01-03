@@ -3,7 +3,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Union, List, Optional, Callable
+from typing import Union, List, Optional, Callable, Literal
 
 import pybase64
 from ovos_bus_client import MessageBusClient
@@ -11,16 +11,14 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
-
+from hivemind_core.config import get_server_config
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
 from hivemind_bus_client.serialization import decode_bitstring, get_bitstring
-from hivemind_bus_client.util import (
-    decrypt_bin,
-    encrypt_bin,
-    decrypt_from_json,
-    encrypt_as_json,
-)
+from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers,
+                                            decrypt_from_json, encrypt_as_json,
+                                            decrypt_bin, encrypt_bin,
+                                            _norm_encoding, _norm_cipher)
 from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
@@ -88,6 +86,9 @@ class HiveMindClientConnection:
 
     hm_protocol: Optional['HiveMindListenerProtocol'] = None
 
+    cipher: Literal[SupportedCiphers] = SupportedCiphers.AES_GCM
+    encoding: Literal[SupportedEncodings] = SupportedEncodings.JSON_HEX
+
     def __post_init__(self):
         self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
 
@@ -125,15 +126,16 @@ class HiveMindClientConnection:
                                         payload=message.payload,
                                         hivemeta=message.metadata,
                                         binary_type=message.bin_type).bytes
-                LOG.debug(f"unencrypted binary payload: {len(payload)}")
-                payload = encrypt_bin(self.crypto_key, payload)
+                LOG.debug(f"unencrypted binary payload size: {len(payload)} bytes")
+                payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload: {len(message.payload.serialize())}")
+                LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
                 payload = encrypt_as_json(
-                    self.crypto_key, message.serialize()  # json string
+                    key=self.crypto_key, plaintext=message.serialize(),
+                    cipher=self.cipher, encoding=self.encoding
                 )  # json string
-            LOG.debug(f"encrypted payload: {len(payload)}")
+            LOG.debug(f"encrypted payload size: {len(payload)} bytes")
         else:
             payload = message.serialize()
             LOG.debug(f"sent unencrypted!")
@@ -144,10 +146,12 @@ class HiveMindClientConnection:
         if self.crypto_key:
             # handle binary encryption
             if isinstance(payload, bytes):
-                payload = decrypt_bin(self.crypto_key, payload)
+                payload = decrypt_bin(key=self.crypto_key, ciphertext=payload,
+                                      cipher=self.cipher)
             # handle json encryption
             elif "ciphertext" in payload:
-                payload = decrypt_from_json(self.crypto_key, payload)
+                payload = decrypt_from_json(key=self.crypto_key, ciphertext_json=payload,
+                                            encoding=self.encoding, cipher=self.cipher)
             else:
                 LOG.warning("Message was unencrypted")
                 # TODO - some error if crypto is required
@@ -167,7 +171,9 @@ class HiveMindClientConnection:
             return False
 
         # TODO check intent / skill that will trigger
-        # we want for example to be able to block shutdown/reboot intents to random chat users
+        # for OVOS agent this is passed in Session and ignored during match
+        # adding it here allows blocking the utterance completely instead
+        # or adding a callback for specific agents to decide how to handle
         return True
 
 
@@ -255,6 +261,10 @@ class HiveMindListenerProtocol:
 
         needs_handshake = not client.crypto_key and self.handshake_enabled
 
+        cfg = get_server_config()
+        allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
+        allowed_encodings = cfg.get("allowed_encodings") or list(SupportedEncodings)
+
         # request client to start handshake (by sending client pubkey)
         payload = {
             "handshake": needs_handshake,  # tell the client it must do a handshake or connection will be dropped
@@ -266,6 +276,8 @@ class HiveMindListenerProtocol:
             "password": client.pswd_handshake
                         is not None,  # is password available (V1 proto, replaces pre-shared key)
             "crypto_required": self.require_crypto,  # do we allow unencrypted payloads
+            "encodings": allowed_encodings,
+            "ciphers": allowed_ciphers
         }
         msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
         LOG.debug(f"starting {client.peer} HANDSHAKE: {payload}")
@@ -450,8 +462,32 @@ class HiveMindListenerProtocol:
             #   self.handshake.receive_handshake(payload["envelope"], pub)
             # self.crypto_key = self.handshake.secret
         elif client.pswd_handshake is not None and "envelope" in message.payload:
+            # sorted by preference from client
+            encodings = message.payload.get("encodings") or [SupportedEncodings.JSON_HEX]
+            encodings = [_norm_encoding(e) for e in encodings]
+            ciphers = message.payload.get("ciphers") or [SupportedCiphers.AES_GCM]
+            ciphers = [_norm_cipher(c) for c in ciphers]
+
+            # allowed ciphers/encodings defined in config
+            cfg = get_server_config()
+            allowed_encodings = cfg.get("allowed_encodings") or list(SupportedEncodings)
+            allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
+
+            encodings = [e for e in encodings if e in allowed_encodings]
+            ciphers = [c for c in ciphers if c in allowed_ciphers]
+            if not ciphers or not encodings:
+                LOG.warning("Client tried to connect with invalid cipher/encoding")
+                # TODO - invalid handshake handler
+                client.disconnect()
+                return
+
+            # from the allowed options, select the one the client prefers
+            client.cipher = ciphers[0]
+            client.encoding = encodings[0]
+
             # while the access key is transmitted, the password never is
             envelope = message.payload["envelope"]
+
             # TODO - seems tornado never emits these, they never arrive in client
             #  closing the listener shows futures were never awaited
             #  until this is debugged force to False
@@ -481,7 +517,10 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
-        msg = HiveMessage(HiveMessageType.HANDSHAKE, {"envelope": envelope_out})
+        msg = HiveMessage(HiveMessageType.HANDSHAKE,
+                          {"envelope": envelope_out,
+                           "encoding": client.encoding,
+                           "cipher": client.cipher })
         client.send(msg)  # client can recreate crypto_key on his side now
 
     def handle_hello_message(self, message: HiveMessage, client: HiveMindClientConnection):
