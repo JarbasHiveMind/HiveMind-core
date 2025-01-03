@@ -5,6 +5,11 @@ from ovos_utils.xdg_utils import xdg_config_home, xdg_data_home
 
 
 _DEFAULT = {
+    # sort encodings by order of preference
+    "allowed_encodings": ["JSON-Z85B", "JSON-B64", "JSON-HEX"],
+    "allowed_ciphers": ["CHACHA20-POLY1305", 'AES-GCM'],
+
+    # configure various plugins
     "agent_protocol": {"module": "hivemind-ovos-agent-plugin",
                        "hivemind-ovos-agent-plugin": {
                            "host": "127.0.0.1",
@@ -33,4 +38,7 @@ def get_server_config() -> JsonStorageXDG:
     if not os.path.isfile(db.path):
         db.merge(_DEFAULT)
         db.store()
+    for k, v in _DEFAULT.items():
+        if k not in db:
+            db[k] = v
     return db

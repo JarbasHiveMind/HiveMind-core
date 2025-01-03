@@ -3,7 +3,7 @@ click_default_group
 rich
 pycryptodomex
 poorman-handshake>=1.0.1,<2.0.0
-hivemind_bus_client>=0.1.6,<1.0.0
+hivemind_bus_client>=0.2.0,<1.0.0
 ovos_utils>=0.0.33,<1.0.0
 pybase64
 hivemind-plugin-manager>=0.3.0,<1.0.0
