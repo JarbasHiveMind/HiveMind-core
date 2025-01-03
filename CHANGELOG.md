@@ -1,12 +1,12 @@
 # Changelog
 
-## [3.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0a1) (2025-01-03)
+## [3.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1a1) (2025-01-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.3...3.1.0a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.0...3.1.1a1)
 
 **Merged pull requests:**
 
-- feat:cipher negotiation [\#40](https://github.com/JarbasHiveMind/HiveMind-core/pull/40) ([JarbasAl](https://github.com/JarbasAl))
+- fix:binarization\_protocol [\#42](https://github.com/JarbasHiveMind/HiveMind-core/pull/42) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
