@@ -11,13 +11,14 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
-
+from hivemind_core.config import get_server_config
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
 from hivemind_bus_client.serialization import decode_bitstring, get_bitstring
 from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers,
                                             decrypt_from_json, encrypt_as_json,
-                                            decrypt_bin,  encrypt_bin)
+                                            decrypt_bin, encrypt_bin,
+                                            _norm_encoding, _norm_cipher)
 from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
@@ -260,6 +261,10 @@ class HiveMindListenerProtocol:
 
         needs_handshake = not client.crypto_key and self.handshake_enabled
 
+        cfg = get_server_config()
+        allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
+        allowed_encodings = cfg.get("allowed_encodings") or list(SupportedEncodings)
+
         # request client to start handshake (by sending client pubkey)
         payload = {
             "handshake": needs_handshake,  # tell the client it must do a handshake or connection will be dropped
@@ -271,8 +276,8 @@ class HiveMindListenerProtocol:
             "password": client.pswd_handshake
                         is not None,  # is password available (V1 proto, replaces pre-shared key)
             "crypto_required": self.require_crypto,  # do we allow unencrypted payloads
-            "encodings": [e for e in SupportedEncodings],
-            "ciphers": [c for c in SupportedCiphers]
+            "encodings": allowed_encodings,
+            "ciphers": allowed_ciphers
         }
         msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
         LOG.debug(f"starting {client.peer} HANDSHAKE: {payload}")
@@ -459,11 +464,14 @@ class HiveMindListenerProtocol:
         elif client.pswd_handshake is not None and "envelope" in message.payload:
             # sorted by preference from client
             encodings = message.payload.get("encodings") or [SupportedEncodings.JSON_HEX]
+            encodings = [_norm_encoding(e) for e in encodings]
             ciphers = message.payload.get("ciphers") or [SupportedCiphers.AES_GCM]
+            ciphers = [_norm_cipher(c) for c in ciphers]
 
-            # TODO - allow defining supported ciphers/encodings in config
-            allowed_encodings = encodings
-            allowed_ciphers = ciphers
+            # allowed ciphers/encodings defined in config
+            cfg = get_server_config()
+            allowed_encodings = cfg.get("allowed_encodings") or list(SupportedEncodings)
+            allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
 
             encodings = [e for e in encodings if e in allowed_encodings]
             ciphers = [c for c in ciphers if c in allowed_ciphers]
