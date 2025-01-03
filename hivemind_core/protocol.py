@@ -126,16 +126,16 @@ class HiveMindClientConnection:
                                         payload=message.payload,
                                         hivemeta=message.metadata,
                                         binary_type=message.bin_type).bytes
-                LOG.debug(f"unencrypted binary payload: {len(payload)}")
+                LOG.debug(f"unencrypted binary payload size: {len(payload)} bytes")
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload: {len(message.payload.serialize())}")
+                LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
                 payload = encrypt_as_json(
                     key=self.crypto_key, plaintext=message.serialize(),
                     cipher=self.cipher, encoding=self.encoding
                 )  # json string
-            LOG.debug(f"encrypted payload: {len(payload)}")
+            LOG.debug(f"encrypted payload size: {len(payload)} bytes")
         else:
             payload = message.serialize()
             LOG.debug(f"sent unencrypted!")
