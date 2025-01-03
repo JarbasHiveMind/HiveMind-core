@@ -270,7 +270,7 @@ class HiveMindListenerProtocol:
             "handshake": needs_handshake,  # tell the client it must do a handshake or connection will be dropped
             "min_protocol_version": min_version,
             "max_protocol_version": max_version,
-            "binarize": True,  # report we support the binarization scheme
+            "binarize": cfg.get("binarize", False),  # report we support the binarization scheme
             "preshared_key": client.crypto_key
                              is not None,  # do we have a pre-shared key (V0 proto)
             "password": client.pswd_handshake
@@ -414,7 +414,6 @@ class HiveMindListenerProtocol:
     ):
         assert message.msg_type == HiveMessageType.BINARY
         bin_data = message.payload
-        # TODO - split binary handlers protocol too
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
@@ -484,19 +483,12 @@ class HiveMindListenerProtocol:
             # from the allowed options, select the one the client prefers
             client.cipher = ciphers[0]
             client.encoding = encodings[0]
+            client.binarize = message.payload.get("binarize", False)
 
-            # while the access key is transmitted, the password never is
             envelope = message.payload["envelope"]
-
-            # TODO - seems tornado never emits these, they never arrive in client
-            #  closing the listener shows futures were never awaited
-            #  until this is debugged force to False
-            # client.binarize = payload.get("binarize", False)
-            client.binarize = False
-
             envelope_out = client.pswd_handshake.generate_handshake()
-
             client.pswd_handshake.receive_handshake(envelope)
+
             # if not client.pswd_handshake.receive_and_verify(envelope):
             #     # TODO - different handles for invalid access key / invalid password
             #     self.handle_invalid_key_connected(client)
