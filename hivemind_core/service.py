@@ -1,6 +1,7 @@
 import dataclasses
 from typing import Callable, Optional, Type
 
+from ovos_utils import create_daemon, wait_for_exit_signal
 from ovos_utils.log import LOG
 from ovos_utils.process_utils import ProcessStatus, StatusCallbackMap
 
@@ -15,12 +16,6 @@ def get_agent_protocol():
     config = get_server_config()["agent_protocol"]
     name = config["module"]
     return AgentProtocolFactory.get_class(name), config.get(name, {})
-
-
-def get_network_protocol():
-    config = get_server_config()["network_protocol"]
-    name = config["module"]
-    return NetworkProtocolFactory.get_class(name), config.get(name, {})
 
 
 def get_binary_protocol():
@@ -121,14 +116,26 @@ class HiveMindService:
                                        binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
 
-        # start network protocol that will deliver HiveMessages
-        network_class, net_config = get_network_protocol()
-        LOG.info(f"Network protocol: {network_class.__name__}")
+        # start network protocols that will carry HiveMessages
+        protos = []
+        for plug_name, plug_conf in get_server_config()["network_protocol"].items():
+            try:
+                network_class = NetworkProtocolFactory.get_class(plug_name)
+                LOG.info(f"Network protocol: {network_class.__name__}")
+                protos.append(network_class(hm_protocol=hm_protocol, config=plug_conf))
+            except:
+                LOG.exception(f"Failed to load plugin '{plug_name}'")
 
-        network_protocol = network_class(hm_protocol=hm_protocol, config=net_config)
+        if not protos:
+            LOG.error("No network protocols were loaded. Exiting service.")
+            self._status.set_stopping()
+            return
+
+        for network_protocol in protos:
+            create_daemon(network_protocol.run)
 
         self._status.set_ready()
 
-        network_protocol.run()  # blocking
+        wait_for_exit_signal()  # block until ctrl+c
 
         self._status.set_stopping()
