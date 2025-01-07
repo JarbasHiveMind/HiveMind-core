@@ -49,6 +49,17 @@ def hmcore_cmds():
     pass
 
 
+##############$
+# launch server
+@hmcore_cmds.command(help="start listening for HiveMind connections", name="listen")
+def listen():
+    service = HiveMindService()
+    service.run()
+
+
+################
+# Database management
+
 @hmcore_cmds.command(help="add credentials for a client", name="add-client")
 @click.option("--name", required=False, type=str)
 @click.option("--access-key", required=False, type=str)
@@ -156,11 +167,8 @@ def list_clients():
     console.print(table)
 
 
-@hmcore_cmds.command(help="start listening for HiveMind connections", name="listen")
-def listen():
-    service = HiveMindService()
-    service.run()
-
+########################
+# Message Permissions
 
 @hmcore_cmds.command(help="allow message types to be sent from a client", name="allow-msg")
 @click.argument("msg_type", required=True, type=str)
@@ -195,6 +203,73 @@ def blacklist_msg(msg_type, node_id):
                 print(f"Client '{client.name}' message already blacklisted: '{msg_type}'")
                 break
 
+
+@hmcore_cmds.command(help="allow 'ESCALATE' messages to be sent from a client", name="allow-escalate")
+@click.argument("node_id", required=False, type=int)
+def allow_escalate(node_id):
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id == int(node_id):
+                if client.can_escalate:
+                    print(f"Client {client.name} already allowed to send 'ESCALATE' messages")
+                    exit()
+                client.can_escalate = True
+                db.update_item(client)
+                print(f"Allowed 'ESCALATE' messages for {client.name}")
+                break
+
+
+@hmcore_cmds.command(help="blacklist 'ESCALATE' messages from being sent by a client", name="blacklist-escalate")
+@click.argument("node_id", required=False, type=int)
+def blacklist_escalate(node_id):
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id == int(node_id):
+                if client.can_escalate:
+                    client.can_escalate = False
+                    db.update_item(client)
+                    print(f"Blacklisted 'ESCALATE' messages for {client.name}")
+                    return
+                print(f"Client '{client.name}' 'ESCALATE' messages already blacklisted")
+                break
+
+
+@hmcore_cmds.command(help="allow 'PROPAGATE' messages to be sent from a client", name="allow-propagate")
+@click.argument("node_id", required=False, type=int)
+def allow_propagate(node_id):
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id == int(node_id):
+                if client.can_propagate:
+                    print(f"Client {client.name} already allowed to send 'PROPAGATE' messages")
+                    exit()
+                client.can_propagate = True
+                db.update_item(client)
+                print(f"Allowed 'PROPAGATE' messages for {client.name}")
+                break
+
+
+@hmcore_cmds.command(help="blacklist 'PROPAGATE' messages from being sent by a client", name="blacklist-propagate")
+@click.argument("node_id", required=False, type=int)
+def blacklist_propagate(node_id):
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id == int(node_id):
+                if client.can_propagate:
+                    client.can_propagate = False
+                    db.update_item(client)
+                    print(f"Blacklisted 'PROPAGATE' messages for {client.name}")
+                    return
+                print(f"Client '{client.name}' 'PROPAGATE' messages already blacklisted")
+                break
+
+
+##########################
+# skill/intent permissions
 
 @hmcore_cmds.command(help="blacklist skills from being triggered by a client", name="blacklist-skill")
 @click.argument("skill_id", required=True, type=str)

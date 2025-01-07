@@ -1,5 +1,6 @@
 import dataclasses
 import json
+import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
@@ -80,9 +81,10 @@ class HiveMindClientConnection:
     )  # list of ovos message_type to allow to be sent from this client
     binarize: bool = False
     site_id: str = "unknown"
-    can_broadcast: bool = True
     can_escalate: bool = True
     can_propagate: bool = True
+    is_admin: bool = False
+    last_seen: float = -1
 
     hm_protocol: Optional['HiveMindListenerProtocol'] = None
 
@@ -285,6 +287,14 @@ class HiveMindListenerProtocol:
         # if client is in protocol V1 -> self.handle_handshake_message
         # clients can rotate their pubkey or session_key by sending a new handshake
 
+    def update_last_seen(self, client: HiveMindClientConnection):
+        """track timestamps of last client interaction"""
+        with self.db:
+            user = self.db.get_client_by_api_key(client.key)
+            user.last_seen = time.time()
+            LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
+            self.db.update_item(user)
+
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_disconnect(client)
@@ -398,6 +408,8 @@ class HiveMindListenerProtocol:
             self.handle_binary_message(message, client)
         else:
             self.handle_unknown_message(message, client)
+
+        self.update_last_seen(client)
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(
@@ -568,7 +580,7 @@ class HiveMindListenerProtocol:
         """
         payload = self._unpack_message(message, client)
 
-        if not client.can_broadcast:
+        if not client.is_admin:
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
