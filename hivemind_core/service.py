@@ -126,6 +126,11 @@ class HiveMindService:
             except:
                 LOG.exception(f"Failed to load plugin '{plug_name}'")
 
+        if not protos:
+            LOG.error("No network protocols were loaded. Exiting service.")
+            self._status.set_stopping()
+            return
+
         for network_protocol in protos:
             create_daemon(network_protocol.run)
 
