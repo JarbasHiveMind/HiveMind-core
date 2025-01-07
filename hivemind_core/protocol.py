@@ -289,9 +289,11 @@ class HiveMindListenerProtocol:
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
-        user = self.db.get_client_by_api_key(client.key)
-        user.last_seen = time.time()
-        self.db.update_item(user)
+        with self.db:
+            user = self.db.get_client_by_api_key(client.key)
+            user.last_seen = time.time()
+            LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
+            self.db.update_item(user)
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
