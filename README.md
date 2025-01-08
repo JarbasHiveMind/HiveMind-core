@@ -64,13 +64,13 @@ The default configuration
     "module": null
   },
   "network_protocol": {
-    "module": "hivemind-websocket-plugin",
     "hivemind-websocket-plugin": {
       "host": "0.0.0.0",
-      "port": 5678,
-      "ssl": false,
-      "cert_dir": "/path/to/xdg/data/hivemind",
-      "cert_name": "hivemind"
+      "port": 5678
+    },
+    "hivemind-http-plugin": {
+      "host": "0.0.0.0",
+      "port": 5679
     }
   },
   "database": {
@@ -322,9 +322,10 @@ $ hivemind-core listen
 | **Category**         | **Plugin**                                                                                   | **Description**                                                                                                                                                                                          |
 |----------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Network Protocol** | [hivemind-websocket-protocol](https://github.com/JarbasHiveMind/hivemind-websocket-protocol) | Provides WebSocket-based communication for Hivemind, enabling real-time data exchange.                                                                                                                   |
-| **Binary Protocol**  | [hivemind-listener](https://github.com/JarbasHiveMind/hivemind-listener)                     | Listens for incoming audio and processes it using the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), enabling seamless interaction between Hivemind and audio input systems. |
-| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, facilitated by [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client), enabling seamless communication with OVOS systems.                                       |
-|                      | [Persona](https://github.com/JarbasHiveMind/hivemind-persona)                                | LLM (Large Language Model) integration powered by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona), works with all OpenAI server compatible projects.                                         |
+|   | [hivemind-http-protocol](https://github.com/JarbasHiveMind/hivemind-http-protocol) | Provides HTTP-based communication for Hivemind, ideal for when a persistent connected is undesirable/not-possible                                                                                                                   |
+| **Binary Protocol**  | [hivemind-audio-binary-protocol](https://github.com/JarbasHiveMind/hivemind-audio-binary-protocol)                     | Listens for incoming audio and processes it using the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), enabling seamless interaction between Hivemind and audio input systems. |
+| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, facilitated by [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client/blob/dev/ovos_bus_client/hpm.py), enabling seamless communication with OVOS systems.                                       |
+|                      | [Persona](https://github.com/OpenVoiceOS/ovos-persona)                                | LLM (Large Language Model) integration provided by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona/blob/dev/ovos_persona/hpm.py), works with all OpenAI server compatible projects.                                         |
 | **Database**         | [hivemind-sqlite-database](https://github.com/JarbasHiveMind/hivemind-sqlite-database)       | SQLite-based database solution for managing local data within Hivemind applications.                                                                                                                     |
 |                      | [hivemind-redis-database](https://github.com/JarbasHiveMind/hivemind-redis-database)         | Redis integration for scalable, in-memory database solutions with fast data access.                                                                                                                      |
 |                      | [hivemind-json-database](https://github.com/TigreGotico/json_database/pull/7)                | A JSON-based database plugin provided by [json-database](https://github.com/TigreGotico/json_database), offering lightweight storage and retrieval using JSON format.                                    |

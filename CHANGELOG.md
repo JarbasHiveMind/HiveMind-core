@@ -1,20 +1,12 @@
 # Changelog
 
-## [3.2.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.1a1) (2025-01-07)
+## [3.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.2a1) (2025-01-08)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.0a1...3.2.1a1)
-
-**Merged pull requests:**
-
-- fix: track last\_seen , add missing cli permission management scripts … [\#44](https://github.com/JarbasHiveMind/HiveMind-core/pull/44) ([JarbasAl](https://github.com/JarbasAl))
-
-## [3.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.0a1) (2025-01-07)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.1...3.2.0a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.1...3.2.2a1)
 
 **Merged pull requests:**
 
-- feat:multiple\_net\_protos [\#46](https://github.com/JarbasHiveMind/HiveMind-core/pull/46) ([JarbasAl](https://github.com/JarbasAl))
+- fix:automations [\#49](https://github.com/JarbasHiveMind/HiveMind-core/pull/49) ([JarbasAl](https://github.com/JarbasAl))
 
 
 
