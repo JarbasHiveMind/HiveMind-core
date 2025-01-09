@@ -1,12 +1,12 @@
 # Changelog
 
-## [3.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.2a1) (2025-01-08)
+## [3.2.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.3a1) (2025-01-09)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.1...3.2.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.2...3.2.3a1)
 
 **Merged pull requests:**
 
-- fix:automations [\#49](https://github.com/JarbasHiveMind/HiveMind-core/pull/49) ([JarbasAl](https://github.com/JarbasAl))
+- fix:delete\_client [\#51](https://github.com/JarbasHiveMind/HiveMind-core/pull/51) ([JarbasAl](https://github.com/JarbasAl))
 
 
 

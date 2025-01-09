@@ -337,8 +337,8 @@ $ hivemind-core listen
 | **Category**   | **Client**                                                                      | **Description**                                                                                              |
 |----------------|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
 | **Satellites** | [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)             | Standalone OVOS *local* audio stack for Hivemind.                                                            |
-|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite, STT/TTS processed *server* side, **requires** `hivemind-listener`.              |
-|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on device, audio streamed and fully processed *server* side, **requires** `hivemind-listener`. |
+|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite, STT/TTS processed *server* side, **requires** `hivemind-audio-binary-protocol`.              |
+|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on device, audio streamed and fully processed *server* side, **requires** `hivemind-audio-binary-protocol`. |
 |                | [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat)                      | *Client-side* browser Hivemind connection for web-based communication.                                       |
 | **Bridges**    | [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)   | Bridge for talking to Hivemind via Mattermost                                                                |
 |                | [Matrix Bridge](https://github.com/JarbasHiveMind/HiveMind-matrix-bridge)       | Bridge for talking to Hivemind via Matrix                                                                    |
