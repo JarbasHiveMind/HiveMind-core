@@ -128,16 +128,15 @@ def rename_client(node_id, name):
 def delete_client(node_id):
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
-        for x in db:
-            if x["client_id"] == int(node_id):
-                item_id = db.get_item_id(x)
-                db.update_item(item_id, dict(client_id=-1, api_key="revoked"))
+        for client in db:
+            if client.client_id == int(node_id):
+                db.delete_client(client.api_key)
                 print(f"Revoked credentials!\n")
-                print("Node ID:", x["client_id"])
-                print("Friendly Name:", x["name"])
-                print("Access Key:", x["api_key"])
-                print("Password:", x["password"])
-                print("Encryption Key:", x["crypto_key"])
+                print("Node ID:", client.client_id)
+                print("Friendly Name:", client.name)
+                print("Access Key:", client.api_key)
+                print("Password:", client.password)
+                print("Encryption Key:", client.crypto_key)
                 break
         else:
             print("Invalid Node ID!")
