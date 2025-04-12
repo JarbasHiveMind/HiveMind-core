@@ -1,13 +1,14 @@
 import os
 
 import click
+import json
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
 
 from hivemind_core.database import ClientDatabase
 from hivemind_core.service import HiveMindService
-
+from hivemind_core.config import get_server_config
 
 def prompt_node_id(db: ClientDatabase) -> int:
     # list clients and prompt for id using rich
@@ -44,14 +45,22 @@ def prompt_node_id(db: ClientDatabase) -> int:
     return node_id
 
 
-@click.group()
+@click.group(help="hivemind-core admin")
 def hmcore_cmds():
     pass
 
 
+@hmcore_cmds.command(help="print hivemind server config", name="print-config")
+def print_config():
+    cfg = get_server_config()
+    cfg = json.dumps(cfg, indent=2, ensure_ascii=False)
+    console = Console()
+    console.print(cfg)
+
+
 ##############$
 # launch server
-@hmcore_cmds.command(help="start listening for HiveMind connections", name="listen")
+@hmcore_cmds.command(help="start listening for HiveMind connections.", name="listen")
 def listen():
     service = HiveMindService()
     service.run()
