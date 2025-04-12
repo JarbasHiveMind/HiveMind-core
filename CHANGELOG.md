@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0a1) (2025-04-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.3.0a1...3.4.0a1)
+
+**Merged pull requests:**
+
+- feat: print-config cli util [\#58](https://github.com/JarbasHiveMind/HiveMind-core/pull/58) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [3.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.3.0a1) (2025-02-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.3...3.3.0a1)
