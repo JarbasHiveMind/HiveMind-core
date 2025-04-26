@@ -549,8 +549,12 @@ class HiveMindListenerProtocol:
     ):
         # track any Session updates from client side
         sess = Session.from_message(message.payload)
+        if sess.session_id == "default" and not client.is_admin:
+            LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
+            client.disconnect()
+            return
 
-        if client.sess.session_id == sess.session_id:
+        if sess.session_id != "default" and client.sess.session_id == sess.session_id:
             client.sess = sess
             LOG.debug(f"Client session updated from payload: {sess.serialize()}")
 
