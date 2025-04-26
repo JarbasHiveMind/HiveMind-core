@@ -547,7 +547,11 @@ class HiveMindListenerProtocol:
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
         LOG.debug(f"client session_id: {client.sess.session_id}")
-        self.clients[client.peer] = client
+        if client.sess.session_id == "default" and not client.is_admin:
+            LOG.warning("Client requested 'default' session, but is not an administrator")
+            client.disconnect()
+        else:
+            self.clients[client.peer] = client
 
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
