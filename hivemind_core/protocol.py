@@ -528,6 +528,11 @@ class HiveMindListenerProtocol:
         client.send(msg)  # client can recreate crypto_key on his side now
 
     def handle_hello_message(self, message: HiveMessage, client: HiveMindClientConnection):
+        """
+        Processes a HELLO message from a client to synchronize session data and register the client.
+        
+        Updates the client's session, site ID, and public key based on the message payload, and adds the client to the active clients registry.
+        """
         LOG.debug("client Hello received, syncing personal session data")
         payload = message.payload
         if "session" in payload:
@@ -548,7 +553,12 @@ class HiveMindListenerProtocol:
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
         # track any Session updates from client side
-        sess = Session.from_message(message.payload)
+        """
+            Handles internal bus messages from a client, enforcing session restrictions and forwarding to the agent bus.
+            
+            If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
+            """
+            sess = Session.from_message(message.payload)
         if sess.session_id == "default" and not client.is_admin:
             LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
             client.disconnect()
