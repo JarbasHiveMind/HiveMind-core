@@ -554,11 +554,11 @@ class HiveMindListenerProtocol:
     ):
         # track any Session updates from client side
         """
-            Handles internal bus messages from a client, enforcing session restrictions and forwarding to the agent bus.
-            
-            If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
-            """
-            sess = Session.from_message(message.payload)
+        Handles internal bus messages from a client, enforcing session restrictions and forwarding to the agent bus.
+
+        If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
+        """
+        sess = Session.from_message(message.payload)
         if sess.session_id == "default" and not client.is_admin:
             LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
             client.disconnect()
