@@ -145,6 +145,8 @@ def rename_client(node_id, name):
                 db.update_item(client)
                 print(f"Renamed '{old_name}' to {name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="Give administrator powers to a client in the database.", name="make-admin")
@@ -186,6 +188,8 @@ def revoke_admin(node_id):
                 db.update_item(client)
                 print(f"Revoked administrator powers for {client.name}")
                 break
+        else:
+           print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="Remove credentials for a client.", name="delete-client")
@@ -281,6 +285,8 @@ def allow_msg(msg_type, node_id):
                 db.update_item(client)
                 print(f"Allowed '{msg_type}' for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="Blacklist a message type from a client.", name="blacklist-msg")
@@ -304,6 +310,8 @@ def blacklist_msg(msg_type, node_id):
                     return
                 print(f"Client '{client.name}' message already blacklisted: '{msg_type}'")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="Allow 'ESCALATE' messages to be sent from a client.", name="allow-escalate")
@@ -321,6 +329,8 @@ def allow_escalate(node_id):
                 db.update_item(client)
                 print(f"Allowed 'ESCALATE' messages for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="blacklist 'ESCALATE' messages from being sent by a client", name="blacklist-escalate")
@@ -337,6 +347,8 @@ def blacklist_escalate(node_id):
                     return
                 print(f"Client '{client.name}' 'ESCALATE' messages already blacklisted")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="allow 'PROPAGATE' messages to be sent from a client", name="allow-propagate")
@@ -353,6 +365,8 @@ def allow_propagate(node_id):
                 db.update_item(client)
                 print(f"Allowed 'PROPAGATE' messages for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="blacklist 'PROPAGATE' messages from being sent by a client", name="blacklist-propagate")
@@ -369,6 +383,8 @@ def blacklist_propagate(node_id):
                     return
                 print(f"Client '{client.name}' 'PROPAGATE' messages already blacklisted")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 ##########################
@@ -390,6 +406,8 @@ def blacklist_skill(skill_id, node_id):
                 db.update_item(client)
                 print(f"Blacklisted '{skill_id}' for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="remove skills from a client blacklist", name="allow-skill")
@@ -407,6 +425,8 @@ def unblacklist_skill(skill_id, node_id):
                 db.update_item(client)
                 print(f"Blacklisted '{skill_id}' for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="blacklist intents from being triggered by a client", name="blacklist-intent")
@@ -424,6 +444,8 @@ def blacklist_intent(intent_id, node_id):
                 db.update_item(client)
                 print(f"Blacklisted '{intent_id}' for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 @hmcore_cmds.command(help="remove intents from a client blacklist", name="allow-intent")
@@ -441,6 +463,8 @@ def unblacklist_intent(intent_id, node_id):
                 db.update_item(client)
                 print(f"Unblacklisted '{intent_id}' for {client.name}")
                 break
+        else:
+            print("Invalid Node ID!")
 
 
 if __name__ == "__main__":
