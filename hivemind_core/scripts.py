@@ -12,13 +12,16 @@ from hivemind_core.config import get_server_config
 
 
 def prompt_node_id(db: ClientDatabase) -> int:
-    """Prompt the user to select a client ID from the database.
-
+    """
+    Prompts the user to select a client ID from the database, displaying available clients in a table.
+    
+    If no clients are found, prints a message and exits. If multiple clients exist, presents a selection prompt; otherwise, selects the only available client.
+    
     Args:
-        db (ClientDatabase): The client database.
-
+        db: The client database to query.
+    
     Returns:
-        int: The selected client ID.
+        The selected client ID as an integer.
     """
     table = Table(title="HiveMind Clients")
     table.add_column("ID", justify="right", style="cyan", no_wrap=True)
@@ -55,13 +58,20 @@ def prompt_node_id(db: ClientDatabase) -> int:
 
 @click.group(help="HiveMind-core admin CLI.")
 def hmcore_cmds():
-    """Main command group for HiveMind admin tasks."""
+    """
+    Main command group for HiveMind-core server administration.
+    
+    This group organizes CLI commands for managing clients, permissions, and server
+    configuration in the HiveMind-core environment.
+    """
     pass
 
 
 @hmcore_cmds.command(help="Print HiveMind server configuration.")
 def print_config():
-    """Print the server's current configuration as JSON."""
+    """
+    Prints the current HiveMind server configuration as formatted JSON to the console.
+    """
     cfg = get_server_config()
     cfg = json.dumps(cfg, indent=2, ensure_ascii=False)
     console = Console()
@@ -70,7 +80,9 @@ def print_config():
 
 @hmcore_cmds.command(help="Start listening for HiveMind connections.", name="listen")
 def listen():
-    """Start the HiveMind service and begin accepting connections."""
+    """
+    Starts the HiveMind service and begins accepting client connections.
+    """
     service = HiveMindService()
     service.run()
 
@@ -82,7 +94,23 @@ def listen():
 @click.option("--crypto-key", required=False, type=str)
 @click.option("--admin", default=False, required=False, type=bool)
 def add_client(name, access_key, password, crypto_key, admin):
-    """Add a new client to the database, generating credentials if necessary."""
+    """
+    Adds a new client to the database, generating credentials if not provided.
+    
+    If a crypto key is supplied, validates its length and warns about deprecation.
+    Random credentials are generated for any missing values. Prints the new client's
+    credentials and admin status after successful addition.
+    
+    Args:
+        name: Optional friendly name for the client. If not provided, a default is generated.
+        access_key: Optional API access key. If not provided, a random key is generated.
+        password: Optional password. If not provided, a random password is generated.
+        crypto_key: Optional 16-character encryption key. If not provided, a random key is generated.
+        admin: Boolean indicating whether the client should have administrator privileges.
+    
+    Raises:
+        ValueError: If the crypto key is not exactly 16 characters, or if the client cannot be added.
+    """
     key = crypto_key
     if key:
         print(
@@ -130,11 +158,10 @@ def add_client(name, access_key, password, crypto_key, admin):
 @click.argument("node_id", required=False, type=int)
 @click.option("--name", required=False, type=str, help="The new friendly name for the client")
 def rename_client(node_id, name):
-    """Rename an existing client.
-
-    Args:
-        node_id (int): The ID of the client to rename.
-        name (str): The new name for the client.
+    """
+    Renames a client in the database to a new name.
+    
+    If node_id is not provided, prompts the user to select a client. Updates the client's name and prints a confirmation.
     """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
@@ -150,10 +177,10 @@ def rename_client(node_id, name):
 @hmcore_cmds.command(help="Give administrator powers to a client in the database.", name="make-admin")
 @click.argument("node_id", required=False, type=int)
 def make_admin(node_id):
-    """Give administrator powers to an existing client.
-
-    Args:
-        node_id (int): The ID of the client to rename.
+    """
+    Grants administrator privileges to a client.
+    
+    If the client is already an administrator, notifies the user; otherwise, updates the client's admin status.
     """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
@@ -170,10 +197,10 @@ def make_admin(node_id):
 @hmcore_cmds.command(help="Revoke administrator powers from a client in the database.", name="revoke-admin")
 @click.argument("node_id", required=False, type=int)
 def revoke_admin(node_id):
-    """Revoke administrator powers from an existing client.
-
-    Args:
-        node_id (int): The ID of the client to rename.
+    """
+    Revokes administrator privileges from a client.
+    
+    If the client is currently an administrator, their admin status is removed. If the client is not an administrator, a message is printed indicating no change.
     """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
@@ -191,10 +218,10 @@ def revoke_admin(node_id):
 @hmcore_cmds.command(help="Remove credentials for a client.", name="delete-client")
 @click.argument("node_id", required=False, type=int)
 def delete_client(node_id):
-    """Delete a client's credentials from the database.
-
-    Args:
-        node_id (int): The ID of the client to delete.
+    """
+    Deletes a client's credentials from the database by node ID.
+    
+    If no node ID is provided, prompts the user to select a client. Prints the revoked credentials upon successful deletion, or an error message if the node ID is invalid.
     """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
@@ -214,7 +241,11 @@ def delete_client(node_id):
 
 @hmcore_cmds.command(help="List all clients and their credentials.", name="list-clients")
 def list_clients():
-    """List all clients currently stored in the database."""
+    """
+    Displays a formatted table of all clients and their credentials stored in the database.
+    
+    Excludes clients with a client ID of -1 from the listing. The table includes each client's ID, name, access key, password, and crypto key.
+    """
     console = Console()
     table = Table(title="HiveMind Credentials:")
     table.add_column("ID", justify="center")
@@ -240,10 +271,13 @@ def list_clients():
 @hmcore_cmds.command(help="Export clients and credentials to a CSV file.", name="export-clients")
 @click.option("--path", required=False, type=str)
 def export_clients(path):
-    """Export client credentials to a CSV file.
-
+    """
+    Exports all client credentials to a CSV file or prints them to stdout.
+    
+    If a directory path is provided, the CSV will be saved as 'hivemind_clients.csv' in that directory. If a file path is provided, the CSV will be saved to that file. If no path is given, the CSV content is printed to stdout. Excludes clients with client_id == -1.
+    
     Args:
-        path (str): Optional path where the CSV will be saved. If not set will print to stdout
+        path: Optional file or directory path for the CSV output.
     """
     if path and os.path.isdir(path):
         path = os.path.join(path, "hivemind_clients.csv")
@@ -264,11 +298,14 @@ def export_clients(path):
 @click.argument("msg_type", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def allow_msg(msg_type, node_id):
-    """Allow a specific message type for a client.
-
+    """
+    Allows a specific message type for a client.
+    
+    If the client does not already have the message type in their allowed list, it is added and the change is saved. If the message type is already allowed, a notice is printed and the operation exits.
+    
     Args:
-        msg_type (str): The message type to allow.
-        node_id (int): The ID of the client.
+        msg_type: The message type to allow for the client.
+        node_id: The ID of the client to update. If not provided, prompts for selection.
     """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
@@ -287,11 +324,10 @@ def allow_msg(msg_type, node_id):
 @click.argument("msg_type", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_msg(msg_type, node_id):
-    """Blacklist a specific message type from a client.
-
-    Args:
-        msg_type (str): The message type to blacklist.
-        node_id (int): The ID of the client.
+    """
+    Removes a specific message type from a client's allowed list, effectively blacklisting it.
+    
+    If the client does not currently allow the specified message type, a notice is printed.
     """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
@@ -309,7 +345,11 @@ def blacklist_msg(msg_type, node_id):
 @hmcore_cmds.command(help="Allow 'ESCALATE' messages to be sent from a client.", name="allow-escalate")
 @click.argument("node_id", required=False, type=int)
 def allow_escalate(node_id):
-    """Allow a client to send 'ESCALATE' messages."""
+    """
+    Grants a client permission to send 'ESCALATE' messages.
+    
+    If the client is already allowed, notifies the user and exits. Otherwise, updates the client's permissions to allow 'ESCALATE' messages and confirms the change.
+    """
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
         for client in db:
