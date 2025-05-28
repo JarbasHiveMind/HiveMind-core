@@ -1,3 +1,5 @@
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/JarbasHiveMind/HiveMind-core)
+
 # HiveMind Core
 
 HiveMind is a flexible [protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/) that
