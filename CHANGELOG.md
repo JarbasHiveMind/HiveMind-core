@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.4.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a2) (2025-12-18)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a1...3.4.1a2)
+
+**Fixed bugs:**
+
+- When listener restart, satellite is not able to reconnect [\#6](https://github.com/JarbasHiveMind/HiveMind-core/issues/6)
+- ask\_yesno\(\) not handled [\#8](https://github.com/JarbasHiveMind/HiveMind-core/issues/8)
+
+**Merged pull requests:**
+
+- chore: Configure Renovate [\#64](https://github.com/JarbasHiveMind/HiveMind-core/pull/64) ([renovate[bot]](https://github.com/apps/renovate))
+
 ## [3.4.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a1) (2025-04-26)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.0...3.4.1a1)
