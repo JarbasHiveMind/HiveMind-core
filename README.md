@@ -19,7 +19,7 @@ HiveMind-core **v4.0+** is licensed under **AGPL-3.0**.
 
 Any commercial deployment, proprietary integration, or internal service that cannot comply with AGPL disclosure obligations **requires a commercial license**. 
 
-If you are upgrading from an older version continuing to use HiveMind-core in production may expose your organization to legal obligations under AGPL. 
+If you are upgrading from an older version, be aware that continuing to use HiveMind-core in production may expose your organization to legal obligations under AGPL.
 
 > 💡 The last **Apache-2.0** release was `hivemind-core` **3.4.0**
 
