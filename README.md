@@ -2,21 +2,24 @@
 
 # HiveMind Core
 
-HiveMind is a flexible [protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/) that
-facilitates communication and collaboration among devices and AI agents within a
-unified network. It enables lightweight devices, called **satellites**, to connect to a central hub, with customizable
-permissions and centralized control.
+HiveMind is a flexible [protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/) that facilitates communication and collaboration among devices and AI agents within a unified network. 
+It enables lightweight devices, called **satellites**, to connect to a central hub, with customizable permissions and centralized control.
 
-HiveMind also
-supports [hierarchical hub-to-hub connections](https://jarbashivemind.github.io/HiveMind-community-docs/15_nested/),
-creating powerful,
-scalable smart environments.
+HiveMind also supports [hierarchical hub-to-hub connections](https://jarbashivemind.github.io/HiveMind-community-docs/15_nested/), creating powerful, scalable smart environments.
 
-Initially developed as part of the [OpenVoiceOS (OVOS)](https://github.com/OpenVoiceOS/) ecosystem, HiveMind is
-adaptable to various AI backend systems.
+Initially developed as part of the [OpenVoiceOS (OVOS)](https://github.com/OpenVoiceOS/) ecosystem, HiveMind is adaptable to various AI backend systems.
 
-For more details and demonstrations, check
-our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/).
+For more details and demonstrations, check our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/).
+
+---
+
+## **⚠️ Commercial Notice**
+
+HiveMind-core v4.0 is licensed under **AGPL-3.0**. 
+
+Any commercial deployment, proprietary integration, or internal service that cannot comply with AGPL disclosure obligations **requires a commercial license**. Continuing to use HiveMind-core in production without a commercial license may expose your organization to legal obligations under AGPL. 
+
+Contact **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)** to secure a license.
 
 ---
 
@@ -35,8 +38,7 @@ our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/)
 
 ## 🔌 Modular Design with Plugins
 
-HiveMind is designed to be modular, allowing you to customize its behavior through plugins managed by the **HiveMind
-Plugin Manager**.
+HiveMind is designed to be modular, allowing you to customize its behavior through plugins managed by the **HiveMind Plugin Manager**.
 
 - **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins** (e.g., Websockets, HTTP).
 - **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins** (e.g., OVOS, Persona).
@@ -90,8 +92,7 @@ The default configuration
 
 ## 🛰️  Quick Start
 
-To get started, HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and
-connections.
+To get started, HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and connections.
 
 ### Installation
 
@@ -356,45 +357,62 @@ $ hivemind-core listen
 
 ---
 
-## 🤝 Contributing
+## ⚖️ License
 
-HiveMind Core is open source and welcomes contributions from the community. If you’d like to contribute, here’s how you
-can get started:
+HiveMind-core is released under a **dual-license model**:
 
-1. **Fork the Repository**:  
-   Fork the [HiveMind Core GitHub repository](https://github.com/JarbasHiveMind/HiveMind-core).
+### AGPL-3.0 (Open Source)
 
-2. **Open an Issue**:  
-   Report bugs or suggest features by [creating an issue](https://github.com/JarbasHiveMind/HiveMind-core/issues).
+Starting with **version 4.0**, HiveMind-core is licensed under the **GNU AGPL-3.0**. This license ensures:
 
-3. **Submit Pull Requests**:  
-   Develop your features or bug fixes in a feature branch and submit a pull request to the main repository.
+* Transparency for derivative works.
+* Disclosure obligations for any network-accessible use or modification.
+* Freedom for open-source projects to use, modify, and distribute HiveMind-core.
 
-4. **Join the Discussion**:  
-   Participate in the [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org) to share ideas and collaborate with
-   the community.
+All prior releases remain available under **Apache-2.0**. 
 
-As HiveMind continues to grow, there are several exciting projects on the horizon that could benefit from community
-involvement. 
+> ⚠️  The last **Apache-2.0** release was `hivemind-core` **3.4.1**
 
-🚧 Here are some beginner-friendly projects where you can contribute: 🚧
+### Commercial License
 
-- **Wyoming Binary Protocol** 🏡: Translate binary payloads to the Wyoming protocol, using Wyoming servers instead of
-  OVOS plugins.
-- **Assist Protocol Agent** 🏡: Develop an agent that communicates with Home Assistant, enabling seamless integration of
-  HiveMind satellites with Home Assistant.
-- **HTTP / MQTT Network Protocols** 🌐: Implement network protocols specifically designed for IoT devices, enhancing
-  connectivity and communication within smart environments.
-- **GGWave Network Protocol** 🎶: Create a solution for HiveMind communication via sound, allowing for networkless
-  systems to interact using audio signals.
+Commercial use of HiveMind-core—including proprietary integrations, internal services, or any deployment where AGPL disclosure obligations are impractical—requires a **commercial license**. 
+
+Required for:
+
+* Closed-source integrations.
+* Proprietary extensions.
+* Internal services that cannot comply with AGPL obligations.
+
+
+> 💡 **Non-profit and permissively licensed projects** (MIT, BSD, Apache-2.0, etc.) may request a **free commercial license.**
+
+Contact: **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)** for licensing.
+
 
 ---
 
-## ⚖️ License
+## 🤝 Contribution Policy
 
-HiveMind is open-source software, licensed under the [Apache 2.0 License](LICENSE).
+HiveMind-core is maintained under a **dual-license model** (AGPL/commercial). To preserve license flexibility and consistent ownership of the codebase, HiveMind-core **does not accept external code contributions**.
 
+1. **No Contributor License Agreement (CLA)**
 
+   * HiveMind-core does **not require or accept a CLA**.
+   * This avoids administrative overhead and prevents asymmetry between contributors and the project owner.
+   * It ensures the project can **enforce both AGPL and commercial licensing** without ambiguity.
 
+2. **Why external contributions are restricted**
 
+   * Maintaining ownership over the codebase allows the maintainer to:
 
+     * Offer a **commercial license** without conflicts.
+     * Control relicensing or dual-licensing strategy.
+     * Protect the integrity of HiveMind-core for commercial and open-source users alike.
+
+3. **Open community participation**
+
+   * While code contributions are not accepted, the community is encouraged to:
+
+     * **Report bugs** via GitHub issues.
+     * **Request features** or improvements.
+     * **Discuss ideas** in the [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org).
