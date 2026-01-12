@@ -15,9 +15,13 @@ For more details and demonstrations, check our [YouTube channel](https://www.you
 
 ## **⚠️ Commercial Notice**
 
-HiveMind-core v4.0 is licensed under **AGPL-3.0**. 
+HiveMind-core **v4.0+** is licensed under **AGPL-3.0**. 
 
-Any commercial deployment, proprietary integration, or internal service that cannot comply with AGPL disclosure obligations **requires a commercial license**. Continuing to use HiveMind-core in production without a commercial license may expose your organization to legal obligations under AGPL. 
+Any commercial deployment, proprietary integration, or internal service that cannot comply with AGPL disclosure obligations **requires a commercial license**. 
+
+If you are upgrading from an older version continuing to use HiveMind-core in production may expose your organization to legal obligations under AGPL. 
+
+> ⚠️  The last **Apache-2.0** release was `hivemind-core` **3.4.0**
 
 Contact **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)** to secure a license.
 
@@ -370,8 +374,6 @@ Starting with **version 4.0**, HiveMind-core is licensed under the **GNU AGPL-3.
 * Freedom for open-source projects to use, modify, and distribute HiveMind-core.
 
 All prior releases remain available under **Apache-2.0**. 
-
-> ⚠️  The last **Apache-2.0** release was `hivemind-core` **3.4.1**
 
 ### Commercial License
 
