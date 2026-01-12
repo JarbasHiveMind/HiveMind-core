@@ -21,7 +21,7 @@ Any commercial deployment, proprietary integration, or internal service that can
 
 If you are upgrading from an older version continuing to use HiveMind-core in production may expose your organization to legal obligations under AGPL. 
 
-> ⚠️  The last **Apache-2.0** release was `hivemind-core` **3.4.0**
+> 💡 The last **Apache-2.0** release was `hivemind-core` **3.4.0**
 
 Contact **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)** to secure a license.
 
@@ -377,7 +377,7 @@ All prior releases remain available under **Apache-2.0**.
 
 ### Commercial License
 
-Commercial use of HiveMind-core—including proprietary integrations, internal services, or any deployment where AGPL disclosure obligations are impractical—requires a **commercial license**. 
+Commercial use of HiveMind-core — including proprietary integrations, internal services, or any deployment where AGPL disclosure obligations are impractical — requires a **commercial license**. 
 
 Required for:
 
@@ -385,8 +385,7 @@ Required for:
 * Proprietary extensions.
 * Internal services that cannot comply with AGPL obligations.
 
-
-> 💡 **Non-profit and permissively licensed projects** (MIT, BSD, Apache-2.0, etc.) may request a **free commercial license.**
+> 💡 **Non-profits and permissively licensed projects** (MIT, BSD, Apache-2.0, etc.) may request a **free commercial license.**
 
 Contact: **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)** for licensing.
 
