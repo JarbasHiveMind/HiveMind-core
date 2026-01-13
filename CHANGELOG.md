@@ -1,20 +1,42 @@
 # Changelog
 
-## [3.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0a1) (2025-04-12)
+## [3.4.1a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a4) (2026-01-13)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.3.0a1...3.4.0a1)
-
-**Merged pull requests:**
-
-- feat: print-config cli util [\#58](https://github.com/JarbasHiveMind/HiveMind-core/pull/58) ([JarbasAl](https://github.com/JarbasAl))
-
-## [3.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.3.0a1) (2025-02-16)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.3...3.3.0a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a3...3.4.1a4)
 
 **Merged pull requests:**
 
-- log to file `~/.local/state/hivemind/core.log` [\#54](https://github.com/JarbasHiveMind/HiveMind-core/pull/54) ([JarbasAl](https://github.com/JarbasAl))
+- chore!: change license to AGPL [\#70](https://github.com/JarbasHiveMind/HiveMind-core/pull/70) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.4.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a3) (2026-01-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a2...3.4.1a3)
+
+**Merged pull requests:**
+
+- chore\(deps\): update actions/setup-python action to v6 [\#69](https://github.com/JarbasHiveMind/HiveMind-core/pull/69) ([renovate[bot]](https://github.com/apps/renovate))
+- chore\(deps\): update actions/checkout action to v6 [\#66](https://github.com/JarbasHiveMind/HiveMind-core/pull/66) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [3.4.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a2) (2025-12-18)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a1...3.4.1a2)
+
+**Fixed bugs:**
+
+- When listener restart, satellite is not able to reconnect [\#6](https://github.com/JarbasHiveMind/HiveMind-core/issues/6)
+- ask\_yesno\(\) not handled [\#8](https://github.com/JarbasHiveMind/HiveMind-core/issues/8)
+
+**Merged pull requests:**
+
+- chore: Configure Renovate [\#64](https://github.com/JarbasHiveMind/HiveMind-core/pull/64) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [3.4.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a1) (2025-04-26)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.0...3.4.1a1)
+
+**Merged pull requests:**
+
+- refactor: allow "default" session for clients [\#60](https://github.com/JarbasHiveMind/HiveMind-core/pull/60) ([JarbasAl](https://github.com/JarbasAl))
 
 
 

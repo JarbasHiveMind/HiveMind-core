@@ -1,3 +1,18 @@
+# hivemind-core
+# Copyright (C) 2026 Casimiro Ferreira
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import dataclasses
 import json
 import time
@@ -528,6 +543,11 @@ class HiveMindListenerProtocol:
         client.send(msg)  # client can recreate crypto_key on his side now
 
     def handle_hello_message(self, message: HiveMessage, client: HiveMindClientConnection):
+        """
+        Processes a HELLO message from a client to synchronize session data and register the client.
+        
+        Updates the client's session, site ID, and public key based on the message payload, and adds the client to the active clients registry.
+        """
         LOG.debug("client Hello received, syncing personal session data")
         payload = message.payload
         if "session" in payload:
@@ -541,30 +561,30 @@ class HiveMindListenerProtocol:
             LOG.warning(f"client did NOT send public key")
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
-        if client.sess.session_id != "default":
-            LOG.debug(f"client session_id: {client.sess.session_id}")
-            self.clients[client.peer] = client
+        LOG.debug(f"client session_id: {client.sess.session_id}")
+        LOG.debug(f"client is_admin: {client.is_admin}")
+        if client.sess.session_id == "default" and not client.is_admin:
+            LOG.warning("Client requested 'default' session, but is not an administrator")
+            client.disconnect()
         else:
-            LOG.warning("client did not send a session after it's handshake")
+            self.clients[client.peer] = client
 
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
         # track any Session updates from client side
-        sess = Session.from_message(message.payload)
-        if client.sess.session_id == "default":
-            LOG.warning(f"{client.peer} did not send a Session via handshake")
-            if sess.session_id == "default":
-                client.sess.session_id = str(uuid.uuid4())
-                LOG.debug(f"Client session_id randomly generated: {client.sess.session_id}")
-            else:
-                client.sess.session_id = sess.session_id
-                LOG.debug(f"Client session_id assigned via client first message: {client.sess.session_id}")
-            self.clients[client.peer] = client
+        """
+        Handles internal bus messages from a client, enforcing session restrictions and forwarding to the agent bus.
 
-        if sess.session_id == "default":
-            sess.session_id = client.sess.session_id
-        if client.sess.session_id == sess.session_id:
+        If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
+        """
+        sess = Session.from_message(message.payload)
+        if sess.session_id == "default" and not client.is_admin:
+            LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
+            client.disconnect()
+            return
+
+        if sess.session_id != "default" and client.sess.session_id == sess.session_id:
             client.sess = sess
             LOG.debug(f"Client session updated from payload: {sess.serialize()}")
 
