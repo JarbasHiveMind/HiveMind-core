@@ -27,7 +27,7 @@ As defined by the AGPL-3.0. For avoidance of doubt, any module, extension, or pl
 
 ## 2. Protocol Usage Terms
 
-The HiveMind Protocol is copyrighted material that is separate from the HiveMind-core implementation.
+**The HiveMind Protocol is copyrighted material that is separate from the HiveMind-core implementation.**
 
 Commercial Deployment of software or services that implement the HiveMind Protocol requires a **commercial protocol license**, except where such software qualifies for a no-cost license (see section 5).
 

@@ -13,6 +13,29 @@ For more details and demonstrations, check our [YouTube channel](https://www.you
 
 ---
 
+- [HiveMind Core](#hivemind-core)
+   * [Key Features](#-key-features)
+   * [Modular Design with Plugins](#-modular-design-with-plugins)
+   * [Protocol Configuration](#-protocol-configuration)
+   * [Quick Start](#-quick-start)
+      + [Installation](#installation)
+      + [Adding a Satellite](#adding-a-satellite)
+      + [Running the Server](#running-the-server)
+   * [Commands Overview](#-commands-overview)
+   * [Plugins Overview](#-plugins-overview)
+   * [Clients Overview](#-clients-overview)
+   * [Next Steps](#-next-steps)
+   * [License](#-license)
+      + [AGPL-3.0 (Open Source)](#agpl-30-open-source)
+      + [Commercial License](#commercial-license)
+         - [Protocol Usage](#protocol-usage)
+         - [Trademark and Branding Restrictions](#trademark-and-branding-restrictions)
+         - [Closed-Source or Commercial Use](#closed-source-or-commercial-use)
+         - [Commercial Licensing](#commercial-licensing)
+   * [Contribution Policy](#-contribution-policy)
+  
+---
+
 ## **⚠️ Commercial Notice**
 
 HiveMind-core **v4.0+** is licensed under **AGPL-3.0**. 
@@ -369,13 +392,14 @@ HiveMind-core is released under a **dual-license model**:
 
 Starting with **version 4.0**, HiveMind-core is licensed under the **GNU AGPL-3.0**.
 
+All prior releases remain available under **Apache-2.0**. 
+
 You may use, study, and modify HiveMind-core under the AGPL-3.0 license.  
 
-If you modify HiveMind-core or build derivative works (including modules executed inside its runtime), you must publish the complete corresponding source code of those modifications.
+If you modify HiveMind-core or build derivative works, you must publish the complete corresponding source code of those modifications.
 
 Redistributing HiveMind-core (including Docker images or docker-compose bundles) requires making its source code accessible to users.
 
-All prior releases remain available under **Apache-2.0**. 
 
 ---
 
