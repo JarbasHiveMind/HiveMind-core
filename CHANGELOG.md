@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.4.1a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a4) (2026-01-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a3...3.4.1a4)
+
+**Merged pull requests:**
+
+- chore!: change license to AGPL [\#70](https://github.com/JarbasHiveMind/HiveMind-core/pull/70) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [3.4.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a3) (2026-01-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a2...3.4.1a3)
