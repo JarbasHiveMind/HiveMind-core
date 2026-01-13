@@ -367,27 +367,60 @@ HiveMind-core is released under a **dual-license model**:
 
 ### AGPL-3.0 (Open Source)
 
-Starting with **version 4.0**, HiveMind-core is licensed under the **GNU AGPL-3.0**. This license ensures:
+Starting with **version 4.0**, HiveMind-core is licensed under the **GNU AGPL-3.0**.
 
-* Transparency for derivative works.
-* Disclosure obligations for any network-accessible use or modification.
-* Freedom for open-source projects to use, modify, and distribute HiveMind-core.
+You may use, study, and modify HiveMind-core under the AGPL-3.0 license.  
+
+If you modify HiveMind-core or build derivative works (including modules executed inside its runtime), you must publish the complete corresponding source code of those modifications.
+
+Redistributing HiveMind-core (including Docker images or docker-compose bundles) requires making its source code accessible to users.
 
 All prior releases remain available under **Apache-2.0**. 
+
+---
 
 ### Commercial License
 
 Commercial use of HiveMind-core — including proprietary integrations, internal services, or any deployment where AGPL disclosure obligations are impractical — requires a **commercial license**. 
 
-Required for:
-
-* Closed-source integrations.
-* Proprietary extensions.
-* Internal services that cannot comply with AGPL obligations.
-
-> 💡 **Non-profits and permissively licensed projects** (MIT, BSD, Apache-2.0, etc.) may request a **free commercial license.**
+> 💡 **Non-profits and permissively licensed projects** (MIT, BSD, Apache-2.0, etc.) are eligible for **no-cost commercial licenses**. If you fall into this category, your contributions to the ecosystem are considered sufficient, please get in touch.
 
 Contact: **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)** for licensing.
+
+#### Protocol Usage
+
+The HiveMind Protocol (message types, schemas, normative definitions) is copyrighted separately from the code.
+
+- **Commercial products or services implementing the HiveMind Protocol require a commercial protocol license.**
+- Non-commercial and open-source projects may implement the protocol freely but may not use HiveMind trademarks or compatibility labels without permission.
+
+#### Trademark and Branding Restrictions
+
+The name **HiveMind**, the HiveMind logos, and any “HiveMind Compatible / Powered by HiveMind” marks are protected trademarks.
+
+You may not use these trademarks in commercial products, marketing materials, documentation, or compatibility claims without a trademark license.
+
+Trademarks remain restricted regardless of AGPL compliance.
+
+#### Closed-Source or Commercial Use
+
+A **commercial license** is required if you:
+
+- operate HiveMind-core as part of a commercial product or service,
+- embed HiveMind-core in a proprietary system,
+- offer an assistant marketplace or platform built on HiveMind-core,
+- distribute appliances or industrial stacks that depend on HiveMind-core,
+- implement the HiveMind Protocol in commercial software,
+- or use HiveMind branding in any commercial context.
+
+#### Commercial Licensing
+
+Commercial licenses provide:
+
+- rights to use HiveMind-core in closed-source or commercial environments,
+- exemption from AGPL-3.0 obligations,
+- rights to commercial-use of the protocol and trademarks,
+- ongoing support and access to maintained releases.
 
 
 ---
