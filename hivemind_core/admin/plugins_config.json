@@ -87,7 +87,7 @@
     {
       "name": "Gemini Code (long lived)",
       "package": "ovos-gemini-plugin",
-      "entry_point": "ovos-chat-gemini-code-plugin",
+      "entry_point": "ovos-chat-gemini-code-session-plugin",
       "description": "Persistent background Google Gemini integration (needs gemini cli)"
     },
     {

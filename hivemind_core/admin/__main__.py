@@ -63,8 +63,16 @@ async def root() -> FileResponse:
 
     Returns:
         FileResponse: The index.html file from static directory.
+
+    Raises:
+        HTTPException: 404 if index.html is not present (e.g. package installed without static assets).
     """
-    return FileResponse(static_dir / "index.html")
+    from fastapi import HTTPException
+    index_path = static_dir / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Admin UI static assets not found. "
+                            "Reinstall with: pip install hivemind-core[admin]")
+    return FileResponse(index_path)
 
 
 @app.get("/index.html")
@@ -73,8 +81,16 @@ async def index() -> FileResponse:
 
     Returns:
         FileResponse: The index.html file from static directory.
+
+    Raises:
+        HTTPException: 404 if index.html is not present (e.g. package installed without static assets).
     """
-    return FileResponse(static_dir / "index.html")
+    from fastapi import HTTPException
+    index_path = static_dir / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Admin UI static assets not found. "
+                            "Reinstall with: pip install hivemind-core[admin]")
+    return FileResponse(index_path)
 
 
 def main() -> None:

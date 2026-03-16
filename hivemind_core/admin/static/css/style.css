@@ -682,14 +682,14 @@
             align-items: center;
             gap: 12px;
             min-width: 300px;
-            animation: slideIn 0.3s ease;
+            animation: slide-in 0.3s ease;
         }
 
         .toast.success { border-left: 4px solid var(--accent-success); }
         .toast.error { border-left: 4px solid var(--accent-danger); }
         .toast.warning { border-left: 4px solid var(--accent-warning); }
 
-        @keyframes slideIn {
+        @keyframes slide-in {
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
@@ -703,7 +703,7 @@
             border: 1px solid var(--border-color);
             border-radius: var(--radius-sm);
             color: var(--text-primary);
-            font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+            font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
             font-size: 13px;
             line-height: 1.6;
             resize: vertical;

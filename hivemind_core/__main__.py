@@ -50,7 +50,7 @@ def parse_args():
         '--admin-port',
         type=int,
         default=8100,
-        help="Admin UI port (default: 8000). Requires --with-admin."
+        help="Admin UI port (default: 8100). Requires --with-admin."
     )
     return parser.parse_args()
 
@@ -68,7 +68,7 @@ def start_admin_with_error(host, port, error):
         cfg = get_server_config()
         try:
             db = ClientDatabase()
-        except:
+        except Exception:
             # Fallback to JSON backend
             cfg['database'] = {
                 'module': 'hivemind-json-db-plugin',
@@ -78,10 +78,10 @@ def start_admin_with_error(host, port, error):
                 }
             }
             cfg.store()
-            LOG.warning(f"Switched to JSON database backend")
+            LOG.warning("Switched to JSON database backend")
             db = ClientDatabase()
     except Exception as db_err:
-        LOG.error(f"Could not create database: {db_err}")
+        LOG.error("Could not create database: %s", db_err)
     
     init_injected_objects(
         service=None,
@@ -135,15 +135,16 @@ def main():
 
         # Start admin UI for error diagnostics if requested
         if args.with_admin:
+            # Brief pause to allow log output to flush before admin server starts
             time.sleep(0.5)
             start_admin_with_error(
                 host=args.admin_host,
                 port=args.admin_port,
                 error=e
             )
-            LOG.warning(f"Admin UI started for error diagnostics")
-            LOG.warning(f"Access at http://{args.admin_host}:{args.admin_port}/")
-            LOG.warning(f"Error: {error_msg}")
+            LOG.warning("Admin UI started for error diagnostics")
+            LOG.warning("Access at http://%s:%s/", args.admin_host, args.admin_port)
+            LOG.warning("Error: %s", error_msg)
 
             # Keep main thread alive
             from ovos_utils import wait_for_exit_signal

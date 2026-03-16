@@ -933,59 +933,6 @@
         </div>
     </div>
 
-    <!-- Enable Binary Plugin Modal -->
-    <div id="enableBinaryPluginModal" class="modal-overlay" onclick="if(event.target===this)closeEnableBinaryPluginModal()">
-        <div class="modal" style="max-width: 600px;">
-            <div class="modal-header">
-                <h3>🔌 Configure & Enable Binary Protocol</h3>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="binaryPluginModule">
-                <p style="font-size: 14px; margin-bottom: 20px; color: var(--text-secondary);">
-                    Select the OVOS plugins to use with this binary transport. These must be already installed on the system.
-                </p>
-
-                <div class="form-group">
-                    <label>STT (Speech-to-Text) Plugin</label>
-                    <select id="binarySTTSelect">
-                        <option value="">Loading plugins...</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>TTS (Text-to-Speech) Plugin</label>
-                    <select id="binaryTTSSelect">
-                        <option value="">Loading plugins...</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Wake Word (e.g., "hey_mycroft")</label>
-                    <input type="text" id="binaryWWName" placeholder="hey_mycroft" value="hey_mycroft">
-                </div>
-
-                <div class="form-group">
-                    <label>Wake Word Engine</label>
-                    <select id="binaryWWSelect">
-                        <option value="">Loading plugins...</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>VAD (Voice Activity Detection)</label>
-                    <select id="binaryVADSelect">
-                        <option value="">Loading plugins...</option>
-                    </select>
-                </div>
-
-                <div id="binaryConfigValidation" class="validation-result error hidden" style="margin-top: 16px;"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeEnableBinaryPluginModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="submitEnableBinaryPlugin()">Enable & Configure</button>
-            </div>
-        </div>
-    </div>
 
     <!-- Plugin Installation Progress Modal -->
     <div id="installProgressModal" class="modal-overlay">
