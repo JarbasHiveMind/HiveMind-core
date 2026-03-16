@@ -1,0 +1,266 @@
+{
+  "_comment": "This file defines plugins available in HiveMind admin UI. Edit to add/remove plugins.",
+  "_docs": "See docs/plugins.md for documentation on plugin categories and usage.",
+  "_note": "entry_point is the Python module name used in config (may differ from package name)",
+  "agent_protocols": [
+    {
+      "name": "OpenVoiceOS",
+      "package": "ovos-bus-client",
+      "entry_point": "hivemind-ovos-agent-plugin",
+      "description": "connect to ovos-core (running in same device as hivemind-core)"
+    },
+    {
+      "name": "Persona",
+      "package": "ovos-persona",
+      "entry_point": "hivemind-persona-agent-plugin",
+      "description": "LLM Persona agent - AI chatbot with configurable personality and memory"
+    }
+  ],
+  "solver_plugins": [
+    {
+      "name": "OpenVoiceOS Messagebus",
+      "package": "ovos-bus-client",
+      "entry_point": "ovos-solver-bus-plugin",
+      "description": "OpenVoiceOS agent"
+    },
+
+    {
+      "name": "Wolfram Alpha",
+      "package": "ovos-wolfram-alpha-solver",
+      "entry_point": "ovos-solver-plugin-wolfram-alpha",
+      "description": "Computational knowledge queries"
+    },
+    {
+      "name": "RiveScript",
+      "package": "ovos-solver-plugin-rivescript",
+      "entry_point": "ovos-solver-plugin-rivescript",
+      "description": "Chatbot scripting engine"
+    },
+    {
+      "name": "AIML",
+      "package": "ovos-solver-plugin-aiml",
+      "entry_point": "ovos-solver-plugin-aiml",
+      "description": "AI Markup Language chatbot"
+    },
+    {
+      "name": "GGUF",
+      "package": "ovos-solver-gguf-plugin",
+      "entry_point": "ovos-chat-gguf-plugin",
+      "description": "Local LLM inference using GGUF models"
+    },
+    {
+      "name": "OpenAI",
+      "package": "ovos-openai-plugin",
+      "entry_point": "ovos-chat-openai-plugin",
+      "description": "OpenAI GPT integration for conversational AI"
+    },
+    {
+      "name": "Claude",
+      "package": "ovos-claude-plugin",
+      "entry_point": "ovos-chat-claude-plugin",
+      "description": "Anthropic Claude integration for conversational AI (needs api key)"
+    },
+    {
+      "name": "Claude Code",
+      "package": "ovos-claude-plugin",
+      "entry_point": "ovos-chat-claude-code-plugin",
+      "description": "Anthropic Claude Code integration (needs claude cli)"
+    },
+    {
+      "name": "Claude Code (long lived)",
+      "package": "ovos-claude-plugin",
+      "entry_point": "ovos-chat-claude-code-session-plugin",
+      "description": "Persistent background Claude Code integration (needs claude cli)"
+    },
+    {
+      "name": "Gemini",
+      "package": "ovos-gemini-plugin",
+      "entry_point": "ovos-chat-gemini-plugin",
+      "description": "Google Gemini integration for conversational AI (needs api key)"
+    },
+    {
+      "name": "Gemini Code",
+      "package": "ovos-gemini-plugin",
+      "entry_point": "ovos-chat-gemini-code-plugin",
+      "description": "Google Gemini integration (needs gemini cli)"
+    },
+    {
+      "name": "Gemini Code (long lived)",
+      "package": "ovos-gemini-plugin",
+      "entry_point": "ovos-chat-gemini-code-plugin",
+      "description": "Persistent background Google Gemini integration (needs gemini cli)"
+    },
+    {
+      "name": "KiloCode",
+      "package": "ovos-chat-kilo-plugin",
+      "entry_point": "ovos-chat-kilo-plugin",
+      "description": "KiloCode integration for coding assistance"
+    },
+    {
+      "name": "Failure",
+      "package": "ovos-solver-failure-plugin",
+      "entry_point": "ovos-solver-failure-plugin",
+      "description": "Handle unknown queries with default error message"
+    }
+  ],
+  "network_protocols": [
+    {
+      "name": "WebSocket Protocol",
+      "package": "hivemind-websocket-protocol",
+      "entry_point": "hivemind-websocket-plugin",
+      "description": "WebSocket transport - bidirectional real-time communication",
+      "default_port": 5678
+    },
+    {
+      "name": "HTTP Protocol",
+      "package": "hivemind-http-protocol",
+      "entry_point": "hivemind-http-plugin",
+      "description": "HTTP REST transport - stateless request/response communication",
+      "default_port": 5679
+    }
+  ],
+  "databases": [
+    {
+      "name": "JSON Database",
+      "package": "json_database",
+      "entry_point": "hivemind-json-db-plugin",
+      "description": "JSON file-based client database - simple, no dependencies",
+      "type": "file"
+    },
+    {
+      "name": "SQLite Database",
+      "package": "hivemind-sqlite-database",
+      "entry_point": "hivemind-sqlite-db-plugin",
+      "description": "SQLite client database - fast queries, single file",
+      "type": "file"
+    },
+    {
+      "name": "Redis Database",
+      "package": "hivemind-redis-database",
+      "entry_point": "hivemind-redis-db-plugin",
+      "description": "Redis client database - distributed, high-performance",
+      "type": "network"
+    }
+  ],
+  "binary_protocols": [
+    {
+      "name": "Audio Binary Protocol",
+      "package": "hivemind-audio-binary-protocol",
+      "entry_point": "hivemind-audio-binary-protocol-plugin",
+      "description": "Audio binary data handling - enables voice I/O on satellites"
+    }
+  ],
+  "ovos_plugins_stt": [
+    {
+      "name": "ONNX ASR STT",
+      "package": "ovos-stt-plugin-onnx-asr",
+      "description": "ONNX ASR - fast ONNX runtime speech recognition"
+    },
+    {
+      "name": "Sherpa-ONNX STT",
+      "package": "ovos-stt-plugin-sherpa-onnx",
+      "description": "Sherpa-ONNX - Next-gen Kaldi with ONNX"
+    },
+    {
+      "name": "FasterWhisper STT",
+      "package": "ovos-stt-plugin-fasterwhisper",
+      "description": "FasterWhisper - optimized Whisper with CTranslate2"
+    },
+    {
+      "name": "Whisper STT",
+      "package": "ovos-stt-plugin-whisper",
+      "description": "OpenAI Whisper (GPU recommended)"
+    },
+    {
+      "name": "WhisperCPP STT",
+      "package": "ovos-stt-plugin-whispercpp",
+      "description": "Whisper.cpp - whisper GGUF models, CPU-optimized C++ inference"
+    },
+    {
+      "name": "Vosk STT",
+      "package": "ovos-stt-plugin-vosk",
+      "description": "Vosk - offline, lightweight speech recognition"
+    },
+    {
+      "name": "NeMo STT",
+      "package": "ovos-stt-plugin-nemo",
+      "description": "NVIDIA NeMo  (GPU recommended)"
+    },
+    {
+      "name": "CoreML STT",
+      "package": "ovos-stt-plugin-coreml",
+      "description": "Apple CoreML - optimized for Apple Silicon"
+    },
+    {
+      "name": "Chromium STT",
+      "package": "ovos-stt-plugin-chromium",
+      "description": "Google Chromium speech API - requires internet - bad for privacy!"
+    }
+  ],
+  "ovos_plugins_tts": [
+    {
+      "name": "Piper TTS",
+      "package": "ovos-tts-plugin-piper",
+      "description": "Piper - fast, high-quality neural TTS (recommended)"
+    },
+    {
+      "name": "Edge TTS",
+      "package": "ovos-tts-plugin-edge-tts",
+      "description": "Microsoft Edge TTS - free cloud synthesis"
+    },
+    {
+      "name": "Google Translate TTS",
+      "package": "ovos-tts-plugin-google-tx",
+      "description": "Google Translate - free online synthesis"
+    },
+    {
+      "name": "MaryTTS",
+      "package": "ovos-tts-plugin-marytts",
+      "description": "MaryTTS - open-source multilingual TTS"
+    },
+    {
+      "name": "Matxa TTS",
+      "package": "ovos-tts-plugin-matxa-multispeaker-cat",
+      "description": "Matxa - Catalan multispeaker TTS"
+    },
+    {
+      "name": "Pico TTS",
+      "package": "ovos-tts-plugin-pico",
+      "description": "Pico - SVOX embedded TTS engine"
+    }
+  ],
+  "ovos_plugins_ww": [
+    {
+      "name": "Precise ONNX",
+      "package": "ovos-ww-plugin-precise-onnx",
+      "description": "Precise - ONNX-optimized wake word models (recommended)"
+    },
+    {
+      "name": "OpenWakeWord",
+      "package": "ovos-ww-plugin-openWakeWord",
+      "description": "OpenWakeWord - neural network wake word detection"
+    },
+    {
+      "name": "Vosk Wake Word",
+      "package": "ovos-ww-plugin-vosk",
+      "description": "Vosk-based wake word detection"
+    }
+  ],
+  "ovos_plugins_vad": [
+    {
+      "name": "Silero VAD",
+      "package": "ovos-vad-plugin-silero",
+      "description": "Silero VAD - neural network voice activity detection (recommended)"
+    },
+    {
+      "name": "WebRTC VAD",
+      "package": "ovos-vad-plugin-webrtcvad",
+      "description": "WebRTC VAD - lightweight, signal-based detection"
+    },
+    {
+      "name": "Noise VAD",
+      "package": "ovos-vad-plugin-noise",
+      "description": "Noise-based voice activity detection"
+    }
+  ]
+}
