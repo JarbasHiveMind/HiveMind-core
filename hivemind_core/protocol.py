@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import dataclasses
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -36,6 +37,7 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
                                             decrypt_bin, encrypt_bin,
                                             _norm_encoding, _norm_cipher)
 from hivemind_core.database import ClientDatabase
+from hivemind_core.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
@@ -147,7 +149,7 @@ class HiveMindClientConnection:
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
+                LOG.debug(f"unencrypted payload size: {len(message.serialize())} bytes")  # fix: payload can be a dict without serialize()
                 payload = encrypt_as_json(
                     key=self.crypto_key, plaintext=message.serialize(),
                     cipher=self.cipher, encoding=self.encoding
@@ -170,8 +172,21 @@ class HiveMindClientConnection:
                 payload = decrypt_from_json(key=self.crypto_key, ciphertext_json=payload,
                                             encoding=self.encoding, cipher=self.cipher)
             else:
+                if self.hm_protocol and self.hm_protocol.require_crypto:
+                    # HELLO and HANDSHAKE are legitimately sent as plaintext
+                    # during session establishment, before crypto is negotiated.
+                    exempt = {HiveMessageType.HELLO, HiveMessageType.HANDSHAKE}
+                    msg_type = ""
+                    try:
+                        parsed = json.loads(payload) if isinstance(payload, str) else {}
+                        msg_type = parsed.get("msg_type", "")
+                    except Exception:
+                        pass
+                    if msg_type not in exempt:
+                        raise ValueError(
+                            f"Encrypted message required but received plaintext from {self.peer}"
+                        )
                 LOG.warning("Message was unencrypted")
-                # TODO - some error if crypto is required
         else:
             pass  # TODO - reject anything except HELLO and HANDSHAKE
 
@@ -183,8 +198,12 @@ class HiveMindClientConnection:
 
     def authorize(self, message: Message) -> bool:
         """parse the message being injected into ovos-core bus
-        if this client is not authorized to inject it return False"""
-        if message.msg_type not in self.allowed_types:
+        if this client is not authorized to inject it return False
+        
+        Empty allowed_types list means allow all messages (no restrictions).
+        """
+        # Empty whitelist = allow all (no restrictions configured)
+        if self.allowed_types and message.msg_type not in self.allowed_types:
             return False
 
         # TODO check intent / skill that will trigger
@@ -206,6 +225,8 @@ class HiveMindListenerProtocol:
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
+    hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
+
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
@@ -215,9 +236,8 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
-    clients = {}  # class object
-
     def __post_init__(self):
+        self.clients = {}  # fix: was a class-level dict shared across all instances
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -306,6 +326,9 @@ class HiveMindListenerProtocol:
         """track timestamps of last client interaction"""
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
+            if user is None:
+                LOG.warning(f"update_last_seen: client key not found in db: {client.key}")
+                return
             user.last_seen = time.time()
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
@@ -461,7 +484,7 @@ class HiveMindListenerProtocol:
             file_name = message.metadata.get("file_name")
             self.binary_data_protocol.handle_receive_tts(bin_data, utt, lang, file_name, client)
         elif message.bin_type == HiveMindBinaryPayloadType.FILE:
-            file_name = message.metadata.get("file_name")
+            file_name = os.path.basename(message.metadata.get("file_name") or "")
             self.binary_data_protocol.handle_receive_file(bin_data, file_name, client)
         elif message.bin_type == HiveMindBinaryPayloadType.NUMPY_IMAGE:
             # TODO - convert to numpy array
@@ -514,16 +537,14 @@ class HiveMindListenerProtocol:
 
             envelope = message.payload["envelope"]
             envelope_out = client.pswd_handshake.generate_handshake()
-            client.pswd_handshake.receive_handshake(envelope)
-
-            # if not client.pswd_handshake.receive_and_verify(envelope):
-            #     # TODO - different handles for invalid access key / invalid password
-            #     self.handle_invalid_key_connected(client)
-            #     client.disconnect()
-            #     return
+            if not client.pswd_handshake.receive_and_verify(envelope):
+                LOG.warning(f"Password mismatch from client: {client.peer}")
+                self.handle_invalid_key_connected(client)
+                client.disconnect()
+                return
 
             # key is derived safely from password in both sides
-            # the handshake is validating both ends have the same password
+            # the handshake validates both ends have the same password
             # the key is never actually transmitted
             client.crypto_key = client.pswd_handshake.secret
 
@@ -604,7 +625,7 @@ class HiveMindListenerProtocol:
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # TODO kick client for misbehaviour so it stops doing that?
+            client.disconnect()
             return
 
         if self.broadcast_callback:
@@ -620,12 +641,14 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
-        # broadcast message to other peers
-        payload = self._unpack_message(message, client)
+        # broadcast message to other peers, preserving the BROADCAST wrapper
+        # so receiving satellites see msg_type=BROADCAST (not the inner message type)
+        inner = self._unpack_message(message, client)
+        broadcast_fwd = HiveMessage(HiveMessageType.BROADCAST, payload=inner)
         for peer in self.clients:
             if peer == client.peer:
                 continue
-            self.clients[peer].send(payload)
+            self.clients[peer].send(broadcast_fwd)
 
     def _unpack_message(self, message: HiveMessage, client: HiveMindClientConnection):
         # propagate message to other peers
@@ -652,7 +675,7 @@ class HiveMindListenerProtocol:
             LOG.warning("Received propagate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # TODO kick client for misbehaviour so it stops doing that?
+            client.disconnect()
             return
 
         if self.propagate_callback:
@@ -668,16 +691,23 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
-        # propagate message to other peers
+        if message.payload.msg_type == HiveMessageType.PING:
+            self.handle_ping_message(payload, client)
+
+        if message.payload.msg_type == HiveMessageType.PONG:
+            self.handle_pong_message(payload, client)
+
+        # propagate message to other peers, preserving the PROPAGATE wrapper
+        propagate_fwd = HiveMessage(HiveMessageType.PROPAGATE, payload=payload)
         for peer in self.clients:
             if peer == client.peer:
                 continue
-            self.clients[peer].send(payload)
+            self.clients[peer].send(propagate_fwd)
 
         # send to other masters
         message = Message(
             "hive.send.upstream",
-            payload,
+            payload.as_dict,  # fix: payload is a HiveMessage; Message.data must be dict
             {
                 "destination": "hive",
                 "source": self.peer,
@@ -686,6 +716,78 @@ class HiveMindListenerProtocol:
         )
         bus = self.get_bus(client)
         bus.emit(message)
+
+    def handle_ping_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Handle an inner PING message received inside a PROPAGATE wrapper.
+
+        Sends a PONG response back toward the PING originator wrapped in PROPAGATE,
+        then emits ``hive.ping.received`` on the agent bus.  The PING itself
+        continues to be relayed by ``handle_propagate_message`` after this returns.
+
+        Args:
+            message: Inner PING HiveMessage (route already transferred from outer
+                PROPAGATE by ``_unpack_message``).
+            client: Connection that delivered the PROPAGATE(PING).
+        """
+        ping_payload = message.payload
+        if not isinstance(ping_payload, dict):
+            LOG.warning("PING received with non-dict payload, ignoring")
+            return
+
+        pong_payload = {
+            "ping_id": ping_payload.get("ping_id", ""),
+            "timestamp": ping_payload.get("timestamp", 0.0),
+            "pong_timestamp": time.time(),
+            "peer": self.peer,
+            "site_id": self.identity.site_id,
+        }
+        pong_inner = HiveMessage(HiveMessageType.PONG, pong_payload)
+        pong_outer = HiveMessage(HiveMessageType.PROPAGATE, payload=pong_inner)
+
+        LOG.debug(f"Sending PONG for ping_id={ping_payload.get('ping_id')} to {client.peer}")
+        client.send(pong_outer)
+
+        bus = self.get_bus(client)
+        bus.emit(Message(
+            "hive.ping.received",
+            {
+                "ping_id": ping_payload.get("ping_id"),
+                "peer": ping_payload.get("peer"),
+                "site_id": ping_payload.get("site_id"),
+                "route": message.route,
+            },
+            {"source": client.peer},
+        ))
+
+    def handle_pong_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Handle an inner PONG message received inside a PROPAGATE wrapper.
+
+        Feeds the PONG into the local ``HiveMapper`` and emits
+        ``hive.pong.received`` on the agent bus.  The PONG continues to be
+        relayed by ``handle_propagate_message`` after this returns.
+
+        Args:
+            message: Inner PONG HiveMessage (route already transferred from outer
+                PROPAGATE by ``_unpack_message``).
+            client: Connection that delivered the PROPAGATE(PONG).
+        """
+        pong_payload = message.payload
+        if not isinstance(pong_payload, dict):
+            LOG.warning("PONG received with non-dict payload, ignoring")
+            return
+
+        self.hive_mapper.on_pong(message)
+
+        bus = self.get_bus(client)
+        bus.emit(Message(
+            "hive.pong.received",
+            {**pong_payload, "route": message.route},
+            {"source": client.peer},
+        ))
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -705,7 +807,7 @@ class HiveMindListenerProtocol:
             LOG.warning("Received escalate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # TODO kick client for misbehaviour so it stops doing that?
+            client.disconnect()
             return
 
         if self.escalate_callback:
@@ -724,7 +826,7 @@ class HiveMindListenerProtocol:
         # send to other masters
         message = Message(
             "hive.send.upstream",
-            payload,
+            payload.as_dict,  # fix: payload is a HiveMessage; Message.data must be dict
             {
                 "destination": "hive",
                 "source": self.peer,
@@ -750,38 +852,51 @@ class HiveMindListenerProtocol:
                 ciphertext = pybase64.b64decode(pload["ciphertext"])
                 signature = pybase64.b64decode(pload["signature"])
 
-                # TODO - allow verifying, we need to store trusted pubkeys before this can be done
-                # pub = ""
-                # verified = verify_RSA(pub, ciphertext, signature)
+                # SECURITY: RSA signature on INTERCOM messages is NOT verified.
+                # To fix this, maintain a registry of trusted peer public keys
+                # (e.g., loaded from a config or exchanged via an out-of-band channel)
+                # and call: verified = verify_RSA(trusted_pub, ciphertext, signature)
+                # Until then, any peer with knowledge of this node's public key can
+                # send forged INTERCOM messages that will be silently accepted.
 
                 private_key = load_RSA_key(self.identity.private_key)
 
                 decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
                 message._payload = HiveMessage.deserialize(decrypted)
-            except:
+            except Exception:
                 if k:
                     LOG.error("failed to decrypt message!")
                 else:
                     LOG.debug("failed to decrypt message, not for us")
                 return False
 
-        if message.msg_type == HiveMessageType.BUS:
-            self.handle_bus_message(message, client)
+        # Dispatch on the inner message type (not the outer INTERCOM type).
+        # After decryption _payload is the inner HiveMessage; for unencrypted INTERCOM
+        # it is the raw dict representation of the inner message.
+        inner = message.payload
+        if isinstance(inner, dict):
+            try:
+                inner = HiveMessage.deserialize(inner)
+            except Exception:
+                return False
+
+        if inner.msg_type == HiveMessageType.BUS:
+            self.handle_bus_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.PROPAGATE:
-            self.handle_propagate_message(message, client)
+        elif inner.msg_type == HiveMessageType.PROPAGATE:
+            self.handle_propagate_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.BROADCAST:
-            self.handle_broadcast_message(message, client)
+        elif inner.msg_type == HiveMessageType.BROADCAST:
+            self.handle_broadcast_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.ESCALATE:
-            self.handle_escalate_message(message, client)
+        elif inner.msg_type == HiveMessageType.ESCALATE:
+            self.handle_escalate_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.BINARY:
-            self.handle_binary_message(message, client)
+        elif inner.msg_type == HiveMessageType.BINARY:
+            self.handle_binary_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.SHARED_BUS:
-            self.handle_client_shared_bus(message.payload, client)
+        elif inner.msg_type == HiveMessageType.SHARED_BUS:
+            self.handle_client_shared_bus(inner.payload, client)
             return True
 
         return False
@@ -823,7 +938,7 @@ class HiveMindListenerProtocol:
 
         # messages/skills/intents per user
         if not client.authorize(message):
-            LOG.warning(client.peer + " sent an unauthorized bus message")
+            LOG.warning(client.peer + f" sent an unauthorized bus message: '{message.msg_type}'")
             return
 
         # ensure client specific session data is injected in query to ovos
