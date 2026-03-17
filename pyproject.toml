@@ -53,6 +53,7 @@ version = {attr = "hivemind_core.version.__version__"}
 [tool.setuptools.packages.find]
 include = ["hivemind_core*"]
 
+
 [tool.setuptools.package-data]
 "hivemind_core.admin" = [
     "static/**/*",
