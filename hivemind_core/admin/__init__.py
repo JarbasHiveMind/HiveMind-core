@@ -1,5 +1,5 @@
 # hivemind-admin
-# Copyright (C) 2026 HiveMind Community
+# Copyright (C) 2026 Casimiro Ferreira
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
