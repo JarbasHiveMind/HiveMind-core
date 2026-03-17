@@ -130,7 +130,7 @@ class HiveMindService:
                 "hivemind-admin not installed. "
                 "Install with: pip install hivemind-core[admin]"
             )
-            return
+            raise
 
         # Inject core objects for direct access (even if core partially failed)
         init_injected_objects(
