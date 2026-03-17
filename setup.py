@@ -45,6 +45,13 @@ setup(
     version=get_version(),
     packages=["hivemind_core", "hivemind_core.admin"],
     include_package_data=True,
+    package_data={
+        "hivemind_core.admin": [
+            "static/**/*",
+            "static/*",
+            "*.json",
+        ]
+    },
     install_requires=required("requirements.txt"),
     extras_require={
         "admin": [
