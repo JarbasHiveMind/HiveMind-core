@@ -10,4 +10,4 @@ jobs:
     secrets: inherit
     with:
       # hivemind-core is intentionally AGPL-3.0; exclude it from the dependency audit
-      exclude_packages: "^hivemind.core.*"
+      exclude_packages: "^hivemind[-_.]core$"
