@@ -563,12 +563,12 @@ def validate_config(config: Dict[str, Any]) -> ConfigValidationResult:
             # Check for optional dependencies if features are enabled
             if presence_cfg.get("zeroconf"):
                 try:
-                    import zeroconf
+                    import zeroconf  # noqa: F401
                 except ImportError:
                     warnings.append("zeroconf is enabled but not installed (pip install zeroconf)")
             if presence_cfg.get("ggwave"):
                 try:
-                    import ggwave
+                    import ggwave  # noqa: F401
                 except ImportError:
                     warnings.append("ggwave is enabled but not installed (pip install ggwave)")
 
@@ -1510,7 +1510,7 @@ def enable_plugin(data: ConfigUpdateRequest) -> PluginInstallResult:
                     else:
                         cfg["binary_protocol"][k] = v
         else:
-            LOG.info(f"Disabling binary protocol")
+            LOG.info("Disabling binary protocol")
             if "binary_protocol" not in cfg:
                 cfg["binary_protocol"] = {}
             cfg["binary_protocol"]["module"] = None

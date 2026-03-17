@@ -261,7 +261,7 @@ def delete_client(node_id):
         for client in db:
             if client.client_id == int(node_id):
                 db.delete_client(client.api_key)
-                print(f"Revoked credentials!\n")
+                print("Revoked credentials!\n")
                 print("Node ID:", client.client_id)
                 print("Friendly Name:", client.name)
                 print("Access Key:", client.api_key)

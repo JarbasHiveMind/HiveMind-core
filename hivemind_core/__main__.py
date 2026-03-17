@@ -16,7 +16,6 @@
 import os
 import argparse
 import time
-import traceback
 from ovos_utils.log import init_service_logger, LOG
 from ovos_utils.xdg_utils import xdg_state_home
 

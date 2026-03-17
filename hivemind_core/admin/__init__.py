@@ -23,8 +23,7 @@ When hivemind-core is started with --with-admin flag, this module gets
 direct access to internal HiveMind-core objects for real-time monitoring.
 """
 
-import threading
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ovos_utils import create_daemon
 from ovos_utils.log import LOG
@@ -90,7 +89,7 @@ def start_admin_server(
         )
 
     # Run server in daemon thread
-    server_thread = create_daemon(_run_server)
+    create_daemon(_run_server)
     LOG.info("HiveMind Admin server thread started")
 
 

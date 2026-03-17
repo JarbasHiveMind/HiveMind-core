@@ -186,7 +186,7 @@ class HiveMindService:
                 network_class = NetworkProtocolFactory.get_class(plug_name)
                 LOG.info(f"Network protocol: {network_class.__name__}")
                 protos.append(network_class(hm_protocol=hm_protocol, config=plug_conf))
-            except:
+            except Exception:
                 LOG.exception(f"Failed to load plugin '{plug_name}'")
 
         if not protos:
