@@ -1,0 +1,10 @@
+name: Python Support
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python_support:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/python-support.yml@dev
+    secrets: inherit
