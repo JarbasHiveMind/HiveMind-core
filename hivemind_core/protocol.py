@@ -16,6 +16,7 @@
 import dataclasses
 import json
 import time
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable, Literal
@@ -154,7 +155,7 @@ class HiveMindClientConnection:
             LOG.debug(f"encrypted payload size: {len(payload)} bytes")
         else:
             payload = message.serialize()
-            LOG.debug("sent unencrypted!")
+            LOG.debug(f"sent unencrypted!")
 
         self.send_msg(payload, is_bin)
 
@@ -232,17 +233,17 @@ class HiveMindListenerProtocol:
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_connect(client)
-        except Exception:
+        except:
             LOG.exception("error on connect callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_connect(client)
-        except Exception:
+        except:
             LOG.exception("error on connect binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_connect(client)
-        except Exception:
+        except:
             LOG.exception("error on connect agent callback")
 
         LOG.debug(f"new client: {client.peer}")
@@ -312,17 +313,17 @@ class HiveMindListenerProtocol:
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_disconnect(client)
-        except Exception:
+        except:
             LOG.exception("error on disconnect callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_disconnect(client)
-        except Exception:
+        except:
             LOG.exception("error on disconnect binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_disconnect(client)
-        except Exception:
+        except:
             LOG.exception("error on disconnect agent callback")
 
         if client.peer in self.clients:
@@ -339,17 +340,17 @@ class HiveMindListenerProtocol:
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_invalid_key(client)
-        except Exception:
+        except:
             LOG.exception("error on invalid_key callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_invalid_key(client)
-        except Exception:
+        except:
             LOG.exception("error on invalid_key binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_invalid_key(client)
-        except Exception:
+        except:
             LOG.exception("error on invalid_key agent callback")
 
         LOG.error("Client provided an invalid api key")
@@ -364,17 +365,17 @@ class HiveMindListenerProtocol:
     def handle_invalid_protocol_version(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_invalid_protocol(client)
-        except Exception:
+        except:
             LOG.exception("error on invalid_protocol callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_invalid_protocol(client)
-        except Exception:
+        except:
             LOG.exception("error on invalid_protocol binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_invalid_protocol(client)
-        except Exception:
+        except:
             LOG.exception("error on invalid_protocol agent callback")
 
         LOG.error("Client does not satisfy protocol requirements")
@@ -555,9 +556,9 @@ class HiveMindListenerProtocol:
             client.sess.site_id = client.site_id = payload["site_id"]
         if "pubkey" in payload:
             client.pub_key = payload["pubkey"]
-            LOG.debug("client sent public key")
+            LOG.debug(f"client sent public key")
         else:
-            LOG.warning("client did NOT send public key")
+            LOG.warning(f"client did NOT send public key")
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
         LOG.debug(f"client session_id: {client.sess.session_id}")
@@ -747,15 +748,17 @@ class HiveMindListenerProtocol:
         if isinstance(pload, dict) and "ciphertext" in pload:
             try:
                 ciphertext = pybase64.b64decode(pload["ciphertext"])
+                signature = pybase64.b64decode(pload["signature"])
+
                 # TODO - allow verifying, we need to store trusted pubkeys before this can be done
-                # signature = pybase64.b64decode(pload["signature"])
+                # pub = ""
                 # verified = verify_RSA(pub, ciphertext, signature)
 
                 private_key = load_RSA_key(self.identity.private_key)
 
                 decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
                 message._payload = HiveMessage.deserialize(decrypted)
-            except Exception:
+            except:
                 if k:
                     LOG.error("failed to decrypt message!")
                 else:
