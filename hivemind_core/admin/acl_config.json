@@ -1,0 +1,84 @@
+{
+  "common_messages": [],
+  "common_skills": [],
+  "common_intents": [],
+  "templates": [
+    {
+      "name": "Minimal",
+      "description": "Standard voice assistant permissions, can send utterances to the server",
+      "allowed_types": [
+        "recognizer_loop:utterance"
+      ],
+      "skill_blacklist": [],
+      "intent_blacklist": []
+    },
+    {
+      "name": "Voice Satellite",
+      "description": "standard voice assistant + common PHAL plugin integration",
+      "allowed_types": [
+        "recognizer_loop:utterance",
+        "speak",
+        "mycroft.audio.is_alive",
+        "mycroft.audio.is_ready",
+        "mycroft.audio.speak.status",
+        "mycroft.stop",
+        "mycroft.phal.is_alive",
+        "mycroft.phal.is_ready",
+        "mycroft.volume.get",
+        "mycroft.volume.set",
+        "mycroft.volume.increase",
+        "mycroft.volume.decrease",
+        "mycroft.volume.mute",
+        "mycroft.volume.unmute"
+      ],
+      "skill_blacklist": [],
+      "intent_blacklist": []
+    },
+    {
+      "name": "Hivemind Player",
+      "description": "Media device, clients can make it speak or play media, does not answer queries",
+      "allowed_types": [
+        "speak",
+        "mycroft.audio.is_alive",
+        "mycroft.audio.is_ready",
+        "mycroft.audio.speak.status",
+        "mycroft.stop",
+        "mycroft.phal.is_alive",
+        "mycroft.phal.is_ready",
+        "mycroft.volume.get",
+        "mycroft.volume.set",
+        "mycroft.volume.increase",
+        "mycroft.volume.decrease",
+        "mycroft.volume.mute",
+        "mycroft.volume.unmute",
+        "mycroft.audio.service.play",
+        "mycroft.audio.service.resume",
+        "mycroft.audio.service.pause",
+        "mycroft.audio.service.stop",
+        "mycroft.audio.service.prev",
+        "mycroft.audio.service.next",
+        "mycroft.audio.service.set_track_position",
+        "ovos.common_play.player.status",
+        "ovos.common_play.track_info",
+        "ovos.common_play.get_track_length",
+        "ovos.common_play.get_track_position",
+        "ovos.common_play.playlist.queue",
+        "ovos.common_play.play",
+        "ovos.common_play.resume",
+        "ovos.common_play.pause",
+        "ovos.common_play.stop",
+        "ovos.common_play.previous",
+        "ovos.common_play.next",
+        "ovos.common_play.set_track_position",
+        "ovos.common_play.playlist.clear",
+        "ovos.common_play.shuffle.set",
+        "ovos.common_play.shuffle.unset",
+        "ovos.common_play.repeat.set",
+        "ovos.common_play.repeat.unset",
+        "ovos.common_play.repeat.one"
+      ],
+      "skill_blacklist": [],
+      "intent_blacklist": []
+    }
+  ]
+}

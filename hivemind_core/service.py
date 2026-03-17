@@ -108,8 +108,56 @@ class HiveMindService:
                                                      ))
         self._status.set_alive()
 
+    def _start_admin(self, host: str = "127.0.0.1", port: int = 8000, error: Exception = None) -> None:
+        """Optionally start HiveMind Admin UI if hivemind-admin is installed.
+
+        This method injects direct references to internal core objects,
+        allowing the admin UI to access real-time data from the running
+        HiveMindService.
+
+        Args:
+            host: Host to bind the admin server (default: 127.0.0.1).
+            port: Port to bind the admin server (default: 8000).
+            error: Optional exception if core failed to start.
+        """
+        try:
+            from hivemind_core.admin import (
+                init_injected_objects,
+                start_admin_server,
+            )
+        except ImportError:
+            LOG.warning(
+                "hivemind-admin not installed. "
+                "Install with: pip install hivemind-core[admin]"
+            )
+            raise
+
+        # Inject core objects for direct access (even if core partially failed)
+        init_injected_objects(
+            service=self,
+            db=self.db,
+            protocol=getattr(self, 'hm_protocol', None),
+            startup_error=error
+        )
+
+        if error:
+            LOG.warning(f"HiveMind Admin initialized with startup error: {error}")
+        else:
+            LOG.info("HiveMind Admin initialized with direct core access")
+
+        # Start admin server
+        start_admin_server(host=host, port=port)
+
     def run(self):
         self._status.set_started()
+
+        # Start admin UI early (daemon thread) so it remains accessible even if
+        # the agent protocol blocks indefinitely (e.g. waiting for OVOS bus).
+        if getattr(self, '_admin_enabled', False):
+            self._start_admin(
+                host=getattr(self, '_admin_host', '127.0.0.1'),
+                port=getattr(self, '_admin_port', 8000)
+            )
 
         # start/connect agent protocol that will handle HiveMessage payloads
         agent_class, agent_config = get_agent_protocol()

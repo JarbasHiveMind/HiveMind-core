@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hivemind-core"
+dynamic = ["version"]
+description = "Mesh Networking utilities for OpenVoiceOS"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "AGPL-3.0"}
+authors = [
+    {name = "jarbasAI", email = "jarbasai@mailfence.com"}
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "click",
+    "click_default_group",
+    "rich",
+    "pycryptodomex",
+    "poorman-handshake>=1.0.1,<2.0.0",
+    "hivemind_bus_client>=0.2.0,<1.0.0",
+    "ovos_utils>=0.0.33,<1.0.0",
+    "pybase64",
+    "hivemind-plugin-manager>=0.3.0,<1.0.0",
+    "ovos-bus-client>=1.3.1,<2.0.0",
+    "json-database>=0.9.1,<1.0.0",
+    "hivemind-websocket-protocol>=0.0.3,<1.0.0",
+    "setuptools",
+]
+
+[project.optional-dependencies]
+admin = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.urls]
+Homepage = "https://github.com/JarbasHiveMind/HiveMind-core"
+
+[project.scripts]
+hivemind-core = "hivemind_core.scripts:hmcore_cmds"
+hivemind-admin = "hivemind_core.admin.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "hivemind_core.version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["hivemind_core*"]
+
+
+[tool.setuptools.package-data]
+"hivemind_core.admin" = [
+    "static/**/*",
+    "static/*",
+    "*.json",
+]

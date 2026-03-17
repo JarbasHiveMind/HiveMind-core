@@ -94,11 +94,25 @@ def print_config():
 
 
 @hmcore_cmds.command(help="Start listening for HiveMind connections.", name="listen")
-def listen():
+@click.option("--with-admin", is_flag=True, default=False, help="Start the admin web UI alongside the HiveMind service.")
+@click.option("--admin-host", default="127.0.0.1", show_default=True, help="Host to bind the admin web UI server.")
+@click.option("--admin-port", default=8000, show_default=True, type=int, help="Port to bind the admin web UI server.")
+def listen(with_admin: bool, admin_host: str, admin_port: int) -> None:
     """
     Starts the HiveMind service and begins accepting client connections.
+
+    Optionally starts the admin web UI server in a background thread when
+    ``--with-admin`` is provided.
+
+    Args:
+        with_admin: If True, launch the admin web UI alongside the service.
+        admin_host: Host address for the admin web UI (default: 127.0.0.1).
+        admin_port: Port for the admin web UI (default: 8000).
     """
     service = HiveMindService()
+    service._admin_enabled = with_admin
+    service._admin_host = admin_host
+    service._admin_port = admin_port
     service.run()
 
 
