@@ -43,15 +43,25 @@ def required(requirements_file):
 setup(
     name="hivemind-core",
     version=get_version(),
-    packages=["hivemind_core"],
+    packages=["hivemind_core", "hivemind_core.admin"],
     include_package_data=True,
     install_requires=required("requirements.txt"),
+    extras_require={
+        "admin": [
+            "fastapi>=0.100.0",
+            "uvicorn[standard]>=0.20.0",
+            "python-multipart>=0.0.6",
+        ]
+    },
     url="https://github.com/JarbasHiveMind/HiveMind-core",
     license="AGPL-3.0",
     author="jarbasAI",
     author_email="jarbasai@mailfence.com",
     description="Mesh Networking utilities for OpenVoiceOS",
     entry_points={
-        "console_scripts": ["hivemind-core=hivemind_core.scripts:hmcore_cmds"]
+        "console_scripts": [
+            "hivemind-core=hivemind_core.scripts:hmcore_cmds",
+            "hivemind-admin=hivemind_core.admin.__main__:main",
+        ]
     },
 )
