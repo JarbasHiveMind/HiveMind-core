@@ -215,24 +215,14 @@ Source: `HiveMindClientConnection` — `protocol.py:72-107`
 
 A relay node is simultaneously a master (accepting downstream connections) and a satellite (connected upstream to another master). Both sides share the same agent protocol and bus.
 
-### 4.1 Upstream Connection
+### 4.1 Shared Bus Architecture
 
-`HiveMindListenerProtocol.upstream` — `protocol.py:235`
-
-```python
-upstream: Optional[Callable[[HiveMessage], None]] = None
-```
-
-When set, the protocol uses this callable to forward messages upstream instead of emitting `hive.send.upstream` on the agent bus. This makes relay behavior native to hivemind-core without requiring the OVOS pipeline plugin.
-
-### 4.2 How Relay Works — Shared Bus Architecture
-
-A relay is simply a `HiveMindListenerProtocol` (master side) and a `HiveMindSlaveProtocol` (satellite side) sharing the **same agent bus**. No special wiring is needed — the existing bus event handlers provide full relay behavior:
+A relay is a `HiveMindListenerProtocol` (master side) and a `HiveMindSlaveProtocol` (satellite side) sharing the **same agent bus**. No special wiring is needed — the existing bus event handlers provide full relay behavior:
 
 **Upstream forwarding** (downstream satellite → upstream master):
 1. R1_master receives PROPAGATE/ESCALATE from downstream satellite
-2. `handle_propagate_message` / `handle_escalate_message` calls `_send_upstream()` — `protocol.py:952`
-3. `_send_upstream()` emits `hive.send.upstream` on the shared bus (with the full transport wrapper)
+2. `handle_propagate_message` / `handle_escalate_message` calls `_send_upstream()`
+3. `_send_upstream()` emits `hive.send.upstream` on the shared bus (full transport wrapper)
 4. `HiveMindSlaveInternalProtocol.handle_send()` (`hivemind_bus_client/protocol.py:33`) picks it up and forwards to the upstream master
 
 **Downstream forwarding** (upstream master → downstream satellites):
@@ -240,17 +230,10 @@ A relay is simply a `HiveMindListenerProtocol` (master side) and a `HiveMindSlav
 2. `HiveMindSlaveProtocol.handle_broadcast/propagate()` (`hivemind_bus_client/protocol.py:242,270`) emits `hive.send.downstream` on the shared bus
 3. The agent protocol's `handle_send()` picks it up and routes to `self.clients` (R1_master's downstream satellites)
 
-### 4.3 `_send_upstream()` — `protocol.py:952`
+### 4.2 `_send_upstream()`
 
-Called by `handle_propagate_message` and `handle_escalate_message`. Wraps the inner payload in the transport type, then sends upstream:
+Called by `handle_propagate_message` and `handle_escalate_message`. Wraps the inner payload in the transport type and emits on the bus:
 
-**Direct mode** (`self.upstream is not None`):
-```python
-upstream_msg = HiveMessage(msg_type, payload=payload)
-self.upstream(upstream_msg)
-```
-
-**Bus event mode** (`self.upstream is None` — default):
 ```python
 upstream_msg = HiveMessage(msg_type, payload=payload)
 bus.emit(Message("hive.send.upstream", upstream_msg.as_dict, {
@@ -260,40 +243,19 @@ bus.emit(Message("hive.send.upstream", upstream_msg.as_dict, {
 }))
 ```
 
-The `upstream` callable is an optional optimization that bypasses bus events for direct forwarding. For standard relay deployments, the bus event path handles everything.
+If no `HiveMindSlaveInternalProtocol` is bound to the bus (i.e., this node is the top-level master), the event is silently ignored.
 
-### 4.4 `handle_upstream_message()` — `protocol.py:985`
-
-Optional method for direct downstream forwarding (bypasses bus events). When called, forwards the message to all downstream clients:
+### 4.3 Relay Configuration
 
 ```python
-def handle_upstream_message(self, message: HiveMessage) -> None:
-    for peer, conn in self.clients.items():
-        conn.send(message)
-```
-
-In the shared-bus architecture this is not needed — `hive.send.downstream` handles it.
-
-### 4.5 Relay Configuration
-
-**Shared-bus relay (recommended):**
-```python
-# Both protocols share the same bus — relay works automatically
-shared_bus = FakeBus()
+shared_bus = FakeBus()  # or MessageBusClient
 master_protocol = HiveMindListenerProtocol(agent_protocol=agent, ...)
 slave_protocol = HiveMindSlaveProtocol(hm=client, ...)
-slave_protocol.bind(shared_bus)
+slave_protocol.bind(shared_bus)  # registers hive.send.upstream listener
 # That's it. Bus events handle upstream/downstream forwarding.
 ```
 
-**Direct relay (optional optimization):**
-```python
-master_protocol.upstream = satellite_client.send
-satellite_client.on(HiveMessageType.BROADCAST, master_protocol.handle_upstream_message)
-satellite_client.on(HiveMessageType.PROPAGATE, master_protocol.handle_upstream_message)
-```
-
-### 4.6 Message Flow Through Relays
+### 4.4 Message Flow Through Relays
 
 #### ESCALATE through relay chain
 ```

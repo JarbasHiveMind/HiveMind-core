@@ -14,10 +14,10 @@ Central hub of the HiveMind mesh network. Runs `HiveMindListenerProtocol` to acc
 See: `docs/protocol.md` §2
 
 ## What is a relay node?
-A node that is simultaneously a master (accepting downstream satellites) and a satellite (connected upstream to another master). Both sides share the same agent and bus. Relay is native to hivemind-core via `HiveMindListenerProtocol.upstream` — `protocol.py:235`.
+A node that is simultaneously a master (accepting downstream satellites) and a satellite (connected upstream to another master). Both sides share the same agent bus. A relay is just `HiveMindListenerProtocol` + `HiveMindSlaveProtocol` bound to the same bus — no special configuration needed.
 
-## How does native relay work?
-Set `master_protocol.upstream = satellite.send`. PROPAGATE and ESCALATE from downstream are automatically forwarded upstream. For downstream BROADCAST/PROPAGATE from upstream, wire `satellite.on(BROADCAST, master_protocol.handle_upstream_message)`.
+## How does relay work?
+Both protocol sides share the same bus. `_send_upstream()` emits `hive.send.upstream` on the bus, which `HiveMindSlaveInternalProtocol.handle_send()` picks up and forwards upstream. `HiveMindSlaveProtocol.handle_broadcast/propagate()` emits `hive.send.downstream`, which the agent protocol routes to downstream clients.
 See: `docs/protocol.md` §4
 
 ## Do BUS messages travel through relays?
