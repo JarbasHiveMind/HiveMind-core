@@ -24,6 +24,16 @@ Every HiveMind communication is a `HiveMessage` (`hivemind_bus_client/message.py
 | `bin_type` | `HiveMindBinaryPayloadType` | Sub-type for BINARY messages only |
 | `metadata` | `dict` | Extra data (sample_rate, file_name, etc.) |
 
+### Route Lifecycle
+
+The `route` field tracks hop-by-hop message traversal. Lifecycle:
+
+1. **Creation**: `route` starts as `[]` when a `HiveMessage` is constructed.
+2. **Hop recording**: `update_hop_data()` (`message.py:249`) is called by `handle_message()` (`protocol.py:495`) on every inbound message. Appends `{"source": source_peer, "targets": target_peers}`.
+3. **Transfer through wrappers**: `_unpack_message()` (`protocol.py:727`) calls `replace_route(message.route)` to copy route from outer transport wrapper to inner payload.
+4. **Response attachment**: `_build_query_response()` (`protocol.py:1083`) accepts a `route` parameter and attaches it to QUERY/CASCADE response messages.
+5. **Serialization**: `as_dict` (`message.py:187`) includes `route`; `deserialize()` (`message.py:204`) restores it.
+
 ### Payload Type Binding
 
 The `payload` property (`message.py:128-146`) reconstructs typed objects based on `msg_type`:

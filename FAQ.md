@@ -57,3 +57,9 @@ Source: `protocol.py:968-971`
 ## Where is the configuration stored?
 `~/.config/hivemind-core/server.json`
 Source: `get_server_config` — `config.py`
+
+### Do QUERY/CASCADE responses carry route metadata?
+Yes. `_build_query_response()` (`protocol.py:1083`) accepts a `route` parameter. All call sites pass `message.route` so responses carry the hop trail back to the originator.
+
+### What is the route lifecycle?
+Created empty → `update_hop_data()` appends hops at each node → `_unpack_message()` transfers route from outer to inner → `_build_query_response()` attaches route to responses → serialized/deserialized intact.

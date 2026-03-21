@@ -159,6 +159,49 @@ Key relay-specific behaviors:
 
 ---
 
+## Route Metadata — Hop-by-Hop Path Tracking
+
+Every `HiveMessage` carries a `route` field: an ordered list of hops recording the network path the message has traversed. Each hop is `{"source": peer_id, "targets": [peer_ids]}`.
+
+### When Route Is Populated
+
+`HiveMessage.update_hop_data()` is called in `handle_message()` (`protocol.py:495`) for every inbound message. This appends a new hop entry with the current `source_peer` and `target_peers`.
+
+### Route Transfer Through Wrappers
+
+Transport messages (PROPAGATE, ESCALATE, CASCADE, QUERY, BROADCAST) wrap an inner `HiveMessage`. When a master unpacks the inner payload via `_unpack_message()` (`protocol.py:727`), route data is transferred:
+
+```python
+pload = message.payload          # reconstruct inner HiveMessage
+pload.replace_route(message.route)  # transfer route from outer to inner
+```
+
+This ensures the inner message inherits the complete hop trail from the outer wrapper.
+
+### Route on QUERY/CASCADE Responses
+
+Response messages built by `_build_query_response()` (`protocol.py:1083`) carry the route trail from the inbound request. This allows the originator to trace the full path the query/response traveled.
+
+### Route Consumers
+
+- **`HiveMapper.on_ping()`** (`hive_map.py`): Builds the topology graph from route hops in PING messages. Each hop's `source`→`targets` mapping becomes an edge in the graph.
+- **Debugging/auditing**: Route data enables path tracing for any message type.
+
+### Route vs Metadata
+
+| Concern | Field | Purpose |
+|---------|-------|---------|
+| Network path | `route` | Hop-by-hop trail of which nodes forwarded the message |
+| Query correlation | `metadata["query_id"]` | Links requests to responses |
+| Originator tracking | `metadata["originator_peer"]` | Who started a QUERY/CASCADE |
+
+### Limitations
+
+- Route is per-link: each relay re-encrypts the message, so route data is visible to every hop (not end-to-end signed).
+- Route filtering: the `route` property (`message.py:122`) filters out hops where `targets` or `source` is empty/falsy. A hop with `targets=[]` is silently dropped.
+
+---
+
 ## Information Flow Invariants
 
 These properties hold for ALL topologies and ALL message types:
