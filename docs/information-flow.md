@@ -179,6 +179,20 @@ These properties hold for ALL topologies and ALL message types:
 
 ---
 
+## Direction as Implicit Semantics
+
+For most message types, direction fully determines the message's role — no explicit flag needed:
+
+| Type | satellite→master | master→satellite |
+|------|-----------------|------------------|
+| **BUS** | Request (inject into agent) | Response (skill output) |
+| **BROADCAST** | Request (ask master to broadcast) | Payload delivery |
+| **ESCALATE** | Request (forward up) | — (never sent downstream) |
+| **QUERY** | Request (ask for answer) | Response (the answer) |
+| **PROPAGATE** | Request (flood network) | Forwarded flood |
+
+BROADCAST is a clear example: a satellite sends BROADCAST upstream as a *request* for the master to fan out the payload. The master then sends BROADCAST downstream as the *delivery*. The satellite never needs an `is_response` flag — if it came from the master, it's the delivery.
+
 ## Why CASCADE Needs `is_response` (Direction Isn't Enough)
 
 For most message types, direction fully determines semantics: satellite→master = request, master→satellite = response. This is true for **QUERY** — it only flows upstream as a request and downstream as a response.
