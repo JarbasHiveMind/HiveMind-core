@@ -935,7 +935,7 @@ class HiveMindListenerProtocol:
                 # Agent answered — send response back to client
                 resp_msg = self._build_query_response(
                     HiveMessageType.QUERY, response, query_id,
-                    originator_peer, self.peer
+                    originator_peer, self.peer, route=message.route
                 )
                 client.send(resp_msg)
                 return
@@ -952,7 +952,7 @@ class HiveMindListenerProtocol:
             )
             error_resp = self._build_query_response(
                 HiveMessageType.QUERY, error_bus, query_id,
-                originator_peer, self.peer
+                originator_peer, self.peer, route=message.route
             )
             client.send(error_resp)
 
@@ -1007,7 +1007,7 @@ class HiveMindListenerProtocol:
             if response is not None:
                 resp_msg = self._build_query_response(
                     HiveMessageType.CASCADE, response, query_id,
-                    originator_peer, self.peer
+                    originator_peer, self.peer, route=message.route
                 )
                 # Route through _route_query_response for disambiguation support
                 self._route_query_response(resp_msg, client)
@@ -1082,7 +1082,8 @@ class HiveMindListenerProtocol:
 
     def _build_query_response(
             self, msg_type: HiveMessageType, response: Message,
-            query_id: str, originator_peer: str, responder_peer: str
+            query_id: str, originator_peer: str, responder_peer: str,
+            route: Optional[list] = None
     ) -> HiveMessage:
         """Build a QUERY or CASCADE response HiveMessage.
 
@@ -1092,12 +1093,13 @@ class HiveMindListenerProtocol:
             query_id: Correlation ID from the original request.
             originator_peer: Peer that originated the query.
             responder_peer: Peer that is responding.
+            route: Hop-by-hop route trail from the inbound request message.
 
         Returns:
             A HiveMessage with is_response=True in metadata.
         """
         inner = HiveMessage(HiveMessageType.BUS, payload=response)
-        return HiveMessage(
+        msg = HiveMessage(
             msg_type,
             payload=inner,
             metadata={
@@ -1107,6 +1109,9 @@ class HiveMindListenerProtocol:
                 "is_response": True,
             },
         )
+        if route:
+            msg.replace_route(route)
+        return msg
 
     def _route_query_response(
             self, message: HiveMessage, client: HiveMindClientConnection
