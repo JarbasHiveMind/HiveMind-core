@@ -149,7 +149,12 @@ class HiveMindClientConnection:
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload size: {len(message.serialize())} bytes")  # fix: payload can be a dict without serialize()
+                # For BUS messages: payload is OVOS Message
+                # For PROPAGATE/ESCALATE/BROADCAST: payload is HiveMessage
+                if hasattr(message.payload, 'serialize'):
+                    LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
+                else:
+                    LOG.debug(f"unencrypted payload size: {len(message.serialize())} bytes")
                 payload = encrypt_as_json(
                     key=self.crypto_key, plaintext=message.serialize(),
                     cipher=self.cipher, encoding=self.encoding
@@ -199,7 +204,7 @@ class HiveMindClientConnection:
     def authorize(self, message: Message) -> bool:
         """parse the message being injected into ovos-core bus
         if this client is not authorized to inject it return False
-        
+
         Empty allowed_types list means allow all messages (no restrictions).
         """
         # Empty whitelist = allow all (no restrictions configured)
@@ -226,6 +231,10 @@ class HiveMindListenerProtocol:
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
     hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
+
+    # Optional upstream relay: when set, this node acts as a relay.
+    # The callable receives a HiveMessage and sends it to the upstream master.
+    upstream: Optional[Callable[[HiveMessage], None]] = None
 
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
@@ -631,20 +640,16 @@ class HiveMindListenerProtocol:
         if self.broadcast_callback:
             self.broadcast_callback(payload)
 
+        # Handle inner payload (does NOT short-circuit forwarding)
         if message.payload.msg_type == HiveMessageType.INTERCOM:
-            if self.handle_intercom_message(message.payload, client):
-                return
-
-        if message.payload.msg_type == HiveMessageType.BUS:
-            # if the message targets our site_id, send it to internal bus
+            self.handle_intercom_message(message.payload, client)
+        elif message.payload.msg_type == HiveMessageType.BUS:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
         # broadcast message to other peers, preserving the BROADCAST wrapper
-        # so receiving satellites see msg_type=BROADCAST (not the inner message type)
-        inner = self._unpack_message(message, client)
-        broadcast_fwd = HiveMessage(HiveMessageType.BROADCAST, payload=inner)
+        broadcast_fwd = HiveMessage(HiveMessageType.BROADCAST, payload=payload)
         for peer in self.clients:
             if peer == client.peer:
                 continue
@@ -681,12 +686,10 @@ class HiveMindListenerProtocol:
         if self.propagate_callback:
             self.propagate_callback(payload)
 
+        # Handle inner payload (does NOT short-circuit forwarding)
         if message.payload.msg_type == HiveMessageType.INTERCOM:
-            if self.handle_intercom_message(message.payload, client):
-                return
-
-        if message.payload.msg_type == HiveMessageType.BUS:
-            # if the message targets our site_id, send it to internal bus
+            self.handle_intercom_message(message.payload, client)
+        elif message.payload.msg_type == HiveMessageType.BUS:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
@@ -704,18 +707,8 @@ class HiveMindListenerProtocol:
                 continue
             self.clients[peer].send(propagate_fwd)
 
-        # send to other masters
-        message = Message(
-            "hive.send.upstream",
-            payload.as_dict,  # fix: payload is a HiveMessage; Message.data must be dict
-            {
-                "destination": "hive",
-                "source": self.peer,
-                "session": client.sess.serialize(),
-            },
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        # send upstream — native relay or bus event for OVOS pipeline
+        self._send_upstream(HiveMessageType.PROPAGATE, payload, client)
 
     def handle_ping_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -813,28 +806,16 @@ class HiveMindListenerProtocol:
         if self.escalate_callback:
             self.escalate_callback(payload)
 
+        # Handle inner payload (does NOT short-circuit forwarding)
         if message.payload.msg_type == HiveMessageType.INTERCOM:
-            if self.handle_intercom_message(message.payload, client):
-                return
-
-        if message.payload.msg_type == HiveMessageType.BUS:
-            # if the message targets our site_id, send it to internal bus
+            self.handle_intercom_message(message.payload, client)
+        elif message.payload.msg_type == HiveMessageType.BUS:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
-        # send to other masters
-        message = Message(
-            "hive.send.upstream",
-            payload.as_dict,  # fix: payload is a HiveMessage; Message.data must be dict
-            {
-                "destination": "hive",
-                "source": self.peer,
-                "session": client.sess.serialize(),
-            },
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        # send upstream — native relay or bus event for OVOS pipeline
+        self._send_upstream(HiveMessageType.ESCALATE, payload, client)
 
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -965,3 +946,50 @@ class HiveMindListenerProtocol:
         LOG.info("Monitoring bus from client: " + client.peer)
         if self.shared_bus_callback:
             self.shared_bus_callback(message)
+
+    # --- Relay / upstream support ---
+
+    def _send_upstream(self, msg_type: HiveMessageType,
+                       payload: HiveMessage,
+                       client: HiveMindClientConnection) -> None:
+        """Send a message upstream, either via native relay or the OVOS bus.
+
+        If ``self.upstream`` is set (native relay mode), wraps the payload in a
+        HiveMessage of the given type and calls the upstream callable directly.
+        Otherwise, falls back to emitting ``hive.send.upstream`` on the agent bus
+        for the OVOS pipeline plugin to pick up.
+
+        Args:
+            msg_type: The wrapper message type (PROPAGATE, ESCALATE, etc.).
+            payload: The inner HiveMessage to forward upstream.
+            client: The client that originated the message (used for session context).
+        """
+        if self.upstream is not None:
+            upstream_msg = HiveMessage(msg_type, payload=payload)
+            self.upstream(upstream_msg)
+        else:
+            # Legacy path: emit on agent bus for OVOS pipeline relay
+            payload_data = payload.as_dict if hasattr(payload, 'as_dict') else payload
+            message = Message(
+                "hive.send.upstream",
+                payload_data,
+                {
+                    "destination": "hive",
+                    "source": self.peer,
+                    "session": client.sess.serialize(),
+                },
+            )
+            bus = self.get_bus(client)
+            bus.emit(message)
+
+    def handle_upstream_message(self, message: HiveMessage) -> None:
+        """Handle a message received from an upstream master (relay mode).
+
+        Called when this node's satellite side receives a BROADCAST or PROPAGATE
+        from the upstream master. Forwards the message to all downstream clients.
+
+        Args:
+            message: The HiveMessage received from upstream (BROADCAST or PROPAGATE).
+        """
+        for peer, conn in self.clients.items():
+            conn.send(message)
