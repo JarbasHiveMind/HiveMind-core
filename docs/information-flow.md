@@ -176,3 +176,26 @@ These properties hold for ALL topologies and ALL message types:
 6. **Permissions are enforced per-hop.** Each master independently checks `can_escalate`, `can_propagate`, `is_admin` for its own connected clients. There is no global permission — topology position and local ACL are the only factors.
 
 7. **Encryption is per-link.** Each connection has its own crypto key negotiated via handshake. A relay decrypts from upstream, processes, and re-encrypts for downstream. There is no end-to-end encryption through relays (except INTERCOM, which uses RSA).
+
+---
+
+## Why CASCADE Needs `is_response` (Direction Isn't Enough)
+
+For most message types, direction fully determines semantics: satellite→master = request, master→satellite = response. This is true for **QUERY** — it only flows upstream as a request and downstream as a response.
+
+**CASCADE breaks this pattern.** A master receiving a CASCADE request does TWO things downstream:
+
+1. **Forwards the request** to all other downstream satellites (so they can also respond)
+2. **Sends responses** back downstream toward the originator
+
+Both are master→satellite messages. The satellite receiving a CASCADE cannot determine from direction alone whether it's a forwarded request (that it should process and respond to) or a response (that it should deliver to its local bus).
+
+```
+S0 sends CASCADE to M0:
+    M0 → S1: CASCADE(is_response=False)  ← forwarded request
+    M0 → S0: CASCADE(is_response=True)   ← response from M0's agent
+
+Both are master→satellite. Direction is identical. is_response disambiguates.
+```
+
+QUERY avoids this because it never forwards requests downstream — it only escalates upstream. But `is_response` is kept in QUERY metadata too for consistency (both types share the same response-building code).
