@@ -247,6 +247,7 @@ class HiveMindListenerProtocol:
 
     def __post_init__(self):
         self.clients = {}  # fix: was a class-level dict shared across all instances
+        self._seen_flood_ids: set = set()
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -262,17 +263,17 @@ class HiveMindListenerProtocol:
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_connect(client)
-        except:
+        except Exception:
             LOG.exception("error on connect callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_connect(client)
-        except:
+        except Exception:
             LOG.exception("error on connect binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_connect(client)
-        except:
+        except Exception:
             LOG.exception("error on connect agent callback")
 
         LOG.debug(f"new client: {client.peer}")
@@ -345,17 +346,17 @@ class HiveMindListenerProtocol:
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_disconnect(client)
-        except:
+        except Exception:
             LOG.exception("error on disconnect callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_disconnect(client)
-        except:
+        except Exception:
             LOG.exception("error on disconnect binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_disconnect(client)
-        except:
+        except Exception:
             LOG.exception("error on disconnect agent callback")
 
         if client.peer in self.clients:
@@ -372,17 +373,17 @@ class HiveMindListenerProtocol:
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_invalid_key(client)
-        except:
+        except Exception:
             LOG.exception("error on invalid_key callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_invalid_key(client)
-        except:
+        except Exception:
             LOG.exception("error on invalid_key binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_invalid_key(client)
-        except:
+        except Exception:
             LOG.exception("error on invalid_key agent callback")
 
         LOG.error("Client provided an invalid api key")
@@ -397,17 +398,17 @@ class HiveMindListenerProtocol:
     def handle_invalid_protocol_version(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_invalid_protocol(client)
-        except:
+        except Exception:
             LOG.exception("error on invalid_protocol callback")
 
         try:  # let the binary protocol know about it
             self.binary_data_protocol.callbacks.on_invalid_protocol(client)
-        except:
+        except Exception:
             LOG.exception("error on invalid_protocol binary callback")
 
         try:  # let the agent protocol know about it
             self.agent_protocol.callbacks.on_invalid_protocol(client)
-        except:
+        except Exception:
             LOG.exception("error on invalid_protocol agent callback")
 
         LOG.error("Client does not satisfy protocol requirements")
@@ -449,6 +450,10 @@ class HiveMindListenerProtocol:
             self.handle_broadcast_message(message, client)
         elif message.msg_type == HiveMessageType.ESCALATE:
             self.handle_escalate_message(message, client)
+        elif message.msg_type == HiveMessageType.QUERY:
+            self.handle_query_message(message, client)
+        elif message.msg_type == HiveMessageType.CASCADE:
+            self.handle_cascade_message(message, client)
         elif message.msg_type == HiveMessageType.INTERCOM:
             self.handle_intercom_message(message, client)
         elif message.msg_type == HiveMessageType.BINARY:
@@ -471,7 +476,9 @@ class HiveMindListenerProtocol:
     def handle_binary_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
-        assert message.msg_type == HiveMessageType.BINARY
+        if message.msg_type != HiveMessageType.BINARY:
+            LOG.warning(f"handle_binary_message called with wrong type: {message.msg_type}")
+            return
         bin_data = message.payload
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
@@ -697,9 +704,6 @@ class HiveMindListenerProtocol:
         if message.payload.msg_type == HiveMessageType.PING:
             self.handle_ping_message(payload, client)
 
-        if message.payload.msg_type == HiveMessageType.PONG:
-            self.handle_pong_message(payload, client)
-
         # propagate message to other peers, preserving the PROPAGATE wrapper
         propagate_fwd = HiveMessage(HiveMessageType.PROPAGATE, payload=payload)
         for peer in self.clients:
@@ -715,9 +719,10 @@ class HiveMindListenerProtocol:
     ):
         """Handle an inner PING message received inside a PROPAGATE wrapper.
 
-        Sends a PONG response back toward the PING originator wrapped in PROPAGATE,
-        then emits ``hive.ping.received`` on the agent bus.  The PING itself
-        continues to be relayed by ``handle_propagate_message`` after this returns.
+        Feeds the PING into the local ``HiveMapper``, emits ``hive.ping.received``
+        on the agent bus, then — if this ``flood_id`` has not been seen before —
+        builds and sends this node's own responsive PING (same ``flood_id``) to
+        all peers and upstream.
 
         Args:
             message: Inner PING HiveMessage (route already transferred from outer
@@ -729,24 +734,17 @@ class HiveMindListenerProtocol:
             LOG.warning("PING received with non-dict payload, ignoring")
             return
 
-        pong_payload = {
-            "ping_id": ping_payload.get("ping_id", ""),
-            "timestamp": ping_payload.get("timestamp", 0.0),
-            "pong_timestamp": time.time(),
-            "peer": self.peer,
-            "site_id": self.identity.site_id,
-        }
-        pong_inner = HiveMessage(HiveMessageType.PONG, pong_payload)
-        pong_outer = HiveMessage(HiveMessageType.PROPAGATE, payload=pong_inner)
+        flood_id = ping_payload.get("flood_id", "")
 
-        LOG.debug(f"Sending PONG for ping_id={ping_payload.get('ping_id')} to {client.peer}")
-        client.send(pong_outer)
+        # Always feed mapper (register sender info)
+        self.hive_mapper.on_ping(message, received_at=time.time())
 
+        # Emit bus event
         bus = self.get_bus(client)
         bus.emit(Message(
             "hive.ping.received",
             {
-                "ping_id": ping_payload.get("ping_id"),
+                "flood_id": flood_id,
                 "peer": ping_payload.get("peer"),
                 "site_id": ping_payload.get("site_id"),
                 "route": message.route,
@@ -754,33 +752,38 @@ class HiveMindListenerProtocol:
             {"source": client.peer},
         ))
 
-    def handle_pong_message(
-            self, message: HiveMessage, client: HiveMindClientConnection
-    ):
-        """Handle an inner PONG message received inside a PROPAGATE wrapper.
-
-        Feeds the PONG into the local ``HiveMapper`` and emits
-        ``hive.pong.received`` on the agent bus.  The PONG continues to be
-        relayed by ``handle_propagate_message`` after this returns.
-
-        Args:
-            message: Inner PONG HiveMessage (route already transferred from outer
-                PROPAGATE by ``_unpack_message``).
-            client: Connection that delivered the PROPAGATE(PONG).
-        """
-        pong_payload = message.payload
-        if not isinstance(pong_payload, dict):
-            LOG.warning("PONG received with non-dict payload, ignoring")
+        # Flood-loop prevention: if we already responded to this flood_id, stop
+        if not flood_id or flood_id in self._seen_flood_ids:
             return
+        # Cap set size to prevent unbounded memory growth
+        if len(self._seen_flood_ids) > 10000:
+            self._seen_flood_ids.clear()
+        self._seen_flood_ids.add(flood_id)
 
-        self.hive_mapper.on_pong(message)
+        # Build our own responsive PING with the same flood_id
+        own_ping_payload = {
+            "flood_id": flood_id,
+            "peer": self.peer,
+            "site_id": self.identity.site_id,
+            "timestamp": time.time(),
+        }
+        own_ping_inner = HiveMessage(HiveMessageType.PING, own_ping_payload)
+        own_ping_outer = HiveMessage(HiveMessageType.PROPAGATE, payload=own_ping_inner)
 
-        bus = self.get_bus(client)
-        bus.emit(Message(
-            "hive.pong.received",
-            {**pong_payload, "route": message.route},
-            {"source": client.peer},
-        ))
+        LOG.debug(f"Sending responsive PING for flood_id={flood_id}")
+
+        # Send to all downstream peers
+        for peer_id, conn in self.clients.items():
+            if peer_id == client.peer:
+                continue
+            conn.send(own_ping_outer)
+
+        # Send back toward sender too (so they discover us)
+        client.send(own_ping_outer)
+
+        # Forward upstream if this node is a relay
+        if self._upstream_hm is not None:
+            self._upstream_hm.emit(own_ping_outer)
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -816,6 +819,256 @@ class HiveMindListenerProtocol:
 
         # forward upstream if this node is a relay
         self.escalate_to_master(payload)
+
+    def handle_query_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Handle a QUERY message: like ESCALATE but expects a response.
+
+        Request (is_response=False): Inject BUS into local agent, check for
+        synchronous response. If the agent handles it, send the response back
+        downstream. If not, escalate upstream (or return error if top-level).
+
+        Response (is_response=True): Route downstream toward the originator.
+
+        Args:
+            message: The QUERY HiveMessage.
+            client: The client connection that sent the message.
+        """
+        LOG.info(f"Received QUERY from: {client.peer}")
+        metadata = message.metadata or {}
+        is_response = metadata.get("is_response", False)
+
+        if is_response:
+            # Route response downstream toward originator
+            self._route_query_response(message, client)
+            return
+
+        # Request handling
+        payload = self._unpack_message(message, client)
+
+        if not client.can_escalate:
+            LOG.warning("Received QUERY from client without escalate permission")
+            if self.illegal_callback:
+                self.illegal_callback(payload)
+            client.disconnect()
+            return
+
+        query_id = metadata.get("query_id", str(uuid.uuid4()))
+        originator_peer = metadata.get("originator_peer", client.peer)
+
+        # Emit bus event
+        bus = self.get_bus(client)
+        bus.emit(Message(
+            "hive.query.received",
+            {"query_id": query_id, "originator_peer": originator_peer},
+            {"source": client.peer},
+        ))
+
+        # Try to get a response from the local agent
+        inner = message.payload
+        if inner.msg_type == HiveMessageType.BUS:
+            response = self._try_local_agent_query(inner.payload, client, query_id)
+            if response is not None:
+                # Agent answered — send response back to client
+                resp_msg = self._build_query_response(
+                    HiveMessageType.QUERY, response, query_id,
+                    originator_peer, self.peer
+                )
+                client.send(resp_msg)
+                return
+
+        # Agent could not answer — escalate upstream or return error
+        if self._upstream_hm is not None:
+            self.query_to_master(payload, metadata)
+        else:
+            # Top-level master, no answer available
+            LOG.info(f"QUERY {query_id}: no answer available (top-level master)")
+            error_bus = Message(
+                "hive.query.timeout",
+                {"query_id": query_id, "error": "no_answer"},
+            )
+            error_resp = self._build_query_response(
+                HiveMessageType.QUERY, error_bus, query_id,
+                originator_peer, self.peer
+            )
+            client.send(error_resp)
+
+    def handle_cascade_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Handle a CASCADE message: like PROPAGATE but expects responses from all nodes.
+
+        Request (is_response=False): Inject BUS into local agent, forward to
+        all other peers and upstream. Collect and relay responses.
+
+        Response (is_response=True): Route downstream toward the originator.
+
+        Args:
+            message: The CASCADE HiveMessage.
+            client: The client connection that sent the message.
+        """
+        LOG.info(f"Received CASCADE from: {client.peer}")
+        metadata = message.metadata or {}
+        is_response = metadata.get("is_response", False)
+
+        if is_response:
+            # Route response downstream toward originator
+            self._route_query_response(message, client)
+            return
+
+        # Request handling
+        payload = self._unpack_message(message, client)
+
+        if not client.can_propagate:
+            LOG.warning("Received CASCADE from client without propagate permission")
+            if self.illegal_callback:
+                self.illegal_callback(payload)
+            client.disconnect()
+            return
+
+        query_id = metadata.get("query_id", str(uuid.uuid4()))
+        originator_peer = metadata.get("originator_peer", client.peer)
+
+        # Emit bus event
+        bus = self.get_bus(client)
+        bus.emit(Message(
+            "hive.cascade.received",
+            {"query_id": query_id, "originator_peer": originator_peer},
+            {"source": client.peer},
+        ))
+
+        # Try local agent
+        inner = message.payload
+        if inner.msg_type == HiveMessageType.BUS:
+            response = self._try_local_agent_query(inner.payload, client, query_id)
+            if response is not None:
+                resp_msg = self._build_query_response(
+                    HiveMessageType.CASCADE, response, query_id,
+                    originator_peer, self.peer
+                )
+                client.send(resp_msg)
+
+        # Forward CASCADE to all other downstream peers
+        cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
+                                  metadata=metadata)
+        for peer in self.clients:
+            if peer == client.peer:
+                continue
+            self.clients[peer].send(cascade_fwd)
+
+        # Forward upstream if relay
+        self.cascade_to_master(payload, metadata)
+
+    def _try_local_agent_query(
+            self, bus_message: Message, client: HiveMindClientConnection,
+            query_id: str
+    ) -> Optional[Message]:
+        """Inject a BUS message into the local agent and check for a synchronous response.
+
+        Listens for a response on the agent bus that has a matching query_id
+        in its context. Returns the response Message if found, None otherwise.
+
+        Args:
+            bus_message: The inner OVOS Message to inject.
+            client: The client that originated the query.
+            query_id: Correlation ID for matching the response.
+
+        Returns:
+            The response Message if the agent answered, None otherwise.
+        """
+        bus = self.get_bus(client)
+
+        # Set up a one-shot listener for the response
+        response_holder: List[Message] = []
+        injected_type = bus_message.msg_type
+
+        def _on_response(msg: Union[Message, str]):
+            if isinstance(msg, str):
+                try:
+                    msg = Message.deserialize(msg)
+                except Exception:
+                    return
+            # Skip the injected message itself (same msg_type as query)
+            if msg.msg_type == injected_type:
+                return
+            if msg.context.get("query_id") == query_id:
+                response_holder.append(msg)
+
+        # Listen on the "message" catch-all to capture any response
+        bus.on("message", _on_response)
+
+        try:
+            # Inject the message with query_id in context
+            if not client.authorize(bus_message):
+                LOG.warning(f"{client.peer} sent unauthorized QUERY bus message: '{bus_message.msg_type}'")
+                return None
+
+            bus_message = self._update_blacklist(bus_message, client)
+            bus_message.context["peer"] = bus_message.context["source"] = client.peer
+            bus_message.context["destination"] = "skills"
+            bus_message.context["query_id"] = query_id
+            bus.emit(bus_message)
+
+            # Check if any synchronous response was captured
+            if response_holder:
+                return response_holder[0]
+            return None
+        finally:
+            bus.remove("message", _on_response)
+
+    def _build_query_response(
+            self, msg_type: HiveMessageType, response: Message,
+            query_id: str, originator_peer: str, responder_peer: str
+    ) -> HiveMessage:
+        """Build a QUERY or CASCADE response HiveMessage.
+
+        Args:
+            msg_type: HiveMessageType.QUERY or HiveMessageType.CASCADE.
+            response: The OVOS Message to wrap as response payload.
+            query_id: Correlation ID from the original request.
+            originator_peer: Peer that originated the query.
+            responder_peer: Peer that is responding.
+
+        Returns:
+            A HiveMessage with is_response=True in metadata.
+        """
+        inner = HiveMessage(HiveMessageType.BUS, payload=response)
+        return HiveMessage(
+            msg_type,
+            payload=inner,
+            metadata={
+                "query_id": query_id,
+                "originator_peer": originator_peer,
+                "responder_peer": responder_peer,
+                "is_response": True,
+            },
+        )
+
+    def _route_query_response(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Route a QUERY/CASCADE response downstream toward the originator.
+
+        If the originator is a direct client, send to them. Otherwise forward
+        to all downstream clients (one of them will be the next hop).
+
+        Args:
+            message: The response HiveMessage (is_response=True).
+            client: The connection that delivered the response.
+        """
+        metadata = message.metadata or {}
+        originator_peer = metadata.get("originator_peer", "")
+
+        # Check if originator is a direct client
+        if originator_peer in self.clients:
+            self.clients[originator_peer].send(message)
+        else:
+            # Forward to all downstream clients (except sender)
+            for peer in self.clients:
+                if peer == client.peer:
+                    continue
+                self.clients[peer].send(message)
 
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -966,10 +1219,17 @@ class HiveMindListenerProtocol:
         """
         self._upstream_hm = slave.hm
 
+        # Share flood_id tracking between relay sides so the master doesn't
+        # re-announce for flood_ids the satellite side already handled.
+        if hasattr(slave, '_seen_flood_ids'):
+            self._seen_flood_ids = slave._seen_flood_ids
+
         # When the upstream master sends BROADCAST or PROPAGATE down to us,
         # forward to all our downstream clients.
         slave.hm.on(HiveMessageType.BROADCAST, self.broadcast_from_master)
         slave.hm.on(HiveMessageType.PROPAGATE, self.propagate_from_master)
+        slave.hm.on(HiveMessageType.QUERY, self.query_from_master)
+        slave.hm.on(HiveMessageType.CASCADE, self.cascade_from_master)
 
     def escalate_to_master(self, payload: HiveMessage) -> None:
         """Forward an ESCALATE message to the upstream master.
@@ -998,6 +1258,48 @@ class HiveMindListenerProtocol:
         if self._upstream_hm is None:
             return
         self._upstream_hm.emit(HiveMessage(HiveMessageType.PROPAGATE, payload=payload))
+
+    def query_to_master(self, payload: HiveMessage, metadata: Optional[dict] = None) -> None:
+        """Forward a QUERY message to the upstream master.
+
+        Args:
+            payload: The inner HiveMessage to send upstream.
+            metadata: Query metadata (query_id, originator_peer, etc.).
+        """
+        if self._upstream_hm is None:
+            return
+        self._upstream_hm.emit(HiveMessage(HiveMessageType.QUERY, payload=payload,
+                                           metadata=metadata))
+
+    def cascade_to_master(self, payload: HiveMessage, metadata: Optional[dict] = None) -> None:
+        """Forward a CASCADE message to the upstream master.
+
+        Args:
+            payload: The inner HiveMessage to send upstream.
+            metadata: Query metadata (query_id, originator_peer, etc.).
+        """
+        if self._upstream_hm is None:
+            return
+        self._upstream_hm.emit(HiveMessage(HiveMessageType.CASCADE, payload=payload,
+                                           metadata=metadata))
+
+    def query_from_master(self, message: HiveMessage) -> None:
+        """Forward a QUERY received from the upstream master to all downstream clients.
+
+        Args:
+            message: The QUERY HiveMessage received from upstream.
+        """
+        for peer, conn in self.clients.items():
+            conn.send(message)
+
+    def cascade_from_master(self, message: HiveMessage) -> None:
+        """Forward a CASCADE received from the upstream master to all downstream clients.
+
+        Args:
+            message: The CASCADE HiveMessage received from upstream.
+        """
+        for peer, conn in self.clients.items():
+            conn.send(message)
 
     def broadcast_from_master(self, message: HiveMessage) -> None:
         """Forward a BROADCAST received from the upstream master to all downstream clients.
