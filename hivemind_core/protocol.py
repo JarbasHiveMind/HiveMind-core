@@ -219,6 +219,60 @@ class HiveMindClientConnection:
 
 
 @dataclass
+class CascadeResponse:
+    """A single response collected during a CASCADE query.
+
+    Attributes:
+        responder_peer: Peer ID of the node that produced this response.
+        responder_site_id: Site ID of the responder (if available).
+        messages: List of OVOS Messages in the response (e.g., multiple 'speak' messages).
+        metadata: Full metadata from the response HiveMessage.
+    """
+    responder_peer: str
+    responder_site_id: str = ""
+    messages: List[Message] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class CascadeCollector:
+    """Collects CASCADE responses for a given query_id.
+
+    Attributes:
+        query_id: The correlation ID for this CASCADE.
+        originator_peer: Peer that originated the CASCADE.
+        responses: All collected CascadeResponse objects.
+    """
+    query_id: str
+    originator_peer: str
+    responses: List[CascadeResponse] = field(default_factory=list)
+
+    def add_response(self, message: HiveMessage) -> 'CascadeResponse':
+        """Add a CASCADE response and return the CascadeResponse object.
+
+        Args:
+            message: The CASCADE response HiveMessage (is_response=True).
+
+        Returns:
+            The newly created CascadeResponse.
+        """
+        meta = message.metadata or {}
+        resp = CascadeResponse(
+            responder_peer=meta.get("responder_peer", "unknown"),
+            responder_site_id=meta.get("responder_site_id", ""),
+            metadata=meta,
+        )
+        # Extract OVOS Messages from the inner BUS payload
+        inner = message.payload
+        if isinstance(inner, HiveMessage) and inner.msg_type == HiveMessageType.BUS:
+            bus_msg = inner.payload
+            if isinstance(bus_msg, Message):
+                resp.messages.append(bus_msg)
+        self.responses.append(resp)
+        return resp
+
+
+@dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
     binary_data_protocol: Optional[BinaryDataHandlerProtocol] = None
@@ -245,9 +299,17 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
+    # CASCADE disambiguation: called when the originating node collects all
+    # CASCADE responses for a given query_id.
+    # Signature: cascade_select_callback(query_id: str, responses: List[CascadeResponse]) -> Optional[Message]
+    # If set and returns a Message, that message is emitted on the local bus.
+    # If None or not set, all responses are emitted individually.
+    cascade_select_callback = None
+
     def __post_init__(self):
         self.clients = {}  # fix: was a class-level dict shared across all instances
         self._seen_flood_ids: set = set()
+        self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -947,7 +1009,8 @@ class HiveMindListenerProtocol:
                     HiveMessageType.CASCADE, response, query_id,
                     originator_peer, self.peer
                 )
-                client.send(resp_msg)
+                # Route through _route_query_response for disambiguation support
+                self._route_query_response(resp_msg, client)
 
         # Forward CASCADE to all other downstream peers
         cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
@@ -1050,8 +1113,13 @@ class HiveMindListenerProtocol:
     ):
         """Route a QUERY/CASCADE response downstream toward the originator.
 
-        If the originator is a direct client, send to them. Otherwise forward
-        to all downstream clients (one of them will be the next hop).
+        For CASCADE responses, if cascade_select_callback is set and the
+        originator is a direct client, the response is collected in a
+        CascadeCollector. The callback is invoked each time a new response
+        arrives, allowing progressive disambiguation.
+
+        For QUERY responses, or CASCADE without a select callback, the
+        response is forwarded immediately.
 
         Args:
             message: The response HiveMessage (is_response=True).
@@ -1060,7 +1128,32 @@ class HiveMindListenerProtocol:
         metadata = message.metadata or {}
         originator_peer = metadata.get("originator_peer", "")
 
-        # Check if originator is a direct client
+        # CASCADE collection: if we have a select callback and the originator
+        # is a direct client, collect responses for disambiguation
+        if (message.msg_type == HiveMessageType.CASCADE
+                and self.cascade_select_callback is not None
+                and originator_peer in self.clients):
+            query_id = metadata.get("query_id", "")
+            if query_id not in self._pending_cascades:
+                self._pending_cascades[query_id] = CascadeCollector(
+                    query_id=query_id, originator_peer=originator_peer
+                )
+            collector = self._pending_cascades[query_id]
+            collector.add_response(message)
+
+            # Invoke the select callback (it decides when enough responses are in)
+            bus = self.get_bus(self.clients[originator_peer])
+            try:
+                selected = self.cascade_select_callback(query_id, collector.responses)
+                if selected is not None:
+                    # Callback selected a winner — emit on bus and clean up
+                    bus.emit(selected)
+                    del self._pending_cascades[query_id]
+            except Exception:
+                LOG.exception(f"cascade_select_callback error for query_id={query_id}")
+            return
+
+        # Default routing: forward toward originator
         if originator_peer in self.clients:
             self.clients[originator_peer].send(message)
         else:
