@@ -964,15 +964,17 @@ class HiveMindListenerProtocol:
             payload: The inner HiveMessage to forward upstream.
             client: The client that originated the message (used for session context).
         """
+        # Wrap inner payload in the transport message type
+        upstream_msg = HiveMessage(msg_type, payload=payload)
+
         if self.upstream is not None:
-            upstream_msg = HiveMessage(msg_type, payload=payload)
             self.upstream(upstream_msg)
         else:
-            # Legacy path: emit on agent bus for OVOS pipeline relay
-            payload_data = payload.as_dict if hasattr(payload, 'as_dict') else payload
+            # Legacy path: emit on agent bus for HiveMindSlaveInternalProtocol
+            # to pick up via handle_send and forward to upstream master.
             message = Message(
                 "hive.send.upstream",
-                payload_data,
+                upstream_msg.as_dict,
                 {
                     "destination": "hive",
                     "source": self.peer,
