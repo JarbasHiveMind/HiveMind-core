@@ -1,13 +1,5 @@
 # FAQ — HiveMind Core
 
-## What is HiveMind Core?
-Central hub of the HiveMind mesh network. Runs `HiveMindListenerProtocol` to accept satellite connections, route messages, and bridge to an AI agent (OVOS or any `AgentProtocol` plugin).
-
-## How do I connect a satellite?
-1. `hivemind-core add-client` → generates Access Key + Password
-2. Configure key/password on the satellite
-3. Satellite connects via WebSocket (default port 5678) or HTTP (5679)
-
 ## What is the difference between payload and transport messages?
 **Payload messages** (BUS, SHARED_BUS, INTERCOM, BINARY) are consumed at the receiving node — never forwarded by the protocol.
 **Transport messages** (PROPAGATE, BROADCAST, ESCALATE) always do two things: unpack + handle the inner payload AND forward the outer wrapper. These operations are independent — inner handling never short-circuits forwarding.
@@ -45,6 +37,22 @@ See: `_send_upstream` — `protocol.py:952`
 ## What database backends are supported?
 Pluggable via `ClientDatabase`. Options: JSON (default), SQLite, Redis.
 Source: `ClientDatabase` — `database.py`
+
+## How does PING-based network discovery work?
+A master sends `PROPAGATE(PING)` with a unique `flood_id`. Each node that receives it records the sender in its `HiveMapper`, then builds and sends its own responsive PING (same `flood_id`) to all peers. The `flood_id` prevents infinite loops — each node only responds once per `flood_id`.
+Source: `HiveMapper.on_ping` — `hive_map.py:59`, `handle_ping_message` — `protocol.py:713`
+
+## What is `flood_id`?
+A UUID string included in every PING payload. It identifies a single discovery session. Each node tracks seen `flood_id` values in `_seen_flood_ids` and skips duplicate floods. The set is capped at 10,000 entries and cleared when exceeded.
+Source: `protocol.py:733,752-757`
+
+## How does HiveMapper build the topology graph?
+`HiveMapper` collects responsive PINGs and extracts two things: (1) `NodeInfo` (peer, site_id, timestamps) from the PING payload, and (2) directed edges from the `route` field on the outer PROPAGATE wrapper. Each hop in the route records `{source, targets}`. The union of all routes forms the complete hive topology.
+Source: `HiveMapper` — `hive_map.py:31`
+
+## How do relays handle flood_id deduplication?
+Relay nodes share `_seen_flood_ids` between their master and satellite sides so a flood that arrives on one side is not re-announced on the other.
+Source: `protocol.py:968-971`
 
 ## Where is the configuration stored?
 `~/.config/hivemind-core/server.json`
