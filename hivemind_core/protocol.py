@@ -232,10 +232,6 @@ class HiveMindListenerProtocol:
 
     hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
 
-    # Optional upstream relay: when set, this node acts as a relay.
-    # The callable receives a HiveMessage and sends it to the upstream master.
-    upstream: Optional[Callable[[HiveMessage], None]] = None
-
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
@@ -947,51 +943,31 @@ class HiveMindListenerProtocol:
         if self.shared_bus_callback:
             self.shared_bus_callback(message)
 
-    # --- Relay / upstream support ---
-
     def _send_upstream(self, msg_type: HiveMessageType,
                        payload: HiveMessage,
                        client: HiveMindClientConnection) -> None:
-        """Send a message upstream, either via native relay or the OVOS bus.
+        """Emit ``hive.send.upstream`` on the agent bus for relay forwarding.
 
-        If ``self.upstream`` is set (native relay mode), wraps the payload in a
-        HiveMessage of the given type and calls the upstream callable directly.
-        Otherwise, falls back to emitting ``hive.send.upstream`` on the agent bus
-        for the OVOS pipeline plugin to pick up.
+        Wraps the inner payload in a transport HiveMessage and emits it as a
+        bus event. ``HiveMindSlaveInternalProtocol.handle_send()``
+        (``hivemind_bus_client/protocol.py:33``) picks this up and forwards
+        to the upstream master. If no slave protocol is bound to the bus,
+        the event is silently ignored (this node is the top-level master).
 
         Args:
-            msg_type: The wrapper message type (PROPAGATE, ESCALATE, etc.).
+            msg_type: The transport wrapper type (PROPAGATE, ESCALATE).
             payload: The inner HiveMessage to forward upstream.
-            client: The client that originated the message (used for session context).
+            client: The client that originated the message.
         """
-        # Wrap inner payload in the transport message type
         upstream_msg = HiveMessage(msg_type, payload=payload)
-
-        if self.upstream is not None:
-            self.upstream(upstream_msg)
-        else:
-            # Legacy path: emit on agent bus for HiveMindSlaveInternalProtocol
-            # to pick up via handle_send and forward to upstream master.
-            message = Message(
-                "hive.send.upstream",
-                upstream_msg.as_dict,
-                {
-                    "destination": "hive",
-                    "source": self.peer,
-                    "session": client.sess.serialize(),
-                },
-            )
-            bus = self.get_bus(client)
-            bus.emit(message)
-
-    def handle_upstream_message(self, message: HiveMessage) -> None:
-        """Handle a message received from an upstream master (relay mode).
-
-        Called when this node's satellite side receives a BROADCAST or PROPAGATE
-        from the upstream master. Forwards the message to all downstream clients.
-
-        Args:
-            message: The HiveMessage received from upstream (BROADCAST or PROPAGATE).
-        """
-        for peer, conn in self.clients.items():
-            conn.send(message)
+        message = Message(
+            "hive.send.upstream",
+            upstream_msg.as_dict,
+            {
+                "destination": "hive",
+                "source": self.peer,
+                "session": client.sess.serialize(),
+            },
+        )
+        bus = self.get_bus(client)
+        bus.emit(message)
