@@ -6,6 +6,7 @@ Welcome to the HiveMind Core documentation. This guide provides an in-depth look
 - [Architecture](architecture.md): Understand the core components and how they interact.
 - [Authentication](auth.md): Learn about client registration and session management.
 - [Security](security.md): Explore the encryption and authorization mechanisms.
+- [Information Flow & Topology-Driven Security](information-flow.md): How topology determines message behavior and enforces security.
 - [Protocol](protocol.md): Detailed information on HiveMessages and communication flows.
 - [QUERY & CASCADE](query-cascade.md): Request-response message types for distributed queries and multi-node disambiguation.
 - [Hive Map](hive_map.md): Visualizing the HiveMind network topology.
