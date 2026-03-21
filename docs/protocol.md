@@ -33,7 +33,7 @@ The `payload` property (`message.py:128-146`) reconstructs typed objects based o
 | BUS, SHARED_BUS | `Message` (OVOS bus message) | dict `{"type", "data", "context"}` |
 | PROPAGATE, BROADCAST, CASCADE, ESCALATE | `HiveMessage` (nested) | dict (HiveMessage.as_dict) |
 | BINARY | `bytes` | raw bytes |
-| All others (PING, PONG, INTERCOM, THIRDPRTY, etc.) | `dict` | dict |
+| All others (PING, INTERCOM, THIRDPRTY, etc.) | `dict` | dict |
 
 ---
 
@@ -115,12 +115,12 @@ Forwards in ALL directions: to all peer slaves AND upstream. The inner payload i
 
 ```
 Satellite → Master
-    Master unpacks inner payload → handles locally (+ PING/PONG)
+    Master unpacks inner payload → handles locally (+ PING flood)
     Master wraps in PROPAGATE → sends to ALL other slaves
     Master sends upstream (native relay or hive.send.upstream bus event)
 ```
 
-**PING/PONG**: PROPAGATE is the transport layer for network mapping. `PROPAGATE(PING)` triggers a `PROPAGATE(PONG)` response at each hop. — `handle_ping_message` — `protocol.py:713`, `handle_pong_message` — `protocol.py:757`
+**PING flood**: PROPAGATE is the transport layer for network mapping. `PROPAGATE(PING)` triggers each node to send its own responsive PING (same `flood_id`). PONG is no longer used. — `handle_ping_message` — `protocol.py:713`
 
 **Illegal action**: satellite with `can_propagate=False` sends PROPAGATE → `illegal_callback` fired, `client.disconnect()` — `protocol.py:679-684`
 
@@ -151,7 +151,7 @@ All three transport handlers follow the same pipeline (`_unpack_message` — `pr
 
 3. Fire callback (propagate_callback, broadcast_callback, escalate_callback)
 
-4. Handle inner payload (INTERCOM, BUS, PING, PONG) — NEVER short-circuits
+4. Handle inner payload (INTERCOM, BUS, PING) — NEVER short-circuits
 
 5. Forward: wrap payload in new HiveMessage(same_type, payload=...)
    → Send to appropriate destinations (slaves, upstream, or both)
@@ -163,8 +163,7 @@ All three transport handlers follow the same pipeline (`_unpack_message` — `pr
 |------|-----------|----------|-------------|
 | **HELLO** | `"hello"` | Session | Connection announcement; carries pubkey, peer ID, session, site_id |
 | **HANDSHAKE** | `"shake"` | Session | Crypto negotiation (password or RSA) |
-| **PING** | `"ping"` | Inner payload | Network mapping request; always wrapped in PROPAGATE |
-| **PONG** | `"pong"` | Inner payload | Network mapping response; always wrapped in PROPAGATE |
+| **PING** | `"ping"` | Inner payload | Network mapping flood; always wrapped in PROPAGATE. Each node responds with its own PING (same `flood_id`). PONG removed. |
 | **QUERY** | `"query"` | Transport (TODO) | Like ESCALATE but stops at first responder |
 | **CASCADE** | `"cascade"` | Transport (TODO) | Like PROPAGATE but expects responses from all nodes |
 | **THIRDPRTY** | `"3rdparty"` | Payload | User-defined; arbitrary dict payload |
@@ -321,7 +320,7 @@ HiveMind emits OVOS bus events for integration with agent plugins:
 | `hive.send.upstream` | Transport message needs upstream relay (legacy mode) | HiveMessage as dict |
 | `hive.send.downstream` | Agent wants to send to specific satellite | `payload`, `peer`, `msg_type` |
 | `hive.ping.received` | PROPAGATE(PING) received | `ping_id`, `peer`, `site_id` |
-| `hive.pong.received` | PROPAGATE(PONG) received | `peer`, `site_id`, `ping_id`, RTT data |
+| `hive.ping.received` | PROPAGATE(PING) received | `flood_id`, `peer`, `site_id` |
 
 `hive.send.upstream` is the **legacy** upstream relay mechanism. When `HiveMindListenerProtocol.upstream` is set (native relay mode), this event is NOT emitted — the native callable is used instead. Agent plugins can still emit `hive.send.upstream` to initiate HiveMind messages; `HiveMindSlaveInternalProtocol.handle_send()` will pick them up.
 
@@ -360,7 +359,7 @@ Source: `handle_handshake_message` — `protocol.py:501-569`
 |--------------|-----------------|
 | BUS | Inject into internal OVOS bus (`handle_bus` — `protocol.py:225`) |
 | BROADCAST | Handle inner payload + emit `hive.send.downstream` on bus (`handle_broadcast` — `protocol.py:242`) |
-| PROPAGATE | Dispatch inner (PING→PONG, INTERCOM) + emit `hive.send.downstream` (`handle_propagate` — `protocol.py:270`) |
+| PROPAGATE | Dispatch inner (PING flood, INTERCOM) + emit `hive.send.downstream` (`handle_propagate` — `protocol.py:270`) |
 | INTERCOM | Decrypt + dispatch inner message (`handle_intercom` — `protocol.py:360`) |
 | ESCALATE, SHARED_BUS | Illegal — logged as warning (`handle_illegal_msg` — `protocol.py:132`) |
 | HANDSHAKE | Continue handshake negotiation (`handle_handshake` — `protocol.py:190`) |

@@ -1,4 +1,9 @@
-"""Hive topology mapper built from PING/PONG discovery messages."""
+"""Hive topology mapper built from PING-only network discovery.
+
+Every node responds to a PING by propagating its own PING (with the same
+``flood_id``), so all nodes in the hive sync simultaneously.  An ephemeral
+``flood_id`` prevents infinite loops.
+"""
 import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set
@@ -8,30 +13,30 @@ from hivemind_bus_client.message import HiveMessage
 
 @dataclass
 class NodeInfo:
-    """Metadata about a node discovered via PING/PONG."""
+    """Metadata about a node discovered via PING flood."""
 
     peer: str
     site_id: Optional[str] = None
-    pong_timestamp: Optional[float] = None
-    ping_timestamp: Optional[float] = None
+    timestamp: Optional[float] = None       # sender's clock when they created the PING
+    received_at: Optional[float] = None     # our local clock when we received it
 
     @property
     def rtt_ms(self) -> Optional[float]:
         """Round-trip time in milliseconds, or None if timestamps are unavailable."""
-        if self.pong_timestamp is not None and self.ping_timestamp is not None:
-            return (self.pong_timestamp - self.ping_timestamp) * 1000
+        if self.received_at is not None and self.timestamp is not None:
+            return (self.received_at - self.timestamp) * 1000
         return None
 
 
 class HiveMapper:
-    """Collect PONG responses from a PING flood and build a directed hive topology graph.
+    """Collect responsive PINGs from a flood and build a directed hive topology graph.
 
     Usage::
 
         mapper = HiveMapper()
-        mapper.start_ping(ping_id)
-        # ... feed each received inner PONG HiveMessage ...
-        mapper.on_pong(pong_msg)
+        mapper.start_ping(flood_id)
+        # ... feed each received inner PING HiveMessage ...
+        mapper.on_ping(ping_msg)
         print(mapper.to_ascii(root_peer="my-node::session1"))
     """
 
@@ -40,41 +45,42 @@ class HiveMapper:
         self.nodes: Dict[str, NodeInfo] = {}
         # source peer → set of target peers (directed edges from route records)
         self.edges: Dict[str, Set[str]] = {}
-        # ping_id → set of peer IDs that already sent a PONG (deduplication)
-        self._seen_pongs: Dict[str, Set[str]] = {}
+        # flood_id → set of peer IDs that already sent a PING (deduplication)
+        self._seen_pings: Dict[str, Set[str]] = {}
 
-    def start_ping(self, ping_id: str) -> None:
+    def start_ping(self, flood_id: str) -> None:
         """Register a new PING session, clearing stale deduplication state for that ID.
 
         Args:
-            ping_id: UUID string from the PING payload.
+            flood_id: UUID string from the PING payload.
         """
-        self._seen_pongs[ping_id] = set()
+        self._seen_pings[flood_id] = set()
 
-    def on_pong(self, message: HiveMessage) -> bool:
-        """Ingest a received inner PONG HiveMessage and update the topology graph.
+    def on_ping(self, message: HiveMessage, received_at: Optional[float] = None) -> bool:
+        """Ingest a received PING HiveMessage and update the topology graph.
 
         The route on *message* must already contain the hop history transferred
         from the outer PROPAGATE wrapper (done by ``_unpack_message`` in the server
         protocol before this method is called).
 
         Args:
-            message: Inner PONG HiveMessage with ``msg_type == HiveMessageType.PONG``.
+            message: Inner PING HiveMessage with ``msg_type == HiveMessageType.PING``.
+            received_at: Local clock timestamp when the PING was received.
 
         Returns:
-            True if the PONG was new and the graph was updated; False if duplicate.
+            True if the PING was new and the graph was updated; False if duplicate.
         """
         payload = message.payload
         if not isinstance(payload, dict):
             return False
 
-        ping_id = payload.get("ping_id", "")
+        flood_id = payload.get("flood_id", "")
         peer = payload.get("peer", "")
 
         if not peer:
             return False
 
-        seen = self._seen_pongs.setdefault(ping_id, set())
+        seen = self._seen_pings.setdefault(flood_id, set())
         if peer in seen:
             return False
         seen.add(peer)
@@ -82,8 +88,8 @@ class HiveMapper:
         self.nodes[peer] = NodeInfo(
             peer=peer,
             site_id=payload.get("site_id"),
-            pong_timestamp=payload.get("pong_timestamp"),
-            ping_timestamp=payload.get("timestamp"),
+            timestamp=payload.get("timestamp"),
+            received_at=received_at,
         )
 
         for hop in message.route:
@@ -108,7 +114,7 @@ class HiveMapper:
             {
                 "peer": n.peer,
                 "site_id": n.site_id,
-                "pong_timestamp": n.pong_timestamp,
+                "timestamp": n.timestamp,
                 "rtt_ms": n.rtt_ms,
             }
             for n in self.nodes.values()
@@ -127,7 +133,7 @@ class HiveMapper:
     def to_ascii(self, root_peer: Optional[str] = None) -> str:
         """Render the hive topology as a human-readable ASCII tree.
 
-        PONG routes flow *toward* the originator, so edges are stored as
+        PING routes flow *toward* the originator, so edges are stored as
         ``relayer → originator``.  When ``root_peer`` (the local node / PING
         originator) is supplied the edge direction is inverted for display so
         that the tree reads top-down from the originator outward to leaf nodes.
@@ -212,4 +218,4 @@ class HiveMapper:
         """Reset the mapper to an empty state."""
         self.nodes.clear()
         self.edges.clear()
-        self._seen_pongs.clear()
+        self._seen_pings.clear()
