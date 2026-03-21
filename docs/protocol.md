@@ -98,6 +98,8 @@ Transport messages define **routing behavior**. Every transport message performs
 | **BROADCAST** | `"broadcast"` | All downstream slaves | `is_admin` required | `handle_broadcast_message` — `protocol.py:625` |
 | **PROPAGATE** | `"propagate"` | All peer slaves + upstream masters | `can_propagate` required | `handle_propagate_message` — `protocol.py:667` |
 | **ESCALATE** | `"escalate"` | Upstream masters only | `can_escalate` required | `handle_escalate_message` — `protocol.py:785` |
+| **QUERY** | `"query"` | Upstream (request) / downstream (response) | `can_escalate` required | `handle_query_message` — `protocol.py:895` |
+| **CASCADE** | `"cascade"` | All directions (request) / toward originator (response) | `can_propagate` required | `handle_cascade_message` — `protocol.py:959` |
 
 #### BROADCAST
 Admin-only. Forwards to all connected slaves except the sender. The inner payload is unpacked and handled locally (INTERCOM dispatch, site-targeted BUS injection), then the full BROADCAST wrapper is forwarded.
@@ -136,6 +138,105 @@ Satellite → Master
 
 **Illegal action**: satellite with `can_escalate=False` sends ESCALATE → `illegal_callback` fired, `client.disconnect()` — `protocol.py:799-804`
 
+#### QUERY
+
+Request-response counterpart to ESCALATE. Climbs upstream until a node's agent can answer. **First answer wins** — stops propagation. Uses `can_escalate` permission.
+
+```
+Satellite → Master (request, is_response=False)
+    Master unpacks inner BUS payload
+    Master injects into local agent bus with context["query_id"]
+    IF agent responds synchronously:
+        → Build QUERY response (is_response=True) → send back to client
+        → STOP (do NOT escalate further)
+    IF agent cannot answer:
+        → Forward QUERY upstream (query_to_master)
+        → If no upstream (top-level master): send error response back
+```
+
+```
+Master ← Upstream (response, is_response=True)
+    Route downstream toward originator_peer
+    If originator is a direct client → send to them
+    Otherwise → forward to all downstream clients
+```
+
+**Metadata fields** (`HiveMessage.metadata`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `query_id` | `str` | UUID correlation ID, set by originator |
+| `originator_peer` | `str` | Peer that started the query (for response routing) |
+| `is_response` | `bool` | `False`=request, `True`=response |
+| `responder_peer` | `str` | (response only) Peer that generated the answer |
+| `responder_site_id` | `str` | (response only) Site ID of the responder |
+
+**Bus events**: `hive.query.received` (on request), `hive.query.timeout` (no answer at top-level)
+
+Source: `handle_query_message` — `protocol.py:895`, `_try_local_agent_query` — `protocol.py:1035`
+
+#### CASCADE
+
+Request-response counterpart to PROPAGATE. Floods entire hive, collects answers from **ALL** agents. Uses `can_propagate` permission. Supports disambiguation via `cascade_select_callback`.
+
+```
+Satellite → Master (request, is_response=False)
+    Master unpacks inner BUS payload
+    Master injects into local agent bus
+    Master forwards CASCADE to ALL other downstream peers
+    Master forwards CASCADE upstream (if relay)
+    When local agent responds:
+        → Build CASCADE response (is_response=True)
+        → Route back toward originator (via _route_query_response)
+```
+
+```
+Master ← Any node (response, is_response=True)
+    If cascade_select_callback is set AND originator is a direct client:
+        → Collect in CascadeCollector (keyed by query_id)
+        → Invoke callback(query_id, responses) for disambiguation
+        → If callback returns a Message → emit on bus, clean up collector
+        → If callback returns None → wait for more responses
+    Otherwise:
+        → Forward toward originator (same as QUERY response routing)
+```
+
+**Metadata fields**: Same as QUERY, plus `responder_site_id` for attribution.
+
+**Disambiguation**: `cascade_select_callback` — `Callable[[str, List[CascadeResponse]], Optional[Message]]`
+
+```python
+def my_selector(query_id: str, responses: List[CascadeResponse]) -> Optional[Message]:
+    """Called each time a new CASCADE response arrives.
+    Return a Message to emit the selected answer, or None to wait for more."""
+    if len(responses) >= 3:
+        # Pick the best answer from collected responses
+        best = max(responses, key=lambda r: score(r))
+        return best.messages[0] if best.messages else None
+    return None  # wait for more
+
+hm_protocol.cascade_select_callback = my_selector
+```
+
+**CascadeResponse** (`protocol.py`): `responder_peer`, `responder_site_id`, `messages: List[Message]`, `metadata: dict`
+
+**Bus events**: `hive.cascade.received`
+
+Source: `handle_cascade_message` — `protocol.py:959`, `CascadeCollector` — `protocol.py:267`, `CascadeResponse` — `protocol.py:244`
+
+**Illegal action**: satellite with `can_propagate=False` sends CASCADE → `illegal_callback` fired, `client.disconnect()`
+
+#### QUERY vs CASCADE — Comparison
+
+| Aspect | QUERY | CASCADE |
+|--------|-------|---------|
+| Direction | Upstream only (like ESCALATE) | All directions (like PROPAGATE) |
+| Response count | First answer wins, stops propagation | All nodes respond |
+| ACL | `can_escalate` | `can_propagate` |
+| Timeout | Per-hop (agent can't handle → escalate) | Originator-side only |
+| Disambiguation | N/A (single answer) | `cascade_select_callback` |
+| Bus event | `hive.query.received` | `hive.cascade.received` |
+
 #### Transport Message Processing Pipeline
 
 All three transport handlers follow the same pipeline (`_unpack_message` — `protocol.py:658`):
@@ -164,8 +265,8 @@ All three transport handlers follow the same pipeline (`_unpack_message` — `pr
 | **HELLO** | `"hello"` | Session | Connection announcement; carries pubkey, peer ID, session, site_id |
 | **HANDSHAKE** | `"shake"` | Session | Crypto negotiation (password or RSA) |
 | **PING** | `"ping"` | Inner payload | Network mapping flood; always wrapped in PROPAGATE. Each node responds with its own PING (same `flood_id`). PONG removed. |
-| **QUERY** | `"query"` | Transport (TODO) | Like ESCALATE but stops at first responder |
-| **CASCADE** | `"cascade"` | Transport (TODO) | Like PROPAGATE but expects responses from all nodes |
+| **QUERY** | `"query"` | Transport | Like ESCALATE but stops at first responder; returns response to originator |
+| **CASCADE** | `"cascade"` | Transport | Like PROPAGATE but expects responses from all nodes; supports disambiguation |
 | **THIRDPRTY** | `"3rdparty"` | Payload | User-defined; arbitrary dict payload |
 | **RENDEZVOUS** | `"rendezvous"` | Reserved | For rendezvous-node discovery |
 
@@ -294,6 +395,45 @@ M0 ──BROADCAST──→ R1_sat (HiveMindSlaveProtocol.handle_broadcast)
                    R1_master ──BROADCAST──→ S0, S1, S2
 ```
 
+#### QUERY through relay chain
+```
+S0 ──QUERY(request)──→ R1_master
+                         │ _unpack_message, inject BUS into agent bus
+                         │ Agent has no answer → query_to_master()
+                         ↓
+                       R1_sat → sends QUERY upstream
+                         ↓
+                       M0 (HiveMindListenerProtocol)
+                         │ inject BUS into agent bus
+                         │ Agent responds → build QUERY(response)
+                         │ Route toward originator: S0 not a direct client
+                         │ → forward to R1_sat
+                         ↓
+                       R1_sat → receives QUERY(response)
+                         │ handle_query: is_response=True → handle_bus(inner)
+                         │ (emits on R1's shared bus → R1_master)
+                         ↓
+                       R1_master ← query_from_master handler
+                         │ forward response to S0 (direct client)
+                         ↓
+                       S0 receives QUERY(response) → handle_query → handle_bus
+```
+
+#### CASCADE through relay chain
+```
+S0 ──CASCADE(request)──→ R1_master
+                           │ inject BUS into agent bus → maybe respond
+                           │ Forward CASCADE to all other slaves of R1
+                           │ cascade_to_master() → R1_sat → upstream
+                           ↓
+                         M0
+                           │ inject BUS → agent responds
+                           │ Forward CASCADE to all OTHER slaves of M0
+                           │ Build CASCADE(response) → route toward S0
+                           ↓
+                         Responses flow back through R1 to S0
+```
+
 #### BUS (consumed-only, NOT relayed)
 ```
 S0 ──BUS──→ R1_master
@@ -319,8 +459,10 @@ HiveMind emits OVOS bus events for integration with agent plugins:
 | `hive.client.connection.error` | Invalid key or protocol | `error`, `peer` |
 | `hive.send.upstream` | Transport message needs upstream relay (legacy mode) | HiveMessage as dict |
 | `hive.send.downstream` | Agent wants to send to specific satellite | `payload`, `peer`, `msg_type` |
-| `hive.ping.received` | PROPAGATE(PING) received | `ping_id`, `peer`, `site_id` |
 | `hive.ping.received` | PROPAGATE(PING) received | `flood_id`, `peer`, `site_id` |
+| `hive.query.received` | QUERY request received by master | `query_id`, `originator_peer` |
+| `hive.query.timeout` | QUERY: top-level master has no answer | `query_id`, `error` |
+| `hive.cascade.received` | CASCADE request received by master | `query_id`, `originator_peer` |
 
 `hive.send.upstream` is the **legacy** upstream relay mechanism. When `HiveMindListenerProtocol.upstream` is set (native relay mode), this event is NOT emitted — the native callable is used instead. Agent plugins can still emit `hive.send.upstream` to initiate HiveMind messages; `HiveMindSlaveInternalProtocol.handle_send()` will pick them up.
 
@@ -361,6 +503,8 @@ Source: `handle_handshake_message` — `protocol.py:501-569`
 | BROADCAST | Handle inner payload + emit `hive.send.downstream` on bus (`handle_broadcast` — `protocol.py:242`) |
 | PROPAGATE | Dispatch inner (PING flood, INTERCOM) + emit `hive.send.downstream` (`handle_propagate` — `protocol.py:270`) |
 | INTERCOM | Decrypt + dispatch inner message (`handle_intercom` — `protocol.py:360`) |
+| QUERY | Response: emit inner BUS on internal bus. Request: forward downstream (`handle_query` — `protocol.py:344`) |
+| CASCADE | Response: emit inner BUS on internal bus. Request: forward downstream (`handle_cascade` — `protocol.py:377`) |
 | ESCALATE, SHARED_BUS | Illegal — logged as warning (`handle_illegal_msg` — `protocol.py:132`) |
 | HANDSHAKE | Continue handshake negotiation (`handle_handshake` — `protocol.py:190`) |
 | HELLO | Store master's pubkey and node_id (`handle_hello` — `protocol.py:138`) |
