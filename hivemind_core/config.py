@@ -60,7 +60,7 @@ _DEFAULT = {
     "intercom": {
         "untrusted_policy": "silent_drop",  # silent_drop | deliver_untrusted | log_only
         "require_signature": True,
-        "global_allowed_types": [],  # empty = allow all BUS message types
+        "global_allowed_types": ["speak"],  # empty = allow all BUS message types
         "trust_store": {
             "module": "hivemind-json-trust-store",
             "hivemind-json-trust-store": {
