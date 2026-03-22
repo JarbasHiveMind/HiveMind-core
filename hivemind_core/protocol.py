@@ -39,6 +39,10 @@ from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
+from hivemind_bus_client.intercom_utils import (IntercomPolicy, verify_intercom,
+                                                check_execution_whitelist)
+from hivemind_plugin_manager import TrustStoreFactory
+from hivemind_plugin_manager.database import AbstractTrustStore
 
 
 class ProtocolVersion(IntEnum):
@@ -225,6 +229,30 @@ class HiveMindListenerProtocol:
                                                                   agent_protocol=self.agent_protocol)
         else:
             self.binary_data_protocol.hm_protocol = self
+
+        # Initialize INTERCOM trust verification from config
+        cfg = get_server_config()
+        intercom_cfg = cfg.get("intercom", {})
+        self._intercom_policy = IntercomPolicy(
+            intercom_cfg.get("untrusted_policy", "silent_drop"))
+        self._intercom_require_signature = intercom_cfg.get(
+            "require_signature", True)
+        self._intercom_allowed_types = intercom_cfg.get(
+            "global_allowed_types", [])
+
+        # Instantiate trust store plugin
+        self._trust_store: Optional[AbstractTrustStore] = None
+        ts_cfg = intercom_cfg.get("trust_store", {})
+        ts_module = ts_cfg.get("module")
+        if ts_module:
+            try:
+                ts_kwargs = ts_cfg.get(ts_module, {})
+                self._trust_store = TrustStoreFactory.create(
+                    ts_module, **ts_kwargs)
+                LOG.info(f"INTERCOM trust store loaded: {ts_module}")
+            except Exception as e:
+                LOG.warning(f"Failed to load trust store '{ts_module}': {e}. "
+                            f"All INTERCOM will be treated as untrusted.")
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
@@ -737,7 +765,19 @@ class HiveMindListenerProtocol:
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ) -> bool:
+        """Handle incoming INTERCOM messages with signature verification.
 
+        Verifies the RSA signature, checks the trust store, applies the
+        configured untrusted-message policy, and enforces execution
+        whitelists before dispatching the inner message.
+
+        Args:
+            message: The incoming HiveMessage of type INTERCOM.
+            client: The client connection that relayed the message.
+
+        Returns:
+            True if the message was dispatched, False if dropped.
+        """
         # if the message targets us, send it to internal bus
         k = message.target_public_key
         if k and k != self.identity.public_key:
@@ -745,27 +785,57 @@ class HiveMindListenerProtocol:
             return False
 
         pload = message.payload
+        verification = None
         if isinstance(pload, dict) and "ciphertext" in pload:
+
+            # Verify signature + trust before decryption
+            verification = verify_intercom(pload, self._trust_store)
+
+            if self._intercom_require_signature and not verification.signature_valid:
+                LOG.warning(f"INTERCOM signature invalid from {client.peer}")
+                return False
+
+            if self._intercom_require_signature and not verification.trusted:
+                if self._intercom_policy == IntercomPolicy.SILENT_DROP:
+                    return False
+                elif self._intercom_policy == IntercomPolicy.LOG_ONLY:
+                    LOG.warning(f"Untrusted INTERCOM from pubkey "
+                                f"{(verification.sender_pubkey or '')[:60]}...")
+                    return False
+                # else: deliver_untrusted — continue with flag
+
             try:
-                ciphertext = pybase64.b64decode(pload["ciphertext"])
-                signature = pybase64.b64decode(pload["signature"])
-
-                # TODO - allow verifying, we need to store trusted pubkeys before this can be done
-                # pub = ""
-                # verified = verify_RSA(pub, ciphertext, signature)
-
                 private_key = load_RSA_key(self.identity.private_key)
-
-                decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
+                decrypted: str = decrypt_RSA(
+                    private_key,
+                    ciphertext=pybase64.b64decode(pload["ciphertext"])
+                ).decode("utf-8")
                 message._payload = HiveMessage.deserialize(decrypted)
-            except:
+            except Exception:
                 if k:
                     LOG.error("failed to decrypt message!")
                 else:
                     LOG.debug("failed to decrypt message, not for us")
                 return False
 
+            # Tag context with trust metadata
+            inner_payload = message.payload
+            if verification and isinstance(inner_payload, HiveMessage):
+                if isinstance(inner_payload.payload, Message):
+                    inner_payload.payload.context["intercom_trusted"] = verification.trusted
+                    if verification.sender_pubkey:
+                        inner_payload.payload.context["intercom_sender"] = verification.sender_pubkey
+
+        # Execution whitelist check for BUS messages
         if message.msg_type == HiveMessageType.BUS:
+            if isinstance(message.payload, Message):
+                peer = verification.peer if verification else None
+                if not check_execution_whitelist(
+                        message.payload.msg_type, peer,
+                        self._intercom_allowed_types):
+                    LOG.warning(f"INTERCOM BUS type '{message.payload.msg_type}' "
+                                f"blocked by whitelist")
+                    return False
             self.handle_bus_message(message, client)
             return True
         elif message.msg_type == HiveMessageType.PROPAGATE:

@@ -55,7 +55,20 @@ _DEFAULT = {
                  "hivemind-json-db-plugin": {
                      "name": "clients",
                      "subfolder": "hivemind-core"
-                 }}
+                 }},
+    # INTERCOM trust verification
+    "intercom": {
+        "untrusted_policy": "silent_drop",  # silent_drop | deliver_untrusted | log_only
+        "require_signature": True,
+        "global_allowed_types": [],  # empty = allow all BUS message types
+        "trust_store": {
+            "module": "hivemind-json-trust-store",
+            "hivemind-json-trust-store": {
+                "name": "trusted_peers",
+                "subfolder": "hivemind-core"
+            }
+        }
+    }
 }
 def get_server_config() -> JsonStorageXDG:
     """from ~/.config/hivemind-core/server.json """
