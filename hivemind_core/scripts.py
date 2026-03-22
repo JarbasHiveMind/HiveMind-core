@@ -135,11 +135,11 @@ def add_client(name, access_key, password, crypto_key, admin):
             "WARNING: for security the encryption key should be randomly generated\n"
             "Defining your own key is discouraged"
         )
-        if len(key) != 16:
-            print("Encryption key needs to be exactly 16 characters!")
+        if len(key) not in (16, 24, 32):
+            print("Encryption key must be 16, 24, or 32 characters (AES-128/192/256)!")
             raise ValueError
     else:
-        key = os.urandom(8).hex()
+        key = os.urandom(16).hex()  # 32 hex chars = 32 bytes = AES-256
 
     password = password or os.urandom(16).hex()
     access_key = access_key or os.urandom(16).hex()
@@ -259,14 +259,26 @@ def delete_client(node_id):
 
 
 @hmcore_cmds.command(help="List all clients and their credentials.", name="list-clients")
-def list_clients():
+@click.option("--show-secrets", is_flag=True, default=False,
+              help="Reveal pre-shared secrets (password and crypto key) in plain text.")
+def list_clients(show_secrets):
     """
-    Displays a formatted table of all clients and their credentials stored in the database.
-    
-    Excludes clients with a client ID of -1 from the listing. The table includes each client's ID, name, access key, password, and crypto key.
+    Displays a formatted table of all clients stored in the database.
+
+    The access key is a client identifier (like a username) and is always shown.
+    The password and crypto key are pre-shared secrets used for key derivation and
+    encryption; they are masked by default. Use --show-secrets to reveal them.
     """
+    def mask(value):
+        if not value:
+            return ""
+        if show_secrets:
+            return value
+        return "*" * min(len(value), 8)
+
     console = Console()
-    table = Table(title="HiveMind Credentials:")
+    title = "HiveMind Credentials" + (" [SECRETS VISIBLE]" if show_secrets else "")
+    table = Table(title=title)
     table.add_column("ID", justify="center")
     table.add_column("Name", justify="center")
     table.add_column("Access Key", justify="center")
@@ -280,11 +292,13 @@ def list_clients():
                     str(x["client_id"]),
                     x["name"],
                     x["api_key"],
-                    x["password"],
-                    x["crypto_key"],
+                    mask(x["password"]),
+                    mask(x["crypto_key"]),
                 )
 
     console.print(table)
+    if not show_secrets:
+        console.print("[dim]Secrets masked. Use --show-secrets to reveal.[/dim]")
 
 
 @hmcore_cmds.command(help="Export clients and credentials to a CSV file.", name="export-clients")
