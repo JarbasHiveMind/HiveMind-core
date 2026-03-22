@@ -822,6 +822,11 @@ class HiveMindListenerProtocol:
             self._seen_flood_ids.clear()
         self._seen_flood_ids.add(flood_id)
 
+        # Relay masters skip own responsive PING — the satellite side
+        # already responded upstream via HiveMindSlaveProtocol._handle_ping.
+        if self._upstream_hm is not None:
+            return
+
         # Build our own responsive PING with the same flood_id
         own_ping_payload = {
             "flood_id": flood_id,
@@ -842,10 +847,6 @@ class HiveMindListenerProtocol:
 
         # Send back toward sender too (so they discover us)
         client.send(own_ping_outer)
-
-        # Forward upstream if this node is a relay
-        if self._upstream_hm is not None:
-            self._upstream_hm.emit(own_ping_outer)
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -1316,11 +1317,6 @@ class HiveMindListenerProtocol:
                    (``slave.bind(bus)`` called).
         """
         self._upstream_hm = slave.hm
-
-        # Share flood_id tracking between relay sides so the master doesn't
-        # re-announce for flood_ids the satellite side already handled.
-        if hasattr(slave, '_seen_flood_ids'):
-            self._seen_flood_ids = slave._seen_flood_ids
 
         # When the upstream master sends BROADCAST or PROPAGATE down to us,
         # forward to all our downstream clients.
