@@ -704,20 +704,6 @@ class HiveMindListenerProtocol:
                 continue
             self.clients[peer].send(message)
 
-        # send to other masters
-        upstream_data = message.as_dict if hasattr(message, "as_dict") else message
-        message = Message(
-            "hive.send.upstream",
-            upstream_data,
-            {
-                "destination": "hive",
-                "source": self.peer,
-                "session": client.sess.serialize(),
-            },
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
-
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
@@ -751,20 +737,6 @@ class HiveMindListenerProtocol:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
-
-        # send to other masters
-        upstream_data = payload.as_dict if hasattr(payload, "as_dict") else payload
-        message = Message(
-            "hive.send.upstream",
-            upstream_data,
-            {
-                "destination": "hive",
-                "source": self.peer,
-                "session": client.sess.serialize(),
-            },
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
 
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
