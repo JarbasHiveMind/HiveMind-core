@@ -38,7 +38,7 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
 from hivemind_core.database import ClientDatabase
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
-from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
+from poorman_handshake.asymmetric.utils import decrypt_RSA, hybrid_decrypt_RSA, load_RSA_key
 from hivemind_bus_client.intercom_utils import (IntercomPolicy, verify_intercom,
                                                 check_execution_whitelist)
 from hivemind_plugin_manager import TrustStoreFactory
@@ -806,10 +806,12 @@ class HiveMindListenerProtocol:
 
             try:
                 private_key = load_RSA_key(self.identity.private_key)
-                decrypted: str = decrypt_RSA(
-                    private_key,
-                    ciphertext=pybase64.b64decode(pload["ciphertext"])
-                ).decode("utf-8")
+                raw_ct = pybase64.b64decode(pload["ciphertext"])
+                try:
+                    decrypted: str = hybrid_decrypt_RSA(private_key, raw_ct).decode("utf-8")
+                except Exception:
+                    # Fallback: legacy plain RSA (small payloads from old senders)
+                    decrypted: str = decrypt_RSA(private_key, raw_ct).decode("utf-8")
                 message._payload = HiveMessage.deserialize(decrypted)
             except Exception:
                 if k:
@@ -826,32 +828,41 @@ class HiveMindListenerProtocol:
                     if verification.sender_pubkey:
                         inner_payload.payload.context["intercom_sender"] = verification.sender_pubkey
 
+        # Dispatch on the inner message type (not the outer INTERCOM type).
+        # After decryption, message.payload is the inner HiveMessage.
+        inner = message.payload
+        if isinstance(inner, dict):
+            try:
+                inner = HiveMessage.deserialize(inner)
+            except Exception:
+                return False
+
         # Execution whitelist check for BUS messages
-        if message.msg_type == HiveMessageType.BUS:
-            if isinstance(message.payload, Message):
+        if inner.msg_type == HiveMessageType.BUS:
+            if isinstance(inner.payload, Message):
                 peer = verification.peer if verification else None
                 if not check_execution_whitelist(
-                        message.payload.msg_type, peer,
+                        inner.payload.msg_type, peer,
                         self._intercom_allowed_types):
-                    LOG.warning(f"INTERCOM BUS type '{message.payload.msg_type}' "
+                    LOG.warning(f"INTERCOM BUS type '{inner.payload.msg_type}' "
                                 f"blocked by whitelist")
                     return False
-            self.handle_bus_message(message, client)
+            self.handle_bus_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.PROPAGATE:
-            self.handle_propagate_message(message, client)
+        elif inner.msg_type == HiveMessageType.PROPAGATE:
+            self.handle_propagate_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.BROADCAST:
-            self.handle_broadcast_message(message, client)
+        elif inner.msg_type == HiveMessageType.BROADCAST:
+            self.handle_broadcast_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.ESCALATE:
-            self.handle_escalate_message(message, client)
+        elif inner.msg_type == HiveMessageType.ESCALATE:
+            self.handle_escalate_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.BINARY:
-            self.handle_binary_message(message, client)
+        elif inner.msg_type == HiveMessageType.BINARY:
+            self.handle_binary_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.SHARED_BUS:
-            self.handle_client_shared_bus(message.payload, client)
+        elif inner.msg_type == HiveMessageType.SHARED_BUS:
+            self.handle_client_shared_bus(inner.payload, client)
             return True
 
         return False
