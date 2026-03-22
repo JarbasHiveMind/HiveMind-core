@@ -151,7 +151,9 @@ class HiveMindClientConnection:
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
+                pload = message.payload
+                pload_size = len(pload.serialize()) if hasattr(pload, "serialize") else len(str(pload))
+                LOG.debug(f"unencrypted payload size: {pload_size} bytes")
                 payload = encrypt_as_json(
                     key=self.crypto_key, plaintext=message.serialize(),
                     cipher=self.cipher, encoding=self.encoding
@@ -648,12 +650,12 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
-        # broadcast message to other peers
-        payload = self._unpack_message(message, client)
+        # broadcast message to other peers (send the full BROADCAST wrapper)
+        self._unpack_message(message, client)
         for peer in self.clients:
             if peer == client.peer:
                 continue
-            self.clients[peer].send(payload)
+            self.clients[peer].send(message)
 
     def _unpack_message(self, message: HiveMessage, client: HiveMindClientConnection):
         # propagate message to other peers
@@ -696,16 +698,17 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
-        # propagate message to other peers
+        # propagate message to other peers (send the full PROPAGATE wrapper)
         for peer in self.clients:
             if peer == client.peer:
                 continue
-            self.clients[peer].send(payload)
+            self.clients[peer].send(message)
 
         # send to other masters
+        upstream_data = message.as_dict if hasattr(message, "as_dict") else message
         message = Message(
             "hive.send.upstream",
-            payload,
+            upstream_data,
             {
                 "destination": "hive",
                 "source": self.peer,
@@ -750,9 +753,10 @@ class HiveMindListenerProtocol:
                 self.handle_bus_message(message.payload, client)
 
         # send to other masters
+        upstream_data = payload.as_dict if hasattr(payload, "as_dict") else payload
         message = Message(
             "hive.send.upstream",
-            payload,
+            upstream_data,
             {
                 "destination": "hive",
                 "source": self.peer,
