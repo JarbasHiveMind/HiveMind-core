@@ -739,6 +739,15 @@ class HiveMindListenerProtocol:
         # Always feed mapper (register sender info, including public_key/lang)
         self.hive_mapper.on_ping(message, received_at=time.time())
 
+        # Notify local agent bus that a PING was received
+        self.agent_protocol.bus.emit(
+            Message("hive.ping.received", {
+                "flood_id": flood_id,
+                "peer": ping_payload.get("peer", ""),
+                "site_id": ping_payload.get("site_id", ""),
+            })
+        )
+
         # Flood-loop prevention — delegated to HiveMapper (FIFO eviction)
         if not flood_id or self.hive_mapper.check_flood_id(flood_id):
             return
