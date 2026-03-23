@@ -1,0 +1,11 @@
+name: Lint
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+
+jobs:
+  lint:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/lint.yml@dev

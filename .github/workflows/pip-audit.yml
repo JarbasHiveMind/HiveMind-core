@@ -1,0 +1,11 @@
+name: Pip Audit
+
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+    branches: [dev, master]
+
+jobs:
+  pip-audit:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/pip-audit.yml@dev

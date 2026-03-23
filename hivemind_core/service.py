@@ -27,6 +27,7 @@ from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
 from hivemind_plugin_manager import AgentProtocolFactory, NetworkProtocolFactory, BinaryDataHandlerProtocolFactory
 from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol
 
+
 def get_agent_protocol():
     config = get_server_config()["agent_protocol"]
     name = config["module"]
@@ -95,8 +96,7 @@ class HiveMindService:
 
     def __post_init__(self) -> None:
         """
-        Initializes the service's status and presence objects after the dataclass
-        has been created.
+        Initializes the service's status after the dataclass has been created.
         """
         self._status = self._status or ProcessStatus("HiveMind",
                                                      callback_map=StatusCallbackMap(

@@ -63,8 +63,10 @@ class ClientDatabase:
                    allowed_types: Optional[List[str]] = None,
                    crypto_key: Optional[str] = None,
                    password: Optional[str] = None) -> bool:
-        if crypto_key is not None:
-            crypto_key = crypto_key[:16]
+        if crypto_key is not None and len(crypto_key) not in (16, 24, 32):
+            raise ValueError(
+                f"crypto_key must be 16, 24, or 32 characters (AES-128/192/256), got {len(crypto_key)}"
+            )
 
         user = self.get_client_by_api_key(key)
         if user:
