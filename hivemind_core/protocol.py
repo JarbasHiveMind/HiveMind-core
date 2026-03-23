@@ -721,7 +721,10 @@ class HiveMindListenerProtocol:
         # Flood-loop prevention: if we already responded to this flood_id, stop
         if not flood_id or flood_id in self._seen_flood_ids:
             return
-        # TODO: Cap set size to prevent unbounded memory growth
+
+        # Evict oldest entries when cache is full (FIFO-ish)
+        while len(self._seen_flood_ids) >= 1000:
+            self._seen_flood_ids.pop()
         self._seen_flood_ids.add(flood_id)
 
         # Build our own responsive PING with the same flood_id
