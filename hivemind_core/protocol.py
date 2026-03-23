@@ -36,6 +36,7 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
                                             decrypt_bin, encrypt_bin,
                                             _norm_encoding, _norm_cipher)
 from hivemind_core.database import ClientDatabase
+from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
@@ -206,6 +207,8 @@ class HiveMindListenerProtocol:
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
+    hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
+
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
@@ -215,9 +218,9 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
 
-    clients = {}  # class object
-
     def __post_init__(self):
+        self.clients = {}
+        self._seen_flood_ids: set = set()
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -668,6 +671,9 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
+        if message.payload.msg_type == HiveMessageType.PING:
+            self.handle_ping_message(payload, client)
+
         # propagate message to other peers
         for peer in self.clients:
             if peer == client.peer:
@@ -686,6 +692,53 @@ class HiveMindListenerProtocol:
         )
         bus = self.get_bus(client)
         bus.emit(message)
+
+    def handle_ping_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Handle an inner PING message received inside a PROPAGATE wrapper.
+
+        Feeds the PING into the local ``HiveMapper``, emits ``hive.ping.received``
+        on the agent bus, then — if this ``flood_id`` has not been seen before —
+        builds and sends this node's own responsive PING (same ``flood_id``) to
+        all peers and upstream.
+
+        Args:
+            message: Inner PING HiveMessage (route already transferred from outer
+                PROPAGATE by ``_unpack_message``).
+            client: Connection that delivered the PROPAGATE(PING).
+        """
+        ping_payload = message.payload
+        if not isinstance(ping_payload, dict):
+            LOG.warning("PING received with non-dict payload, ignoring")
+            return
+
+        flood_id = ping_payload.get("flood_id", "")
+
+        # Always feed mapper (register sender info)
+        self.hive_mapper.on_ping(message, received_at=time.time())
+
+        # Flood-loop prevention: if we already responded to this flood_id, stop
+        if not flood_id or flood_id in self._seen_flood_ids:
+            return
+        # TODO: Cap set size to prevent unbounded memory growth
+        self._seen_flood_ids.add(flood_id)
+
+        # Build our own responsive PING with the same flood_id
+        own_ping_payload = {
+            "flood_id": flood_id,
+            "peer": self.peer,
+            "site_id": self.identity.site_id,
+            "timestamp": time.time(),
+        }
+        own_ping_inner = HiveMessage(HiveMessageType.PING, own_ping_payload)
+        own_ping_outer = HiveMessage(HiveMessageType.PROPAGATE, payload=own_ping_inner)
+
+        LOG.debug(f"Sending responsive PING for flood_id={flood_id}")
+
+        # Send to all downstream peers
+        for peer_id, conn in self.clients.items():
+            conn.send(own_ping_outer)
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -720,19 +773,6 @@ class HiveMindListenerProtocol:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
-
-        # send to other masters
-        message = Message(
-            "hive.send.upstream",
-            payload,
-            {
-                "destination": "hive",
-                "source": self.peer,
-                "session": client.sess.serialize(),
-            },
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
 
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
