@@ -37,7 +37,7 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
                                             decrypt_bin, encrypt_bin,
                                             _norm_encoding, _norm_cipher)
 from hivemind_core.database import ClientDatabase
-from hivemind_core.hive_map import HiveMapper
+from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
