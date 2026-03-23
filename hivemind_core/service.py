@@ -108,6 +108,53 @@ class HiveMindService:
                                                      ))
         self._status.set_alive()
 
+    def _ggwave_add_client(self, access_key: str, pswd: str) -> None:
+        """Callback for GGWave pairing: register a new client without importing
+        hivemind-core inside hivemind-presence."""
+        import os
+        key = os.urandom(16).hex()  # 32 hex chars = 32 bytes = AES-256
+        with ClientDatabase() as db:
+            name = f"HiveMind-Node-{db.total_clients()}"
+            db.add_client(name, access_key, crypto_key=key, password=pswd)
+            LOG.info(f"GGWave pairing: registered '{name}' key={access_key}")
+
+    def _start_presence(self) -> None:
+        """Optionally start LocalPresence if hivemind-presence is installed."""
+        try:
+            from hivemind_presence import LocalPresence
+        except ImportError:
+            return
+
+        cfg = get_server_config()
+        presence_cfg = cfg.get("presence", {})
+        if not presence_cfg.get("enabled", True):
+            return
+
+        # Derive port/ssl from the first configured network protocol
+        net_protocols = cfg.get("network_protocol", {})
+        first_proto = next(iter(net_protocols.values()), {}) if net_protocols else {}
+        port = first_proto.get("port", 5678)
+        ssl = first_proto.get("ssl", False)
+
+        self._presence = LocalPresence(
+            port=port,
+            ssl=ssl,
+            name=presence_cfg.get("name", "HiveMind-Node"),
+            upnp=presence_cfg.get("upnp", False),
+            zeroconf=presence_cfg.get("zeroconf", True),
+            beacon=presence_cfg.get("beacon", True),
+            ggwave=presence_cfg.get("ggwave", False),
+            ggwave_add_client_callback=self._ggwave_add_client
+            if presence_cfg.get("ggwave", False) else None,
+        )
+        create_daemon(self._presence.start)
+        LOG.info("LocalPresence started")
+
+    def _stop_presence(self) -> None:
+        presence = getattr(self, "_presence", None)
+        if presence is not None:
+            presence.stop()
+
     def run(self):
         self._status.set_started()
 
@@ -150,7 +197,9 @@ class HiveMindService:
             create_daemon(network_protocol.run)
 
         self._status.set_ready()
+        self._start_presence()
 
         wait_for_exit_signal()  # block until ctrl+c
 
+        self._stop_presence()
         self._status.set_stopping()

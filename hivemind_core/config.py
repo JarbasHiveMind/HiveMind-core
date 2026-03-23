@@ -18,7 +18,6 @@ import os.path
 from json_database import JsonStorageXDG
 from ovos_utils.xdg_utils import xdg_config_home, xdg_data_home
 
-
 _DEFAULT = {
     # enable the hivemind binarization protocol
     "binarize": False,  # default False because of a bug in old hivemind-bus-client versions
@@ -31,37 +30,53 @@ _DEFAULT = {
     "allowed_ciphers": ["CHACHA20-POLY1305", 'AES-GCM'],
 
     # configure various plugins
-    "agent_protocol": {"module": "hivemind-ovos-agent-plugin",
-                       "hivemind-ovos-agent-plugin": {
-                           "host": "127.0.0.1",
-                           "port": 8181
-                       }},
+    "agent_protocol": {
+        "module": "hivemind-ovos-agent-plugin",
+        "hivemind-persona-agent-plugin": {
+            "persona": "~/.config/ovos_persona/persona.json"
+        },
+        "hivemind-ovos-agent-plugin": {
+            "host": "127.0.0.1",
+            "port": 8181
+        }
+    },
     "binary_protocol": {"module": None},
     "network_protocol": {"hivemind-websocket-plugin": {
-                             "host": "0.0.0.0",
-                             "port": 5678,
-                             "ssl": False,
-                             "cert_dir": f"{xdg_data_home()}/hivemind",
-                             "cert_name": "hivemind"
-                         },
-                         "hivemind-http-plugin": {
-                             "host": "0.0.0.0",
-                             "port": 5679,
-                             "ssl": False,
-                             "cert_dir": f"{xdg_data_home()}/hivemind",
-                             "cert_name": "hivemind"
-                         }},
+        "host": "0.0.0.0",
+        "port": 5678,
+        "ssl": False,
+        "cert_dir": f"{xdg_data_home()}/hivemind",
+        "cert_name": "hivemind"
+    },
+        "hivemind-http-plugin": {
+            "host": "0.0.0.0",
+            "port": 5679,
+            "ssl": False,
+            "cert_dir": f"{xdg_data_home()}/hivemind",
+            "cert_name": "hivemind"
+        }},
     "database": {"module": "hivemind-json-db-plugin",
                  "hivemind-json-db-plugin": {
                      "name": "clients",
                      "subfolder": "hivemind-core"
-                 }}
+                 }},
+    # Local-network presence / discovery (requires optional hivemind-presence package)
+    "presence": {
+        "enabled": True,
+        "name": "HiveMind-Node",
+        "zeroconf": True,  # mDNS/Zeroconf (requires optional zeroconf package)
+        "upnp": False,  # UPnP/SSDP (requires upnpclient)
+        "beacon": True,  # HiveBeacon UDP broadcast (requires optional hivebeacon)
+        "ggwave": False,  # GGWave audio pairing (requires optional hivemind-ggwave + binaries)
+    }
 }
+
+
 def get_server_config() -> JsonStorageXDG:
     """from ~/.config/hivemind-core/server.json """
     db = JsonStorageXDG("server",
-                          xdg_folder=xdg_config_home(),
-                          subfolder="hivemind-core")
+                        xdg_folder=xdg_config_home(),
+                        subfolder="hivemind-core")
     if not os.path.isfile(db.path):
         db.merge(_DEFAULT)
         db.store()
