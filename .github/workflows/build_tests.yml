@@ -23,3 +23,7 @@ jobs:
       - name: Install package
         run: |
           pip install .
+      - name: Run E2E Tests
+        run: |
+          pip install hivescope
+          pytest tests/e2e/ -v
