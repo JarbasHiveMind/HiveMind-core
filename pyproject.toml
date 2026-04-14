@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hivemind-core"
+dynamic = ["version"]
+description = "Mesh Networking utilities for OpenVoiceOS"
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+requires-python = ">=3.10"
+dependencies = [
+    "click",
+    "click_default_group",
+    "rich",
+    "pycryptodomex",
+    "poorman-handshake>=1.0.1,<2.0.0",
+    "hivemind_bus_client>=0.5.0a1,<1.0.0",
+    "ovos_utils>=0.0.33,<1.0.0",
+    "pybase64",
+    "hivemind-plugin-manager>=0.3.0,<1.0.0",
+    "ovos-bus-client>=1.3.1,<2.0.0",
+    "json-database>=0.9.1,<1.0.0",
+    "hivemind-websocket-protocol>=0.0.3,<1.0.0",
+    "setuptools",
+]
+
+[project.scripts]
+hivemind-core = "hivemind_core.scripts:hmcore_cmds"
+
+[tool.setuptools]
+packages = ["hivemind_core"]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "hivemind_core.version.__version__"}
