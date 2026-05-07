@@ -10,8 +10,5 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
     with:
       python_versions: '["3.10", "3.11", "3.12", "3.13"]'
-      # TEMP: pin hivemind-bus-client to the feature branch carrying the
-      # protocol fix until #112 lands and a release ships. hivescope is
-      # required by tests/e2e/.
-      pre_install_pip: '"hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e" "hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev"'
+      pre_install_pip: '"hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev"'
       test_path: 'tests/'
