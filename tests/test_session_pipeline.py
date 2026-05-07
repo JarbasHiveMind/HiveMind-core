@@ -112,6 +112,31 @@ class TestSessionPipelineHandling(unittest.TestCase):
         self.assertIsNone(emitted.context["session"]["pipeline"])
         self.assertIsNone(client.sess.pipeline)
 
+    def test_invalid_bus_payload_is_ignored(self):
+        protocol = _make_protocol()
+        client = _make_client(protocol, ["client-pipeline"])
+
+        protocol.handle_bus_message(
+            HiveMessage(HiveMessageType.BUS, {"context": {}}), client
+        )
+
+        protocol.agent_protocol.bus.emit.assert_not_called()
+        client.disconnect.assert_not_called()
+        self.assertEqual(client.sess.pipeline, ["client-pipeline"])
+
+    def test_agent_bus_callback_runs_once(self):
+        protocol = _make_protocol()
+        protocol.agent_bus_callback = MagicMock()
+        client = _make_client(protocol, ["client-pipeline"])
+        raw_session = {"session_id": "session-1", "site_id": "client-site"}
+        bus_message = _make_bus_message({"session": raw_session})
+
+        protocol.handle_bus_message(
+            HiveMessage(HiveMessageType.BUS, bus_message), client
+        )
+
+        protocol.agent_bus_callback.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -581,7 +581,16 @@ class HiveMindListenerProtocol:
 
         If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
         """
-        payload = message.payload
+        try:
+            payload = message.payload
+        except (AttributeError, KeyError, TypeError, ValueError):
+            LOG.warning("Ignoring BUS payload with invalid message/context shape")
+            return
+
+        if not isinstance(payload, Message) or not isinstance(payload.context, dict):
+            LOG.warning("Ignoring BUS payload with invalid message/context shape")
+            return
+
         raw_session = payload.context.get("session") or {}
         sent_pipeline = isinstance(raw_session, dict) and "pipeline" in raw_session
         sess = Session.from_message(payload)
@@ -599,8 +608,6 @@ class HiveMindListenerProtocol:
             LOG.debug(f"Client session updated from payload: {sess.serialize()}")
 
         self.handle_inject_agent_msg(payload, client)
-        if self.agent_bus_callback:
-            self.agent_bus_callback(payload)
 
     def handle_broadcast_message(
             self, message: HiveMessage, client: HiveMindClientConnection
