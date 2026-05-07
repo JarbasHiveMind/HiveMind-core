@@ -7,28 +7,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
+    with:
+      python_versions: '["3.10", "3.11", "3.12", "3.13"]'
       # TEMP: pin hivemind-bus-client to the feature branch carrying the
-      # protocol fix until that PR (#112) lands and a release ships.
-      - name: Install bus-client from feature branch
-        run: pip install "hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"
-      - name: Install package
-        run: pip install -e .
-      # The legacy test/ directory's unit tests were removed because they
-      # referenced classes from a defunct package (jarbas_hive_mind) and
-      # symbols (HiveNodeClient, JsonDB) that no longer exist. Behaviour is
-      # now covered by tests/e2e/ via hivescope (e2e_tests job below). The
-      # build matrix here verifies build + install across Python versions.
+      # protocol fix until #112 lands and a release ships.
+      pre_install_pip: '"hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"'
 
   e2e_tests:
     runs-on: ubuntu-latest

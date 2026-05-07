@@ -12,3 +12,6 @@ jobs:
     with:
       python_version: '3.11'
       coverage_source: 'hivemind_core'
+      # TEMP: pin hivemind-bus-client to the feature branch carrying the
+      # protocol fix until #112 lands and a release ships.
+      pre_install_pip: '"hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"'
