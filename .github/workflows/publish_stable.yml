@@ -8,7 +8,9 @@ on:
 jobs:
   publish_stable:
     uses: OpenVoiceOS/gh-automations/.github/workflows/publish-stable.yml@dev
-    secrets: inherit
+    secrets:
+      PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      MATRIX_TOKEN: ${{ secrets.MATRIX_TOKEN }}
     with:
       version_file: 'hivemind_core/version.py'
       publish_pypi: true

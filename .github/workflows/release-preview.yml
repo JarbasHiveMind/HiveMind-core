@@ -8,7 +8,6 @@ on:
 jobs:
   release_preview:
     uses: OpenVoiceOS/gh-automations/.github/workflows/release-preview.yml@dev
-    secrets: inherit
     with:
       package_name: 'hivemind_core'
       version_file: 'hivemind_core/version.py'
