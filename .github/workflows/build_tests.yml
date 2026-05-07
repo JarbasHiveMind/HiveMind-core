@@ -22,16 +22,13 @@ jobs:
       # protocol fix until that PR (#112) lands and a release ships.
       - name: Install bus-client from feature branch
         run: pip install "hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"
-      - name: Install package and pytest
-        run: |
-          pip install -e .
-          pip install pytest
-      - name: Run unit tests
-        # test_bus.py and test_db.py reference symbols (HiveNodeClient, JsonDB)
-        # that were removed in a prior refactor; tracked separately.
-        run: pytest test/ -v
-          --ignore=test/unittests/test_bus.py
-          --ignore=test/unittests/test_db.py
+      - name: Install package
+        run: pip install -e .
+      # The legacy test/ directory's unit tests were removed because they
+      # referenced classes from a defunct package (jarbas_hive_mind) and
+      # symbols (HiveNodeClient, JsonDB) that no longer exist. Behaviour is
+      # now covered by tests/e2e/ via hivescope (e2e_tests job below). The
+      # build matrix here verifies build + install across Python versions.
 
   e2e_tests:
     runs-on: ubuntu-latest
