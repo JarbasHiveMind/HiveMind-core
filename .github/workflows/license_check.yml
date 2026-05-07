@@ -12,4 +12,4 @@ jobs:
     with:
       # The package itself ships under AGPL — exclude it from the
       # downstream-licence audit to avoid self-flagging.
-      exclude_packages: '^(hivemind-core|hivemind_core)$'
+      exclude_packages: '^hivemind-core$'
