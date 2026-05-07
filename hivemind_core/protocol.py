@@ -585,6 +585,8 @@ class HiveMindListenerProtocol:
         raw_session = payload.context.get("session") or {}
         sent_pipeline = isinstance(raw_session, dict) and "pipeline" in raw_session
         sess = Session.from_message(payload)
+        if sent_pipeline:
+            sess.pipeline = raw_session.get("pipeline")
         if sess.session_id == "default" and not client.is_admin:
             LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
             client.disconnect()
@@ -840,6 +842,7 @@ class HiveMindListenerProtocol:
         raw_session = message.context.get("session") or {}
         session = client.sess.serialize()
         if not isinstance(raw_session, dict) or "pipeline" not in raw_session:
+            # Each bus message owns its outbound pipeline; do not reattach one from an earlier message.
             session.pop("pipeline", None)
         message.context["session"] = session
 

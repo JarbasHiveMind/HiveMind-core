@@ -37,16 +37,34 @@ def _make_client(protocol, pipeline):
     return client
 
 
+def _make_bus_message(context):
+    return Message(
+        "recognizer_loop:utterance",
+        {"utterances": ["hello"]},
+        context,
+    )
+
+
 class TestSessionPipelineHandling(unittest.TestCase):
     def test_missing_pipeline_is_not_invented_from_core_config(self):
         protocol = _make_protocol()
         client = _make_client(protocol, ["client-pipeline"])
         raw_session = {"session_id": "session-1", "site_id": "client-site"}
-        bus_message = Message(
-            "recognizer_loop:utterance",
-            {"utterances": ["hello"]},
-            {"session": raw_session},
+        bus_message = _make_bus_message({"session": raw_session})
+
+        protocol.handle_bus_message(
+            HiveMessage(HiveMessageType.BUS, bus_message), client
         )
+
+        emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
+        self.assertNotIn("pipeline", emitted.context["session"])
+        self.assertEqual(client.sess.pipeline, ["client-pipeline"])
+
+    def test_missing_session_key_is_not_given_pipeline(self):
+        protocol = _make_protocol()
+        client = _make_client(protocol, ["client-pipeline"])
+        client.is_admin = True
+        bus_message = _make_bus_message({})
 
         protocol.handle_bus_message(
             HiveMessage(HiveMessageType.BUS, bus_message), client
@@ -64,11 +82,7 @@ class TestSessionPipelineHandling(unittest.TestCase):
             "site_id": "client-site",
             "pipeline": ["client-sent-pipeline"],
         }
-        bus_message = Message(
-            "recognizer_loop:utterance",
-            {"utterances": ["hello"]},
-            {"session": raw_session},
-        )
+        bus_message = _make_bus_message({"session": raw_session})
 
         protocol.handle_bus_message(
             HiveMessage(HiveMessageType.BUS, bus_message), client
@@ -79,6 +93,24 @@ class TestSessionPipelineHandling(unittest.TestCase):
             emitted.context["session"]["pipeline"], ["client-sent-pipeline"]
         )
         self.assertEqual(client.sess.pipeline, ["client-sent-pipeline"])
+
+    def test_explicit_none_pipeline_is_kept(self):
+        protocol = _make_protocol()
+        client = _make_client(protocol, ["old-pipeline"])
+        raw_session = {
+            "session_id": "session-1",
+            "site_id": "client-site",
+            "pipeline": None,
+        }
+        bus_message = _make_bus_message({"session": raw_session})
+
+        protocol.handle_bus_message(
+            HiveMessage(HiveMessageType.BUS, bus_message), client
+        )
+
+        emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
+        self.assertIsNone(emitted.context["session"]["pipeline"])
+        self.assertIsNone(client.sess.pipeline)
 
 
 if __name__ == "__main__":
