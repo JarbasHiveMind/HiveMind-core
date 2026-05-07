@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.1.0a1) (2026-05-07)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.0.1a1...4.1.0a1)
+
+**Merged pull requests:**
+
+- feat\(tests\): hivescope e2e skeleton [\#80](https://github.com/JarbasHiveMind/HiveMind-core/pull/80) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.0.1a1) (2026-03-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.0.0...4.0.1a1)
