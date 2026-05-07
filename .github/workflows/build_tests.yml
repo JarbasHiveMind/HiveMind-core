@@ -25,5 +25,5 @@ jobs:
           pip install .
       - name: Run E2E Tests
         run: |
-          pip install "hivescope @ git+https://github.com/JarbasHiveMind/hivescope@master"
+          pip install "hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev"
           pytest tests/e2e/ -v
