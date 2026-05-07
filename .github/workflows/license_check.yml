@@ -12,6 +12,5 @@ jobs:
     with:
       # The package itself ships under AGPL — exclude it from the
       # downstream-licence audit to avoid self-flagging.
-      # Exclude both dash + underscore variants (pip-licenses normalizes
-      # inconsistently) without anchors so version suffixes don't matter.
-      exclude_packages: '^(hivemind-core|hivemind_core)'
+      # Use the same pattern shape the upstream action's docs recommend.
+      exclude_packages: '(?i)^hivemind[-_]core.*'
