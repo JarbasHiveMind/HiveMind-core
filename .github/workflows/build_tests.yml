@@ -14,21 +14,10 @@ jobs:
       # protocol fix until #112 lands and a release ships.
       pre_install_pip: '"hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"'
 
-  e2e_tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      # TEMP: pin hivemind-bus-client to the feature branch carrying the
-      # protocol fix until that PR (#112) lands and a release ships.
-      - name: Install bus-client from feature branch
-        run: pip install "hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"
-      - name: Install package
-        run: pip install .
-      - name: Install hivescope
-        run: pip install "hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev"
-      - name: Run E2E Tests
-        run: pytest tests/e2e/ -v
+  e2e:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
+    with:
+      python_versions: '["3.11"]'
+      # TEMP bus-client pin (see above) plus hivescope from dev.
+      pre_install_pip: '"hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e" "hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev"'
+      test_path: 'tests/e2e/'
