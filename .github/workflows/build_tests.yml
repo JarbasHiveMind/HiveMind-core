@@ -22,8 +22,10 @@ jobs:
       # protocol fix until that PR (#112) lands and a release ships.
       - name: Install bus-client from feature branch
         run: pip install "hivemind-bus-client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/hivescope-e2e"
-      - name: Install package and test extras
-        run: pip install -e ".[test]"
+      - name: Install package and pytest
+        run: |
+          pip install -e .
+          pip install pytest
       - name: Run unit tests
         run: pytest test/ -v
 
