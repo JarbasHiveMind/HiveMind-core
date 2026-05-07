@@ -1,6 +1,7 @@
 """Connection lifecycle: peers register and deregister cleanly."""
 
 from hivescope import TopologyBuilder
+from hivescope.scenarios import three_satellites
 
 
 def test_disconnected_peer_drops_from_connected_peers():
@@ -8,8 +9,8 @@ def test_disconnected_peer_drops_from_connected_peers():
     m = b.add_master("M0")
     b.add_satellite("S0", upstream=m)
     b.add_satellite("S1", upstream=m)
-    b.start_all()
     try:
+        b.start_all()
         m0 = b.get_master("M0")
         s0 = b.get_satellite("S0")
 
@@ -22,11 +23,9 @@ def test_disconnected_peer_drops_from_connected_peers():
 
 
 def test_three_satellites_register_independently():
-    from hivescope.scenarios import three_satellites
-
     b = three_satellites()
-    b.start_all()
     try:
+        b.start_all()
         m0 = b.get_master("M0")
         peers = m0.connected_peers()
         assert len(peers) == 3, peers
