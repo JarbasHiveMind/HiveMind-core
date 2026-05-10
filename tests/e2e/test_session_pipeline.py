@@ -14,6 +14,27 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 
 from hivescope.scenarios import admin_satellite
+from hivescope.topology import TopologyBuilder
+
+
+def _non_admin_satellite():
+    """Non-admin counterpart to ``admin_satellite()``.
+
+    Needed for tests that probe the ``session_id == "default"`` rejection,
+    which only fires for non-admin peers. ``allowed_types`` is set
+    explicitly because ``recognizer_loop:utterance`` is not in the default
+    allowlist for non-admin satellites.
+    """
+    b = TopologyBuilder()
+    m = b.add_master("M0")
+    m.register_satellite(
+        "test-key",
+        password="test-password",
+        is_admin=False,
+        allowed_types=["recognizer_loop:utterance"],
+    )
+    b.add_satellite("S0", upstream=m)
+    return b
 
 
 def _wait_for(condition, timeout: float = 2.0, interval: float = 0.02) -> bool:
@@ -126,6 +147,80 @@ def test_agent_bus_callback_fires_exactly_once_per_bus_message():
         time.sleep(0.05)
         assert callback.call_count == 1, (
             f"agent_bus_callback fired {callback.call_count} times, expected 1"
+        )
+    finally:
+        b.stop_all()
+
+
+def test_non_admin_default_session_id_is_disconnected():
+    """Non-admin client may not use the reserved ``default`` session id."""
+    b = _non_admin_satellite()
+    try:
+        b.start_all()
+        m = b.get_master("M0")
+        s = b.get_satellite("S0")
+
+        peer = next(iter(m.hm_protocol.clients))
+        client = m.hm_protocol.clients[peer]
+        client.disconnect = MagicMock()
+
+        _send_bus(s, {"session_id": "default", "site_id": "client-site"})
+
+        assert _wait_for(lambda: client.disconnect.called), (
+            "non-admin client using session_id='default' was not disconnected"
+        )
+        # And the message must not have reached the agent bus.
+        assert not any(
+            msg.msg_type == "recognizer_loop:utterance"
+            for msg in m.agent_protocol.injected
+        ), m.agent_protocol.injected
+    finally:
+        b.stop_all()
+
+
+def test_non_admin_payload_without_session_is_disconnected():
+    """Missing session in payload defaults to ``default`` and is rejected."""
+    b = _non_admin_satellite()
+    try:
+        b.start_all()
+        m = b.get_master("M0")
+        s = b.get_satellite("S0")
+
+        peer = next(iter(m.hm_protocol.clients))
+        client = m.hm_protocol.clients[peer]
+        client.disconnect = MagicMock()
+
+        # Build the BUS message with NO session in context — Session.from_message
+        # will fall back to the reserved 'default' id, which a non-admin may not use.
+        msg = Message(
+            "recognizer_loop:utterance", {"utterances": ["hello"]}, {}
+        )
+        s.send(HiveMessage(HiveMessageType.BUS, payload=msg))
+
+        assert _wait_for(lambda: client.disconnect.called), (
+            "non-admin client whose payload had no session was not disconnected"
+        )
+    finally:
+        b.stop_all()
+
+
+def test_admin_default_session_id_is_allowed():
+    """Counterpart: admin clients may use ``default`` and the message lands."""
+    b = admin_satellite()
+    try:
+        b.start_all()
+        m = b.get_master("M0")
+        s = b.get_satellite("S0")
+
+        peer = next(iter(m.hm_protocol.clients))
+        client = m.hm_protocol.clients[peer]
+        client.disconnect = MagicMock()
+
+        _send_bus(s, {"session_id": "default", "site_id": "client-site"})
+
+        assert _wait_for(lambda: len(m.agent_protocol.injected) >= 1)
+        assert not client.disconnect.called, (
+            "admin client using session_id='default' was wrongly disconnected"
         )
     finally:
         b.stop_all()
