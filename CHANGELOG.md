@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.1.1a1) (2026-05-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.1.0a1...4.1.1a1)
+
+**Merged pull requests:**
+
+- fix: preserve client session pipeline [\#79](https://github.com/JarbasHiveMind/HiveMind-core/pull/79) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.1.0a1) (2026-05-07)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.0.1a1...4.1.0a1)
