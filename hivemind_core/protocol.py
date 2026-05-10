@@ -581,19 +581,33 @@ class HiveMindListenerProtocol:
 
         If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
         """
-        sess = Session.from_message(message.payload)
+        try:
+            payload = message.payload
+        except (AttributeError, KeyError, TypeError, ValueError):
+            LOG.warning("Ignoring BUS payload with invalid message/context shape")
+            return
+
+        if not isinstance(payload, Message) or not isinstance(payload.context, dict):
+            LOG.warning("Ignoring BUS payload with invalid message/context shape")
+            return
+
+        raw_session = payload.context.get("session") or {}
+        sent_pipeline = isinstance(raw_session, dict) and "pipeline" in raw_session
+        sess = Session.from_message(payload)
+        if sent_pipeline:
+            sess.pipeline = raw_session.get("pipeline")
         if sess.session_id == "default" and not client.is_admin:
             LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
             client.disconnect()
             return
 
         if sess.session_id != "default" and client.sess.session_id == sess.session_id:
+            if not sent_pipeline:
+                sess.pipeline = client.sess.pipeline
             client.sess = sess
             LOG.debug(f"Client session updated from payload: {sess.serialize()}")
 
-        self.handle_inject_agent_msg(message.payload, client)
-        if self.agent_bus_callback:
-            self.agent_bus_callback(message.payload)
+        self.handle_inject_agent_msg(payload, client)
 
     def handle_broadcast_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -832,7 +846,12 @@ class HiveMindListenerProtocol:
     # HiveMind mycroft bus messages -  from slave -> master
     def _update_blacklist(self, message: Message, client: HiveMindClientConnection):
         LOG.debug("replacing message metadata with hivemind client session")
-        message.context["session"] = client.sess.serialize()
+        raw_session = message.context.get("session") or {}
+        session = client.sess.serialize()
+        if not isinstance(raw_session, dict) or "pipeline" not in raw_session:
+            # Each bus message owns its outbound pipeline; do not reattach one from an earlier message.
+            session.pop("pipeline", None)
+        message.context["session"] = session
 
         # update blacklist from db, to account for changes without requiring a restart
         self.db.sync()
