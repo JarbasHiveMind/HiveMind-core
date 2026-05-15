@@ -68,6 +68,7 @@ HiveMind is designed to be modular, allowing you to customize its behavior throu
 - **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins** (e.g., OVOS, Persona).
 - **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins** (e.g., process incoming audio).
 - **Database**: 🗃️ how client credentials are stored is implemented via **database plugins** (e.g., JSON, SQLite, Redis).
+- **Policy**: optional dynamic ACL checks can be implemented via **policy plugins** before client messages are forwarded to the bus.
 
 ---
 
@@ -91,6 +92,8 @@ The default configuration
   "binary_protocol": {
     "module": null
   },
+  "policy": {},
+  "policy_fail_closed": true,
   "network_protocol": {
     "hivemind-websocket-plugin": {
       "host": "0.0.0.0",
@@ -110,6 +113,21 @@ The default configuration
   }
 }
 ```
+
+A policy plugin can be enabled by entry point name:
+
+```json
+{
+  "policy": {
+    "example-utterance-limit": {
+      "limit": 100
+    }
+  },
+  "policy_fail_closed": true
+}
+```
+
+Policy plugins do not change HiveMind identity. Clients are still identified by `api_key`; the policy receives the authenticated client/database record from core. If a policy denies a message, the message is not emitted to the agent bus and the client receives a `hive.policy.denied` bus message with the policy code/reason.
 
 
 ---
