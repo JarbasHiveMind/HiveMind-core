@@ -566,7 +566,7 @@ class HiveMindListenerProtocol:
 
         message.update_hop_data()
         user = None
-        if message.msg_type not in [HiveMessageType.HANDSHAKE, HiveMessageType.HELLO]:
+        if self.policy_protocols and message.msg_type not in [HiveMessageType.HANDSHAKE, HiveMessageType.HELLO]:
             user = self._get_client_user(client)
             if not self._authorize_hive_message_policies(message, client, user):
                 return
@@ -612,9 +612,10 @@ class HiveMindListenerProtocol:
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
         assert message.msg_type == HiveMessageType.BINARY
-        user = self._get_client_user(client)
-        if not self._authorize_binary_payload_policies(message, client, user):
-            return
+        if self.policy_protocols:
+            user = self._get_client_user(client)
+            if not self._authorize_binary_payload_policies(message, client, user):
+                return
         bin_data = message.payload
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)

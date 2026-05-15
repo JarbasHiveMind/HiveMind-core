@@ -5,6 +5,7 @@ from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 
 from hivemind_bus_client import HiveMessage, HiveMessageType
+from hivemind_bus_client.message import HiveMindBinaryPayloadType
 from hivemind_core.protocol import HiveMindClientConnection, HiveMindListenerProtocol
 
 try:
@@ -167,6 +168,34 @@ class TestSessionPipelineHandling(unittest.TestCase):
         )
 
         protocol.agent_bus_callback.assert_called_once()
+
+    def test_no_policy_skips_hive_message_policy_user_lookup(self):
+        protocol = _make_protocol()
+        client = _make_client(protocol, ["client-pipeline"])
+        raw_session = {"session_id": "session-1", "site_id": "client-site"}
+        bus_message = _make_bus_message({"session": raw_session})
+
+        protocol.handle_message(
+            HiveMessage(HiveMessageType.BUS, bus_message), client
+        )
+
+        # One lookup updates blacklist data and one updates last_seen.
+        # Policy pre-authorization must not add a third lookup when disabled.
+        self.assertEqual(protocol.db.get_client_by_api_key.call_count, 2)
+
+    def test_no_policy_skips_binary_policy_user_lookup(self):
+        protocol = _make_protocol()
+        client = _make_client(protocol, ["client-pipeline"])
+        binary_message = HiveMessage(
+            HiveMessageType.BINARY,
+            b"audio",
+            bin_type=HiveMindBinaryPayloadType.RAW_AUDIO,
+            metadata={},
+        )
+
+        protocol.handle_binary_message(binary_message, client)
+
+        protocol.db.get_client_by_api_key.assert_not_called()
 
     @unittest.skipIf(PolicyDecision is None, "policy protocol support is not installed")
     def test_policy_context_patch_updates_session_acl(self):
