@@ -39,10 +39,15 @@ from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import (AgentProtocol,
                                                BinaryDataHandlerProtocol,
-                                               ClientCallbacks,
-                                               PolicyContext,
-                                               PolicyDecision,
-                                               PolicyProtocol)
+                                               ClientCallbacks)
+try:
+    from hivemind_plugin_manager.protocols import (PolicyContext,
+                                                   PolicyDecision,
+                                                   PolicyProtocol)
+except ImportError:
+    PolicyContext = None
+    PolicyDecision = None
+    PolicyProtocol = Any
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
@@ -261,6 +266,8 @@ class HiveMindListenerProtocol:
                 target[key] = value
 
     def _make_policy_context(self, client: HiveMindClientConnection, user=None) -> PolicyContext:
+        if PolicyContext is None:
+            raise RuntimeError("Policy support requires hivemind-plugin-manager with hivemind.policy support")
         user = user or self._get_client_user(client)
         return PolicyContext(
             client=client,
@@ -270,6 +277,8 @@ class HiveMindListenerProtocol:
     def _policy_exception_decision(self, policy: PolicyProtocol, hook_name: str) -> PolicyDecision:
         LOG.exception(f"Policy '{policy.__class__.__name__}' failed in {hook_name}")
         if get_server_config().get("policy_fail_closed", True):
+            if PolicyDecision is None:
+                raise RuntimeError("Policy support requires hivemind-plugin-manager with hivemind.policy support")
             return PolicyDecision(
                 allowed=False,
                 reason="policy check failed",

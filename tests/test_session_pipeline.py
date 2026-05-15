@@ -6,7 +6,12 @@ from ovos_bus_client.session import Session
 
 from hivemind_bus_client import HiveMessage, HiveMessageType
 from hivemind_core.protocol import HiveMindClientConnection, HiveMindListenerProtocol
-from hivemind_plugin_manager.protocols import PolicyDecision, PolicyProtocol
+
+try:
+    from hivemind_plugin_manager.protocols import PolicyDecision, PolicyProtocol
+except ImportError:
+    PolicyDecision = None
+    PolicyProtocol = object
 
 
 class CapturePolicy(PolicyProtocol):
@@ -163,6 +168,7 @@ class TestSessionPipelineHandling(unittest.TestCase):
 
         protocol.agent_bus_callback.assert_called_once()
 
+    @unittest.skipIf(PolicyDecision is None, "policy protocol support is not installed")
     def test_policy_context_patch_updates_session_acl(self):
         policy = CapturePolicy(PolicyDecision(
             context_patch={
@@ -187,6 +193,7 @@ class TestSessionPipelineHandling(unittest.TestCase):
         self.assertIn("quota.skill", emitted.context["session"]["blacklisted_skills"])
         self.assertEqual(len(policy.recorded), 1)
 
+    @unittest.skipIf(PolicyDecision is None, "policy protocol support is not installed")
     def test_policy_denial_blocks_bus_emit_and_notifies_client(self):
         policy = CapturePolicy(PolicyDecision(
             allowed=False,
@@ -211,6 +218,7 @@ class TestSessionPipelineHandling(unittest.TestCase):
         self.assertEqual(response.payload.data["code"], "quota_exceeded")
         self.assertEqual(response.payload.data["reason"], "quota exceeded")
 
+    @unittest.skipIf(PolicyDecision is None, "policy protocol support is not installed")
     def test_policy_context_uses_server_owned_user(self):
         policy = CapturePolicy()
         protocol = _make_protocol([policy])

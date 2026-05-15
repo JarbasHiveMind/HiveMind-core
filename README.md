@@ -129,6 +129,8 @@ A policy plugin can be enabled by entry point name:
 
 Policy plugins do not change HiveMind identity. Clients are still identified by `api_key`; the policy receives the authenticated client/database record from core. If a policy denies a message, the message is not emitted to the agent bus and the client receives a `hive.policy.denied` bus message with the policy code/reason.
 
+Existing installs keep working without policy plugins configured. Enabling `policy` requires a HiveMind Plugin Manager version that provides the `hivemind.policy` entry point.
+
 
 ---
 

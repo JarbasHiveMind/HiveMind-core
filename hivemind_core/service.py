@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import dataclasses
-from typing import Callable, List, Optional, Type
+from typing import Any, Callable, List, Optional, Type
 
 from ovos_utils import create_daemon, wait_for_exit_signal
 from ovos_utils.log import LOG
@@ -26,9 +26,14 @@ from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
 from hivemind_plugin_manager import (AgentProtocolFactory,
                                      NetworkProtocolFactory,
-                                     BinaryDataHandlerProtocolFactory,
-                                     PolicyProtocolFactory)
-from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol, PolicyProtocol
+                                     BinaryDataHandlerProtocolFactory)
+try:
+    from hivemind_plugin_manager import PolicyProtocolFactory
+    from hivemind_plugin_manager.protocols import PolicyProtocol
+except ImportError:
+    PolicyProtocolFactory = None
+    PolicyProtocol = Any
+from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol
 
 def get_agent_protocol():
     config = get_server_config()["agent_protocol"]
@@ -51,6 +56,8 @@ def get_policy_protocols() -> List[PolicyProtocol]:
         plug_conf = plug_conf or {}
         if plug_conf.get("enabled", True) is False:
             continue
+        if PolicyProtocolFactory is None:
+            raise RuntimeError("Policy plugins require hivemind-plugin-manager with hivemind.policy support")
         policy_class = PolicyProtocolFactory.get_class(plug_name)
         LOG.info(f"Policy protocol: {policy_class.__name__}")
         policies.append(policy_class(config=plug_conf))
