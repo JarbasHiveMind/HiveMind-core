@@ -37,6 +37,8 @@ _DEFAULT = {
                            "port": 8181
                        }},
     "binary_protocol": {"module": None},
+    "policy": {},
+    "policy_fail_closed": True,
     "network_protocol": {"hivemind-websocket-plugin": {
                              "host": "0.0.0.0",
                              "port": 5678,

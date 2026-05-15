@@ -19,7 +19,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Union, List, Optional, Callable, Literal
+from typing import Any, Dict, Union, List, Optional, Callable, Literal
 
 import pybase64
 from ovos_bus_client import MessageBusClient
@@ -37,7 +37,12 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
                                             _norm_encoding, _norm_cipher)
 from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import HiveMapper
-from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from hivemind_plugin_manager.protocols import (AgentProtocol,
+                                               BinaryDataHandlerProtocol,
+                                               ClientCallbacks,
+                                               PolicyContext,
+                                               PolicyDecision,
+                                               PolicyProtocol)
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
@@ -206,6 +211,7 @@ class HiveMindListenerProtocol:
     identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
+    policy_protocols: List[PolicyProtocol] = dataclasses.field(default_factory=list)
 
     hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
 
@@ -228,10 +234,159 @@ class HiveMindListenerProtocol:
                                                                   agent_protocol=self.agent_protocol)
         else:
             self.binary_data_protocol.hm_protocol = self
+        for policy in self.policy_protocols:
+            policy.hm_protocol = self
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
         return self.agent_protocol.bus
+
+    def _get_client_user(self, client: HiveMindClientConnection):
+        self.db.sync()
+        user = self.db.get_client_by_api_key(client.key)
+        if user is None:
+            LOG.warning(f"No database user found for connected client: {client.peer}")
+        return user
+
+    @staticmethod
+    def _merge_policy_patch(target: Dict[str, Any], patch: Dict[str, Any]):
+        for key, value in patch.items():
+            if isinstance(value, dict) and isinstance(target.get(key), dict):
+                HiveMindListenerProtocol._merge_policy_patch(target[key], value)
+            elif isinstance(value, list) and isinstance(target.get(key), list):
+                for item in value:
+                    if item not in target[key]:
+                        target[key].append(item)
+            else:
+                target[key] = value
+
+    def _make_policy_context(self, client: HiveMindClientConnection, user=None) -> PolicyContext:
+        user = user or self._get_client_user(client)
+        return PolicyContext(
+            client=client,
+            user=user,
+        )
+
+    def _policy_exception_decision(self, policy: PolicyProtocol, hook_name: str) -> PolicyDecision:
+        LOG.exception(f"Policy '{policy.__class__.__name__}' failed in {hook_name}")
+        if get_server_config().get("policy_fail_closed", True):
+            return PolicyDecision(
+                allowed=False,
+                reason="policy check failed",
+                code="policy_error",
+                data={"policy": policy.__class__.__name__, "hook": hook_name},
+            )
+        return PolicyDecision()
+
+    def _send_policy_denied(self,
+                            client: HiveMindClientConnection,
+                            decision: PolicyDecision,
+                            request: Optional[Message] = None):
+        data = dict(decision.data or {})
+        if decision.reason:
+            data.setdefault("reason", decision.reason)
+        if decision.code:
+            data.setdefault("code", decision.code)
+        data.setdefault("peer", client.peer)
+        if request is not None:
+            data.setdefault("request_type", request.msg_type)
+
+        response = Message(
+            decision.message_type or "hive.policy.denied",
+            data,
+            {
+                "source": self.peer,
+                "destination": client.peer,
+                "session": client.sess.serialize(),
+            },
+        )
+        client.send(HiveMessage(HiveMessageType.BUS, response))
+
+    def _apply_policy_decision(self,
+                               decision: Optional[PolicyDecision],
+                               client: HiveMindClientConnection,
+                               message: Optional[Message] = None) -> bool:
+        if decision is None:
+            return True
+        if message is not None and decision.context_patch:
+            if not isinstance(message.context, dict):
+                message.context = {}
+            self._merge_policy_patch(message.context, decision.context_patch)
+        if decision.allowed:
+            return True
+
+        LOG.warning(f"{client.peer} denied by policy: {decision.reason or decision.code}")
+        self._send_policy_denied(client, decision, message)
+        return False
+
+    def _authorize_hive_message_policies(self,
+                                         message: HiveMessage,
+                                         client: HiveMindClientConnection,
+                                         user=None) -> bool:
+        if not self.policy_protocols:
+            return True
+        context = self._make_policy_context(client, user)
+        request = message.payload if isinstance(message.payload, Message) else None
+        for policy in self.policy_protocols:
+            try:
+                decision = policy.authorize_hive_message(message, context)
+            except Exception:
+                decision = self._policy_exception_decision(policy, "authorize_hive_message")
+            if not self._apply_policy_decision(decision, client, request):
+                return False
+            if decision and decision.stop_processing:
+                break
+        return True
+
+    def _authorize_binary_payload_policies(self,
+                                           message: HiveMessage,
+                                           client: HiveMindClientConnection,
+                                           user=None) -> bool:
+        if not self.policy_protocols:
+            return True
+        context = self._make_policy_context(client, user)
+        for policy in self.policy_protocols:
+            try:
+                decision = policy.authorize_binary_payload(message, context)
+            except Exception:
+                decision = self._policy_exception_decision(policy, "authorize_binary_payload")
+            if not self._apply_policy_decision(decision, client):
+                return False
+            if decision and decision.stop_processing:
+                break
+        return True
+
+    def _authorize_bus_message_policies(self,
+                                        message: Message,
+                                        client: HiveMindClientConnection,
+                                        user=None) -> bool:
+        if not self.policy_protocols:
+            return True
+        context = self._make_policy_context(client, user)
+        for policy in self.policy_protocols:
+            try:
+                decision = policy.authorize_bus_message(message, context)
+            except Exception:
+                decision = self._policy_exception_decision(policy, "authorize_bus_message")
+            if not self._apply_policy_decision(decision, client, message):
+                return False
+            if decision and decision.stop_processing:
+                break
+        return True
+
+    def _record_bus_message_policies(self,
+                                     message: Message,
+                                     client: HiveMindClientConnection,
+                                     user=None,
+                                     result: Optional[Any] = None):
+        if not self.policy_protocols:
+            return
+        context = self._make_policy_context(client, user)
+        for policy in self.policy_protocols:
+            try:
+                policy.record_bus_message(message, context, result=result)
+            except Exception:
+                LOG.exception(f"Policy '{policy.__class__.__name__}' failed in record_bus_message")
 
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
@@ -401,6 +556,11 @@ class HiveMindListenerProtocol:
         message.update_source_peer(client.peer)
 
         message.update_hop_data()
+        user = None
+        if message.msg_type not in [HiveMessageType.HANDSHAKE, HiveMessageType.HELLO]:
+            user = self._get_client_user(client)
+            if not self._authorize_hive_message_policies(message, client, user):
+                return
 
         if message.msg_type == HiveMessageType.HANDSHAKE:
             self.handle_handshake_message(message, client)
@@ -443,6 +603,9 @@ class HiveMindListenerProtocol:
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
         assert message.msg_type == HiveMessageType.BINARY
+        user = self._get_client_user(client)
+        if not self._authorize_binary_payload_policies(message, client, user):
+            return
         bin_data = message.payload
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
@@ -844,7 +1007,7 @@ class HiveMindListenerProtocol:
         return False
 
     # HiveMind mycroft bus messages -  from slave -> master
-    def _update_blacklist(self, message: Message, client: HiveMindClientConnection):
+    def _update_blacklist(self, message: Message, client: HiveMindClientConnection, user=None):
         LOG.debug("replacing message metadata with hivemind client session")
         raw_session = message.context.get("session") or {}
         session = client.sess.serialize()
@@ -854,8 +1017,9 @@ class HiveMindListenerProtocol:
         message.context["session"] = session
 
         # update blacklist from db, to account for changes without requiring a restart
-        self.db.sync()
-        user = self.db.get_client_by_api_key(client.key)
+        user = user or self._get_client_user(client)
+        if user is None:
+            return message
         client.skill_blacklist = user.skill_blacklist or []
         client.intent_blacklist = user.intent_blacklist or []
         client.msg_blacklist = user.message_blacklist or []
@@ -889,7 +1053,10 @@ class HiveMindListenerProtocol:
             return
 
         # ensure client specific session data is injected in query to ovos
-        message = self._update_blacklist(message, client)
+        user = self._get_client_user(client)
+        message = self._update_blacklist(message, client, user=user)
+        if not self._authorize_bus_message_policies(message, client, user):
+            return
         if message.msg_type == "speak":
             message.context["destination"] = ["audio"]  # make audible, this is injected "speak" command
         elif message.context.get("destination") is None:
@@ -902,6 +1069,7 @@ class HiveMindListenerProtocol:
 
         bus = self.get_bus(client)
         bus.emit(message)
+        self._record_bus_message_policies(message, client, user)
 
         if self.agent_bus_callback:
             self.agent_bus_callback(message)

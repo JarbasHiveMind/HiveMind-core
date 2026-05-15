@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import dataclasses
-from typing import Callable, Optional, Type
+from typing import Callable, List, Optional, Type
 
 from ovos_utils import create_daemon, wait_for_exit_signal
 from ovos_utils.log import LOG
@@ -24,8 +24,11 @@ from hivemind_bus_client.identity import NodeIdentity
 from hivemind_core.config import get_server_config
 from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
-from hivemind_plugin_manager import AgentProtocolFactory, NetworkProtocolFactory, BinaryDataHandlerProtocolFactory
-from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol
+from hivemind_plugin_manager import (AgentProtocolFactory,
+                                     NetworkProtocolFactory,
+                                     BinaryDataHandlerProtocolFactory,
+                                     PolicyProtocolFactory)
+from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol, PolicyProtocol
 
 def get_agent_protocol():
     config = get_server_config()["agent_protocol"]
@@ -40,6 +43,18 @@ def get_binary_protocol():
         # dummy by default
         return BinaryDataHandlerProtocol, {}
     return BinaryDataHandlerProtocolFactory.get_class(name), config.get(name, {})
+
+
+def get_policy_protocols() -> List[PolicyProtocol]:
+    policies = []
+    for plug_name, plug_conf in (get_server_config().get("policy") or {}).items():
+        plug_conf = plug_conf or {}
+        if plug_conf.get("enabled", True) is False:
+            continue
+        policy_class = PolicyProtocolFactory.get_class(plug_name)
+        LOG.info(f"Policy protocol: {policy_class.__name__}")
+        policies.append(policy_class(config=plug_conf))
+    return policies
 
 
 def on_ready():
@@ -123,13 +138,15 @@ class HiveMindService:
         LOG.info(f"BinaryData protocol: {bin_class.__name__}")
 
         bin_protocol = bin_class(agent_protocol=agent_protocol, config=bin_config)
+        policy_protocols = get_policy_protocols()
 
         # start hivemind protocol that will handle HiveMessages
         hm_protocol = self.hm_protocol(identity=self.identity,
                                        db=self.db,
                                        callbacks=self.callbacks,
                                        binary_data_protocol=bin_protocol,
-                                       agent_protocol=agent_protocol)
+                                       agent_protocol=agent_protocol,
+                                       policy_protocols=policy_protocols)
 
         # start network protocols that will carry HiveMessages
         protos = []
