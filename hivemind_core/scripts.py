@@ -26,6 +26,19 @@ from hivemind_core.service import HiveMindService
 from hivemind_core.config import get_server_config
 
 
+def parse_client_metadata(metadata):
+    """Parse client metadata from a JSON object string."""
+    if metadata is None:
+        return None
+    try:
+        parsed = json.loads(metadata)
+    except json.JSONDecodeError as e:
+        raise click.BadParameter("must be valid JSON") from e
+    if not isinstance(parsed, dict):
+        raise click.BadParameter("must be a JSON object")
+    return parsed
+
+
 def prompt_node_id(db: ClientDatabase) -> int:
     """
     Prompts the user to select a client ID from the database, displaying available clients in a table.
@@ -108,7 +121,8 @@ def listen():
 @click.option("--password", required=False, type=str)
 @click.option("--crypto-key", required=False, type=str)
 @click.option("--admin", default=False, required=False, type=bool)
-def add_client(name, access_key, password, crypto_key, admin):
+@click.option("--metadata", required=False, type=str, help="Client metadata as a JSON object.")
+def add_client(name, access_key, password, crypto_key, admin, metadata):
     """
     Adds a new client to the database, generating credentials if not provided.
     
@@ -122,6 +136,7 @@ def add_client(name, access_key, password, crypto_key, admin):
         password: Optional password. If not provided, a random password is generated.
         crypto_key: Optional 16-character encryption key. If not provided, a random key is generated.
         admin: Boolean indicating whether the client should have administrator privileges.
+        metadata: Optional JSON object with admin-defined client metadata.
     
     Raises:
         ValueError: If the crypto key is not exactly 16 characters, or if the client cannot be added.
@@ -143,11 +158,13 @@ def add_client(name, access_key, password, crypto_key, admin):
 
     password = password or os.urandom(16).hex()
     access_key = access_key or os.urandom(16).hex()
+    client_metadata = parse_client_metadata(metadata)
 
     with ClientDatabase() as db:
         name = name or f"HiveMind-Node-{db.total_clients()}"
         print(f"Database backend: {db.db.__class__.__name__}")
-        success = db.add_client(name, access_key, crypto_key=key, password=password, admin=admin)
+        success = db.add_client(name, access_key, crypto_key=key, password=password,
+                                admin=admin, metadata=client_metadata)
         if not success:
             raise ValueError(f"Error adding User to database: {name}")
 
@@ -161,8 +178,10 @@ def add_client(name, access_key, password, crypto_key, admin):
         print("Admin Privileges:", admin)
         print("Friendly Name:", name)
         print("Access Key:", access_key)
-        print("Password:", password)
+        click.echo(f"Password: {password}")
         print("Encryption Key:", key)
+        if client_metadata is not None:
+            print("Metadata:", json.dumps(user.metadata, sort_keys=True, ensure_ascii=False))
 
         print(
             "WARNING: Encryption Key is deprecated, only use if your client does not support password"
@@ -247,11 +266,11 @@ def delete_client(node_id):
         for client in db:
             if client.client_id == int(node_id):
                 db.delete_client(client.api_key)
-                print(f"Revoked credentials!\n")
+                print("Revoked credentials!\n")
                 print("Node ID:", client.client_id)
                 print("Friendly Name:", client.name)
                 print("Access Key:", client.api_key)
-                print("Password:", client.password)
+                click.echo(f"Password: {client.password}")
                 print("Encryption Key:", client.crypto_key)
                 break
         else:

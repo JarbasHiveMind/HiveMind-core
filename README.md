@@ -198,6 +198,12 @@ $ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --passwo
 - **When to use**:  
   Use this command when setting up a new HiveMind client (e.g., Raspberry Pi, IoT device). Provide credentials for
   secure communication with the server.
+- **Optional metadata**:
+  Admins can attach plugin-specific client context with `--metadata`:
+
+```bash
+hivemind-core add-client --name "satellite_1" --metadata '{"account_id":"acct_123","device_type":"satellite"}'
+```
 
 ---
 
