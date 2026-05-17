@@ -13,13 +13,26 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from typing import List, Optional, Iterable
+from dataclasses import fields
+from typing import Any, Dict, List, Optional, Iterable
 
 from ovos_utils.log import LOG
 
 from hivemind_core.config import get_server_config
 from hivemind_plugin_manager import DatabaseFactory
 from hivemind_plugin_manager.database import Client
+
+
+def _client_supports_metadata() -> bool:
+    try:
+        return any(field.name == "metadata" for field in fields(Client))
+    except TypeError:
+        annotations = getattr(Client, "__annotations__", {})
+        return "metadata" in annotations or hasattr(Client, "metadata")
+
+
+CLIENT_SUPPORTS_METADATA = _client_supports_metadata()
+METADATA_SUPPORT_REQUIRED = "Client.metadata requires hivemind-plugin-manager metadata support"
 
 
 class ClientDatabase:
@@ -62,9 +75,12 @@ class ClientDatabase:
                    message_blacklist: Optional[List[str]] = None,
                    allowed_types: Optional[List[str]] = None,
                    crypto_key: Optional[str] = None,
-                   password: Optional[str] = None) -> bool:
+                   password: Optional[str] = None,
+                   metadata: Optional[Dict[str, Any]] = None) -> bool:
         if crypto_key is not None:
             crypto_key = crypto_key[:16]
+        if metadata is not None and not CLIENT_SUPPORTS_METADATA:
+            raise RuntimeError(METADATA_SUPPORT_REQUIRED)
 
         user = self.get_client_by_api_key(key)
         if user:
@@ -85,20 +101,25 @@ class ClientDatabase:
                 user.crypto_key = crypto_key
             if password:
                 user.password = password
+            if metadata is not None:
+                user.metadata = dict(metadata)
             return self.db.update_item(user)
 
-        user = Client(
-            api_key=key,
-            name=name,
-            intent_blacklist=intent_blacklist,
-            skill_blacklist=skill_blacklist,
-            message_blacklist=message_blacklist,
-            crypto_key=crypto_key,
-            client_id=self.total_clients() + 1,
-            is_admin=admin,
-            password=password,
-            allowed_types=allowed_types,
-        )
+        client_data = {
+            "api_key": key,
+            "name": name,
+            "intent_blacklist": intent_blacklist,
+            "skill_blacklist": skill_blacklist,
+            "message_blacklist": message_blacklist,
+            "crypto_key": crypto_key,
+            "client_id": self.total_clients() + 1,
+            "is_admin": admin,
+            "password": password,
+            "allowed_types": allowed_types,
+        }
+        if metadata is not None:
+            client_data["metadata"] = dict(metadata)
+        user = Client(**client_data)
         return self.db.add_item(user)
 
     def update_item(self, client: Client):
