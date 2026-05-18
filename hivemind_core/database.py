@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from typing import List, Optional, Iterable
+from typing import Any, Dict, List, Optional, Iterable
 
 from ovos_utils.log import LOG
 
@@ -62,7 +62,8 @@ class ClientDatabase:
                    message_blacklist: Optional[List[str]] = None,
                    allowed_types: Optional[List[str]] = None,
                    crypto_key: Optional[str] = None,
-                   password: Optional[str] = None) -> bool:
+                   password: Optional[str] = None,
+                   metadata: Optional[Dict[str, Any]] = None) -> bool:
         if crypto_key is not None:
             crypto_key = crypto_key[:16]
 
@@ -85,6 +86,8 @@ class ClientDatabase:
                 user.crypto_key = crypto_key
             if password:
                 user.password = password
+            if metadata is not None:
+                user.metadata = dict(metadata)
             return self.db.update_item(user)
 
         user = Client(
@@ -98,6 +101,7 @@ class ClientDatabase:
             is_admin=admin,
             password=password,
             allowed_types=allowed_types,
+            metadata=dict(metadata) if metadata else {},
         )
         return self.db.add_item(user)
 
