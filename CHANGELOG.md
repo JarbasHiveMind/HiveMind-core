@@ -1,14 +1,12 @@
 # Changelog
 
-## Unreleased
+## [4.2.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.2.0a2) (2026-05-18)
 
-**Licence change:** HiveMind-core is relicensed from **AGPL-3.0** back to
-**Apache-2.0**, matching the rest of the HiveMind ecosystem. The
-AGPL/commercial dual-licence model is retired; the project is now a single
-permissively-licensed project with separate trademark protection (see
-[TRADEMARK-USAGE.md](./TRADEMARK-USAGE.md)). Releases up to and including
-4.x as published on PyPI remain under their original licence — this change
-applies from the next release forward. External contributions are reopened.
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.2.0a1...4.2.0a2)
+
+**Merged pull requests:**
+
+- Relicense to Apache-2.0 [\#87](https://github.com/JarbasHiveMind/HiveMind-core/pull/87) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.2.0a1) (2026-05-18)
 
