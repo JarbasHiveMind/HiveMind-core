@@ -178,7 +178,7 @@ def add_client(name, access_key, password, crypto_key, admin, metadata):
         print("Admin Privileges:", admin)
         print("Friendly Name:", name)
         print("Access Key:", access_key)
-        click.echo(f"Password: {password}")
+        print("Password:", password)
         print("Encryption Key:", key)
         if client_metadata is not None:
             print("Metadata:", json.dumps(user.metadata, sort_keys=True, ensure_ascii=False))
@@ -266,11 +266,11 @@ def delete_client(node_id):
         for client in db:
             if client.client_id == int(node_id):
                 db.delete_client(client.api_key)
-                print("Revoked credentials!\n")
+                print(f"Revoked credentials!\n")
                 print("Node ID:", client.client_id)
                 print("Friendly Name:", client.name)
                 print("Access Key:", client.api_key)
-                click.echo(f"Password: {client.password}")
+                print("Password:", client.password)
                 print("Encryption Key:", client.crypto_key)
                 break
         else:
