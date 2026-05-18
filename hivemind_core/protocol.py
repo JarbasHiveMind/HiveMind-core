@@ -84,18 +84,22 @@ class HiveMindClientConnection:
     crypto_key: Optional[str] = None
     pub_key: Optional[str] = None  # TODO add field to database
 
-    msg_blacklist: List[str] = field(
-        default_factory=list
-    )  # list of ovos message_type to never be sent to this client
-    skill_blacklist: List[str] = field(
-        default_factory=list
-    )  # list of skill_id that can't match for this client
-    intent_blacklist: List[str] = field(
-        default_factory=list
-    )  # list of skill_id:intent_name that can't match for this client
-    allowed_types: List[str] = field(
-        default_factory=list
-    )  # list of ovos message_type to allow to be sent from this client
+    # admission whitelist — list of ovos message_type values this client
+    # may inject onto the agent bus. Enforced by ClientACLPolicy
+    # (hivemind_core.policy.ClientACLPolicy). Empty = deny everything.
+    allowed_types: List[str] = field(default_factory=list)
+
+    # --- Deprecated connection-level caches ---
+    # These fields cache OVOS-specific per-client ACL data populated by
+    # OVOSAgentPolicy (hivemind-ovos-agent-plugin) from
+    # ``Client.metadata`` at admission time. They exist as a
+    # backwards-compat surface for callers that read attributes
+    # directly off the live connection (notably the outbound send()
+    # filter on msg_blacklist below). New code should use the policy
+    # chain or Client.metadata.
+    msg_blacklist: List[str] = field(default_factory=list)
+    skill_blacklist: List[str] = field(default_factory=list)
+    intent_blacklist: List[str] = field(default_factory=list)
     binarize: bool = False
     site_id: str = "unknown"
     can_escalate: bool = True
@@ -126,6 +130,11 @@ class HiveMindClientConnection:
             else:
                 _msg_type = message.payload.msg_type
 
+            # Outbound message-type filter — deprecated. The canonical
+            # admission model is whitelist-only via ClientACLPolicy on
+            # the inbound side; this outbound block is preserved for
+            # back-compat with deployments still configuring
+            # message_blacklist via OVOSAgentPolicy.
             if _msg_type in self.msg_blacklist:
                 LOG.debug(
                     f"message type {_msg_type} is blacklisted for {self.peer}"
@@ -184,12 +193,16 @@ class HiveMindClientConnection:
         return HiveMessage(**payload)
 
     def authorize(self, message: Message) -> bool:
-        """parse the message being injected into ovos-core bus
-        if this client is not authorized to inject it return False"""
-        if message.msg_type not in self.allowed_types:
-            return False
+        """Subclass override hook — return False to short-circuit bus
+        injection without going through the policy chain.
 
-        # TODO check intent / skill that will trigger
+        The allowed_types whitelist that used to live here moved to
+        ClientACLPolicy in hivemind_core/policy.py (see #85). Kept as a
+        default-True stub so subclasses overriding it for ad-hoc
+        admission gates continue to work.
+        """
+        # legacy hooks: subclasses may still want to plug intent / skill
+        # decisions here outside the policy chain
         # for OVOS agent this is passed in Session and ignored during match
         # adding it here allows blocking the utterance completely instead
         # or adding a callback for specific agents to decide how to handle
@@ -877,33 +890,21 @@ class HiveMindListenerProtocol:
 
     # HiveMind mycroft bus messages -  from slave -> master
     def _update_blacklist(self, message: Message, client: HiveMindClientConnection):
-        LOG.debug("replacing message metadata with hivemind client session")
+        """Install the per-client session onto an inbound bus message.
+
+        Skill / intent / message-type blacklist injection moved to
+        OVOSAgentPolicy in hivemind-ovos-agent-plugin (see #85). This
+        method now only handles the session-rewrite half of the original
+        ``_update_blacklist``: copy the client's serialised session onto
+        the message, taking care not to reattach a stale pipeline.
+        """
         raw_session = message.context.get("session") or {}
         session = client.sess.serialize()
         if not isinstance(raw_session, dict) or "pipeline" not in raw_session:
-            # Each bus message owns its outbound pipeline; do not reattach one from an earlier message.
+            # Each bus message owns its outbound pipeline; do not reattach
+            # one from an earlier message.
             session.pop("pipeline", None)
         message.context["session"] = session
-
-        # update blacklist from db, to account for changes without requiring a restart
-        self.db.sync()
-        user = self.db.get_client_by_api_key(client.key)
-        client.skill_blacklist = user.skill_blacklist or []
-        client.intent_blacklist = user.intent_blacklist or []
-        client.msg_blacklist = user.message_blacklist or []
-
-        # inject client specific blacklist into session
-        if "blacklisted_skills" not in message.context["session"]:
-            message.context["session"]["blacklisted_skills"] = []
-        if "blacklisted_intents" not in message.context["session"]:
-            message.context["session"]["blacklisted_intents"] = []
-
-        message.context["session"]["blacklisted_skills"] += [s for s in client.skill_blacklist
-                                                             if
-                                                             s not in message.context["session"]["blacklisted_skills"]]
-        message.context["session"]["blacklisted_intents"] += [s for s in client.intent_blacklist
-                                                              if s not in message.context["session"][
-                                                                  "blacklisted_intents"]]
         return message
 
     def handle_inject_agent_msg(

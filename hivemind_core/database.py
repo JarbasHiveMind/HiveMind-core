@@ -57,27 +57,32 @@ class ClientDatabase:
                    name: str,
                    key: str = "",
                    admin: bool = False,
-                   intent_blacklist: Optional[List[str]] = None,
-                   skill_blacklist: Optional[List[str]] = None,
-                   message_blacklist: Optional[List[str]] = None,
                    allowed_types: Optional[List[str]] = None,
                    crypto_key: Optional[str] = None,
                    password: Optional[str] = None,
-                   metadata: Optional[Dict[str, Any]] = None) -> bool:
+                   metadata: Optional[Dict[str, Any]] = None,
+                   # Deprecated kwargs — folded into metadata. Kept so the
+                   # CLI and external callers using the old signature keep
+                   # working. Client.deserialize handles the same migration
+                   # on the read side. See HiveMind-core#85.
+                   intent_blacklist: Optional[List[str]] = None,
+                   skill_blacklist: Optional[List[str]] = None,
+                   message_blacklist: Optional[List[str]] = None) -> bool:
         if crypto_key is not None:
             crypto_key = crypto_key[:16]
 
+        # Migrate any legacy blacklist kwargs into metadata.
+        meta = dict(metadata) if metadata else {}
+        for k, v in (("skill_blacklist", skill_blacklist),
+                     ("intent_blacklist", intent_blacklist),
+                     ("message_blacklist", message_blacklist)):
+            if v:
+                meta.setdefault(k, list(v))
+
         user = self.get_client_by_api_key(key)
         if user:
-            # Update the existing client object directly
             if name:
                 user.name = name
-            if intent_blacklist:
-                user.intent_blacklist = intent_blacklist
-            if skill_blacklist:
-                user.skill_blacklist = skill_blacklist
-            if message_blacklist:
-                user.message_blacklist = message_blacklist
             if allowed_types:
                 user.allowed_types = allowed_types
             if admin is not None:
@@ -86,22 +91,22 @@ class ClientDatabase:
                 user.crypto_key = crypto_key
             if password:
                 user.password = password
-            if metadata is not None:
-                user.metadata = dict(metadata)
+            if meta:
+                # merge — don't blow away existing metadata
+                merged = dict(user.metadata)
+                merged.update(meta)
+                user.metadata = merged
             return self.db.update_item(user)
 
         user = Client(
             api_key=key,
             name=name,
-            intent_blacklist=intent_blacklist,
-            skill_blacklist=skill_blacklist,
-            message_blacklist=message_blacklist,
             crypto_key=crypto_key,
             client_id=self.total_clients() + 1,
             is_admin=admin,
             password=password,
-            allowed_types=allowed_types,
-            metadata=dict(metadata) if metadata else {},
+            allowed_types=allowed_types or [],
+            metadata=meta,
         )
         return self.db.add_item(user)
 

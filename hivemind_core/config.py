@@ -59,7 +59,16 @@ _DEFAULT = {
         "fail_open": False,
         # ordered list of policy plugins to evaluate; each entry is
         # {"module": "<entry-point-name>", "config": {...}}.
-        "chain": [],
+        "chain": [
+            # built-in: allowed_types whitelist (admission-side ACL,
+            # migrated out of HiveMindClientConnection.authorize)
+            {"module": "hivemind-core-acl-policy"},
+            # ships with hivemind-ovos-agent-plugin — the default agent
+            # protocol — and replaces the legacy skill/intent/msg
+            # blacklist injection from _update_blacklist. Drop this
+            # entry if you're running a non-OVOS agent plugin.
+            {"module": "hivemind-ovos-agent-policy"},
+        ],
     },
     "database": {"module": "hivemind-json-db-plugin",
                  "hivemind-json-db-plugin": {

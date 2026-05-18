@@ -142,3 +142,29 @@ class PolicyChain:
                 LOG.exception(
                     f"policy {type(policy).__name__}.observe raised — ignored"
                 )
+
+
+class ClientACLPolicy(PolicyPlugin):
+    """Built-in admission policy enforcing the per-client ``allowed_types``
+    whitelist that previously lived in
+    :meth:`HiveMindClientConnection.authorize`.
+
+    Returns ``Verdict.deny("acl_disallowed_type", ...)`` when the client's
+    ``allowed_types`` list does not include the inbound message type, else
+    ``Verdict.allow()``. No mutations and no DB sync — that responsibility
+    moves to agent-specific policies (e.g. ``OVOSAgentPolicy`` in
+    ``hivemind-ovos-agent-plugin``).
+    """
+
+    def review(self, message: Message,
+               client: "HiveMindClientConnection") -> Verdict:
+        allowed = list(getattr(client, "allowed_types", []) or [])
+        msg_type = getattr(message, "msg_type", None)
+        if msg_type not in allowed:
+            return Verdict.deny(
+                "acl_disallowed_type",
+                f"{msg_type} not in allowed_types",
+                msg_type=msg_type,
+                allowed=allowed,
+            )
+        return Verdict.allow()

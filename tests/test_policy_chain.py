@@ -15,11 +15,30 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock, patch
 
-from hivemind_plugin_manager import (AddBlacklistedSkill, PolicyPlugin,
-                                     Verdict)
+from hivemind_plugin_manager import Mutation, PolicyPlugin, Verdict
 from ovos_bus_client.message import Message
 
-from hivemind_core.policy import PolicyChain
+from hivemind_core.policy import ClientACLPolicy, PolicyChain
+
+
+class AddBlacklistedSkill(Mutation):
+    """Local stand-in. The real OVOS-specific subclass lives in
+    hivemind-ovos-agent-plugin now; reproducing the minimum here keeps
+    these unit tests free of that runtime dep."""
+
+    def __init__(self, skill_id: str):
+        self.skill_id = skill_id
+
+    def apply(self, message, client) -> None:
+        if not isinstance(message.context, dict):
+            message.context = {}
+        sess = message.context.setdefault("session", {})
+        if not isinstance(sess, dict):
+            sess = {}
+            message.context["session"] = sess
+        bl = sess.setdefault("blacklisted_skills", [])
+        if self.skill_id not in bl:
+            bl.append(self.skill_id)
 
 
 def _msg(msg_type="speak", data=None, context=None):
@@ -191,6 +210,52 @@ class TestPolicyChainFromConfig(unittest.TestCase):
             "policy": {"chain": [{"config": {}}]},
         })
         self.assertEqual(chain.policies, [])
+
+
+# ---------------------------------------------------------------------------
+# ClientACLPolicy — built-in allowed_types enforcement
+# ---------------------------------------------------------------------------
+
+class _FakeClient:
+    def __init__(self, allowed_types=None):
+        self.allowed_types = list(allowed_types or [])
+
+
+class TestClientACLPolicy(unittest.TestCase):
+    def test_allowed_type_allows(self):
+        p = ClientACLPolicy()
+        client = _FakeClient(allowed_types=["recognizer_loop:utterance"])
+        v = p.review(_msg("recognizer_loop:utterance"), client)
+        self.assertFalse(v.denied)
+        self.assertEqual(v.mutations, [])
+
+    def test_disallowed_type_denies(self):
+        p = ClientACLPolicy()
+        client = _FakeClient(allowed_types=["recognizer_loop:utterance"])
+        v = p.review(_msg("speak"), client)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
+        self.assertEqual(v.data["msg_type"], "speak")
+        self.assertEqual(v.data["allowed"], ["recognizer_loop:utterance"])
+
+    def test_empty_allowed_denies_everything(self):
+        p = ClientACLPolicy()
+        client = _FakeClient(allowed_types=[])
+        v = p.review(_msg("recognizer_loop:utterance"), client)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
+
+    def test_none_allowed_types_treated_as_empty(self):
+        p = ClientACLPolicy()
+        client = _FakeClient(allowed_types=None)
+        v = p.review(_msg("anything"), client)
+        self.assertTrue(v.denied)
+
+    def test_reason_string_includes_msg_type(self):
+        p = ClientACLPolicy()
+        client = _FakeClient(allowed_types=["ok"])
+        v = p.review(_msg("forbidden"), client)
+        self.assertIn("forbidden", v.reason)
 
 
 if __name__ == "__main__":

@@ -462,83 +462,87 @@ def blacklist_propagate(node_id):
 
 
 ##########################
-# skill/intent permissions
+# skill / intent permissions — DEPRECATED. These flags are OVOS-specific
+# and live in Client.metadata now (read by OVOSAgentPolicy in
+# hivemind-ovos-agent-plugin). The CLI is preserved for backwards compat
+# with existing deployment scripts and emits a deprecation warning to
+# stderr; mutations are written through Client.metadata directly.
 
-@hmcore_cmds.command(help="blacklist skills from being triggered by a client", name="blacklist-skill")
+
+def _deprecated_blacklist_cmd(field: str):
+    click.echo(
+        f"DeprecationWarning: 'hivemind-core {field.replace('_', '-')}' "
+        "is deprecated; configure OVOSAgentPolicy in your hivemind-core "
+        "server config (policy.chain) or write directly to "
+        f"Client.metadata['{field}'] instead.",
+        err=True,
+    )
+
+
+def _toggle_metadata_blacklist(metadata_key: str, value: str,
+                               node_id: int, add: bool) -> None:
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id != int(node_id):
+                continue
+            bl = list(client.metadata.get(metadata_key) or [])
+            if add:
+                if value in bl:
+                    print(f"Client {client.name} already has '{value}' "
+                          f"in {metadata_key}")
+                    return
+                bl.append(value)
+            else:
+                if value not in bl:
+                    print(f"'{value}' is not in {metadata_key} for "
+                          f"client {client.name}")
+                    return
+                bl.remove(value)
+            new_meta = dict(client.metadata)
+            new_meta[metadata_key] = bl
+            client.metadata = new_meta
+            db.update_item(client)
+            verb = "Blacklisted" if add else "Unblacklisted"
+            print(f"{verb} '{value}' for {client.name}")
+            return
+        print("Invalid Node ID!")
+
+
+@hmcore_cmds.command(help="(deprecated) blacklist a skill for a client",
+                     name="blacklist-skill")
 @click.argument("skill_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_skill(skill_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if skill_id in client.skill_blacklist:
-                    print(f"Client {client.name} already blacklisted '{skill_id}'")
-                    exit()
-
-                client.skill_blacklist.append(skill_id)
-                db.update_item(client)
-                print(f"Blacklisted '{skill_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _deprecated_blacklist_cmd("skill_blacklist")
+    _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=True)
 
 
-@hmcore_cmds.command(help="remove skills from a client blacklist", name="allow-skill")
+@hmcore_cmds.command(help="(deprecated) remove a skill from a client blacklist",
+                     name="allow-skill")
 @click.argument("skill_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def unblacklist_skill(skill_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if skill_id not in client.skill_blacklist:
-                    print(f"'{skill_id}' is not blacklisted for client {client.name}")
-                    exit()
-                client.skill_blacklist.remove(skill_id)
-                db.update_item(client)
-                print(f"Blacklisted '{skill_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _deprecated_blacklist_cmd("skill_blacklist")
+    _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=False)
 
 
-@hmcore_cmds.command(help="blacklist intents from being triggered by a client", name="blacklist-intent")
+@hmcore_cmds.command(help="(deprecated) blacklist an intent for a client",
+                     name="blacklist-intent")
 @click.argument("intent_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_intent(intent_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if intent_id in client.intent_blacklist:
-                    print(f"Client {client.name} already blacklisted '{intent_id}'")
-                    exit()
-                client.intent_blacklist.append(intent_id)
-                db.update_item(client)
-                print(f"Blacklisted '{intent_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _deprecated_blacklist_cmd("intent_blacklist")
+    _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=True)
 
 
-@hmcore_cmds.command(help="remove intents from a client blacklist", name="allow-intent")
+@hmcore_cmds.command(help="(deprecated) remove an intent from a client blacklist",
+                     name="allow-intent")
 @click.argument("intent_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def unblacklist_intent(intent_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if intent_id not in client.intent_blacklist:
-                    print(f" '{intent_id}' not blacklisted for Client {client.name} ")
-                    exit()
-                client.intent_blacklist.remove(intent_id)
-                db.update_item(client)
-                print(f"Unblacklisted '{intent_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _deprecated_blacklist_cmd("intent_blacklist")
+    _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=False)
 
 
 if __name__ == "__main__":
