@@ -7,7 +7,7 @@ name = "hivemind-core"
 dynamic = ["version"]
 description = "Mesh Networking utilities for OpenVoiceOS"
 readme = "README.md"
-license = {text = "AGPL-3.0"}
+license = "Apache-2.0"
 authors = [
     {name = "jarbasAI", email = "jarbasai@mailfence.com"}
 ]
@@ -15,7 +15,6 @@ requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
