@@ -51,6 +51,16 @@ _DEFAULT = {
                              "cert_dir": f"{xdg_data_home()}/hivemind",
                              "cert_name": "hivemind"
                          }},
+    # policy admission chain — evaluated for every client message before
+    # injection into the agent bus. See HiveMind-core#85.
+    "policy": {
+        # if True, policy plugin errors are logged and skipped instead of
+        # producing Verdict.deny("policy_error", ...). Default fails closed.
+        "fail_open": False,
+        # ordered list of policy plugins to evaluate; each entry is
+        # {"module": "<entry-point-name>", "config": {...}}.
+        "chain": [],
+    },
     "database": {"module": "hivemind-json-db-plugin",
                  "hivemind-json-db-plugin": {
                      "name": "clients",

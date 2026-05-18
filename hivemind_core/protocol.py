@@ -38,6 +38,7 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
 from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from hivemind_core.policy import PolicyChain
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
@@ -208,6 +209,7 @@ class HiveMindListenerProtocol:
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
     hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
+    policy_chain: Optional[PolicyChain] = None
 
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
@@ -228,6 +230,13 @@ class HiveMindListenerProtocol:
                                                                   agent_protocol=self.agent_protocol)
         else:
             self.binary_data_protocol.hm_protocol = self
+        if self.policy_chain is None:
+            try:
+                self.policy_chain = PolicyChain.from_config(get_server_config(),
+                                                            hm_protocol=self)
+            except Exception:
+                LOG.exception("failed to build policy chain; falling back to empty chain")
+                self.policy_chain = PolicyChain()
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
@@ -444,6 +453,29 @@ class HiveMindListenerProtocol:
     ):
         assert message.msg_type == HiveMessageType.BINARY
         bin_data = message.payload
+
+        # policy admission chain — issue #85
+        verdict = self.policy_chain.review_binary(bin_data, client)
+        if verdict.denied:
+            LOG.info(f"policy denied binary payload from {client.peer}: "
+                     f"{verdict.code} ({verdict.reason})")
+            denied = Message(
+                "hive.policy.denied",
+                {
+                    "denied_type": "binary",
+                    "bin_type": str(getattr(message, "bin_type", "")),
+                    "code": verdict.code,
+                    "reason": verdict.reason,
+                    "data": verdict.data,
+                },
+                {"source": "hivemind-core", "destination": client.peer},
+            )
+            try:
+                client.send(HiveMessage(HiveMessageType.BUS, payload=denied))
+            except Exception:
+                LOG.exception("failed to send hive.policy.denied for binary")
+            return
+
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
@@ -895,6 +927,14 @@ class HiveMindListenerProtocol:
         elif message.context.get("destination") is None:
             message.context["destination"] = "skills"  # ensure not treated as a broadcast
 
+        # policy admission chain — issue #85
+        verdict = self.policy_chain.review(message, client)
+        if verdict.denied:
+            LOG.info(f"policy denied '{message.msg_type}' from {client.peer}: "
+                     f"{verdict.code} ({verdict.reason})")
+            self._send_policy_denied(client, message, verdict)
+            return
+
         # send client message to internal mycroft bus
         LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
@@ -903,8 +943,28 @@ class HiveMindListenerProtocol:
         bus = self.get_bus(client)
         bus.emit(message)
 
+        self.policy_chain.observe(message, client)
+
         if self.agent_bus_callback:
             self.agent_bus_callback(message)
+
+    def _send_policy_denied(self, client: HiveMindClientConnection,
+                             message: Message, verdict) -> None:
+        """Inform a client that an admission policy denied their message."""
+        payload = Message(
+            "hive.policy.denied",
+            {
+                "denied_type": getattr(message, "msg_type", None),
+                "code": verdict.code,
+                "reason": verdict.reason,
+                "data": verdict.data,
+            },
+            {"source": "hivemind-core", "destination": client.peer},
+        )
+        try:
+            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
+        except Exception:
+            LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
 
     def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
         # this message is going inside the client bus
