@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 from hivemind_plugin_manager import Mutation, PolicyPlugin, Verdict
 from ovos_bus_client.message import Message
 
-from hivemind_core.policy import ClientACLPolicy, PolicyChain
+from hivemind_core.policy import ClientACLPolicy, DenyAllPolicy, PolicyChain
 
 
 class AddBlacklistedSkill(Mutation):
@@ -256,6 +256,51 @@ class TestClientACLPolicy(unittest.TestCase):
         client = _FakeClient(allowed_types=["ok"])
         v = p.review(_msg("forbidden"), client)
         self.assertIn("forbidden", v.reason)
+
+
+# ---------------------------------------------------------------------------
+# DenyAllPolicy — fail-closed fallback when chain construction fails
+# ---------------------------------------------------------------------------
+
+class TestDenyAllPolicy(unittest.TestCase):
+    def test_review_denies(self):
+        v = DenyAllPolicy().review(_msg(), _FakeClient(allowed_types=["x"]))
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_chain_unavailable")
+
+    def test_review_binary_denies(self):
+        v = DenyAllPolicy().review_binary(b"x", _FakeClient())
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_chain_unavailable")
+
+
+class TestFromConfigUnknownPlugin(unittest.TestCase):
+    """from_config raises a KeyError for an unknown entry-point name when
+    fail_open=False, so the protocol's __post_init__ can install the
+    DenyAllPolicy fallback. Locks the contract that the audit flagged.
+    """
+
+    def test_unknown_module_raises_under_fail_closed(self):
+        with patch("hivemind_core.policy.PolicyPluginFactory.create",
+                   side_effect=KeyError("missing-plugin")):
+            with self.assertRaises(KeyError):
+                PolicyChain.from_config({
+                    "policy": {
+                        "fail_open": False,
+                        "chain": [{"module": "missing-plugin"}],
+                    },
+                })
+
+    def test_unknown_module_skipped_under_fail_open(self):
+        with patch("hivemind_core.policy.PolicyPluginFactory.create",
+                   side_effect=KeyError("missing-plugin")):
+            chain = PolicyChain.from_config({
+                "policy": {
+                    "fail_open": True,
+                    "chain": [{"module": "missing-plugin"}],
+                },
+            })
+        self.assertEqual(chain.policies, [])
 
 
 if __name__ == "__main__":

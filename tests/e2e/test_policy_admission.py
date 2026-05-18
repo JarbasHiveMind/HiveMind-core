@@ -279,6 +279,63 @@ def test_db_changes_picked_up_between_messages():
 # Outbound msg_blacklist — outbound-side filter is unaffected by the chain
 # ---------------------------------------------------------------------------
 
+def test_missing_plugin_falls_back_to_deny_all_under_fail_closed():
+    """Audit fix: a configured policy entry-point that fails to resolve
+    must NOT silently install an empty (allow-all) chain when the
+    operator runs fail_open=false. Verifies the DenyAllPolicy fallback
+    in HiveMindListenerProtocol.__post_init__.
+    """
+    from hivemind_core.policy import DenyAllPolicy
+
+    b, m = _build(allowed_types=["recognizer_loop:utterance"])
+    try:
+        b.start_all()
+        s = b.get_satellite("S0")
+
+        # Force a chain rebuild that would have failed at startup.
+        from hivemind_core.policy import PolicyChain
+        try:
+            PolicyChain.from_config({
+                "policy": {
+                    "fail_open": False,
+                    "chain": [{"module": "does-not-exist-policy"}],
+                },
+            }, hm_protocol=m.hm_protocol)
+            raised = False
+        except Exception:
+            raised = True
+        assert raised, "from_config should raise under fail_open=false"
+
+        # Simulate the protocol's __post_init__ fallback path.
+        m.hm_protocol.policy_chain = PolicyChain(
+            policies=[DenyAllPolicy(hm_protocol=m.hm_protocol)],
+            fail_open=False,
+        )
+
+        seen = []
+        m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
+        denied = []
+
+        def on_bus(msg):
+            payload = getattr(msg, "payload", None)
+            if isinstance(payload, Message) and payload.msg_type == "hive.policy.denied":
+                denied.append(payload)
+
+        s.shim.emitter.on(HiveMessageType.BUS, on_bus)
+
+        _send_utterance(s)
+
+        assert _wait_for(lambda: len(denied) >= 1), (
+            f"DenyAllPolicy fallback did not notify client: {denied}"
+        )
+        assert seen == [], (
+            f"DenyAllPolicy fallback let a message through: {seen}"
+        )
+        assert denied[0].data["code"] == "policy_chain_unavailable"
+    finally:
+        b.stop_all()
+
+
 def test_outbound_msg_blacklist_still_filters_after_refactor():
     """The send()-side filter on ``client.msg_blacklist`` predates the
     chain and is orthogonal. Verifies the refactor didn't break it."""

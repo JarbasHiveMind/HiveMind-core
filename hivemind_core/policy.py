@@ -144,6 +144,31 @@ class PolicyChain:
                 )
 
 
+class DenyAllPolicy(PolicyPlugin):
+    """Fail-closed fallback policy installed when chain construction fails
+    under ``fail_open=false``.
+
+    Denies every inbound message + binary payload with
+    ``code="policy_chain_unavailable"`` so operators see a loud signal
+    in the client and in logs that the configured policy chain didn't
+    build. Better than silently installing an empty (allow-all) chain
+    when the operator asked for fail-closed semantics.
+    """
+
+    REASON = (
+        "policy chain failed to build; rejecting all admissions until "
+        "configuration is fixed"
+    )
+
+    def review(self, message: Message,
+               client: "HiveMindClientConnection") -> Verdict:
+        return Verdict.deny("policy_chain_unavailable", self.REASON)
+
+    def review_binary(self, payload: bytes,
+                       client: "HiveMindClientConnection") -> Verdict:
+        return Verdict.deny("policy_chain_unavailable", self.REASON)
+
+
 class ClientACLPolicy(PolicyPlugin):
     """Built-in admission policy enforcing the per-client ``allowed_types``
     whitelist that previously lived in

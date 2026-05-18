@@ -244,12 +244,32 @@ class HiveMindListenerProtocol:
         else:
             self.binary_data_protocol.hm_protocol = self
         if self.policy_chain is None:
+            cfg = get_server_config()
             try:
-                self.policy_chain = PolicyChain.from_config(get_server_config(),
-                                                            hm_protocol=self)
+                self.policy_chain = PolicyChain.from_config(cfg, hm_protocol=self)
             except Exception:
-                LOG.exception("failed to build policy chain; falling back to empty chain")
-                self.policy_chain = PolicyChain()
+                # Honour the operator's fail_open intent. Default
+                # (fail_open=False) installs a DenyAllPolicy so the chain
+                # rejects every admission rather than silently flipping
+                # to allow-all. fail_open=True installs an empty chain.
+                fail_open = bool((cfg.get("policy") or {}).get("fail_open", False))
+                if fail_open:
+                    LOG.exception(
+                        "failed to build policy chain; fail_open=true, "
+                        "falling back to empty (allow-all) chain"
+                    )
+                    self.policy_chain = PolicyChain(fail_open=True)
+                else:
+                    from hivemind_core.policy import DenyAllPolicy
+                    LOG.exception(
+                        "failed to build policy chain; fail_open=false, "
+                        "installing DenyAllPolicy fallback — every admission "
+                        "will be rejected until configuration is fixed"
+                    )
+                    self.policy_chain = PolicyChain(
+                        policies=[DenyAllPolicy(hm_protocol=self)],
+                        fail_open=False,
+                    )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
