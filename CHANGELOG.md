@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.2.0a1) (2026-05-18)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.1.1a1...4.2.0a1)
+
+**Implemented enhancements:**
+
+- Add client metadata option [\#86](https://github.com/JarbasHiveMind/HiveMind-core/pull/86) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.1.1a1) (2026-05-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.1.0a1...4.1.1a1)
