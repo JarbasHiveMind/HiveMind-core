@@ -87,17 +87,9 @@ class HiveMindClientConnection:
     # admission whitelist — list of ovos message_type values this client
     # may inject onto the agent bus. Enforced by ClientACLPolicy
     # (hivemind_core.policy.ClientACLPolicy). Empty = deny everything.
+    # This is the only ACL field on the connection. There is no message
+    # blacklist by design: hivemind-core is whitelist-only, deny-by-default.
     allowed_types: List[str] = field(default_factory=list)
-
-    # Outbound message-type filter (DEPRECATED). Populated from
-    # ``Client.metadata["message_blacklist"]`` at connect time
-    # (``handle_new_client``) so the filter is independent of inbound
-    # traffic, and refreshed by ``OVOSAgentPolicy`` on every admission
-    # to pick up mid-session DB changes. New code should NOT rely on
-    # this — the canonical admission model is whitelist-only via
-    # ``allowed_types`` and ``ClientACLPolicy``. Field preserved for
-    # back-compat with the outbound ``send()`` filter below.
-    msg_blacklist: List[str] = field(default_factory=list)
     binarize: bool = False
     site_id: str = "unknown"
     can_escalate: bool = True
@@ -121,25 +113,11 @@ class HiveMindClientConnection:
 
     def send(self, message: HiveMessage):
         is_bin = message.msg_type == HiveMessageType.BINARY
-        # TODO some cleaning around HiveMessage
-        if not is_bin:
-            if isinstance(message.payload, dict):
-                _msg_type = message.payload.get("type")
-            else:
-                _msg_type = message.payload.msg_type
-
-            # Outbound message-type filter — deprecated. The canonical
-            # admission model is whitelist-only via ClientACLPolicy on
-            # the inbound side; this outbound block is preserved for
-            # back-compat with deployments still configuring
-            # message_blacklist via OVOSAgentPolicy.
-            if _msg_type in self.msg_blacklist:
-                LOG.debug(
-                    f"message type {_msg_type} is blacklisted for {self.peer}"
-                )
-                return
-            elif message.msg_type == HiveMessageType.BUS:
-                LOG.debug(f"mycroft_type {_msg_type}")
+        if not is_bin and message.msg_type == HiveMessageType.BUS:
+            _payload_type = (message.payload.get("type")
+                             if isinstance(message.payload, dict)
+                             else message.payload.msg_type)
+            LOG.debug(f"mycroft_type {_payload_type}")
 
         LOG.debug(f"sending to {self.peer}: {message.msg_type}")
 
@@ -242,51 +220,35 @@ class HiveMindListenerProtocol:
         else:
             self.binary_data_protocol.hm_protocol = self
         if self.policy_chain is None:
+            from hivemind_core.policy import ClientACLPolicy, DenyAllPolicy
             cfg = get_server_config()
             try:
-                self.policy_chain = PolicyChain.from_config(cfg, hm_protocol=self)
+                chain = PolicyChain.from_config(cfg, hm_protocol=self)
             except Exception:
-                # Honour the operator's fail_open intent. Default
-                # (fail_open=False) installs a DenyAllPolicy so the chain
-                # rejects every admission rather than silently flipping
-                # to allow-all. fail_open=True installs an empty chain.
-                fail_open = bool((cfg.get("policy") or {}).get("fail_open", False))
-                if fail_open:
-                    LOG.exception(
-                        "failed to build policy chain; fail_open=true, "
-                        "falling back to empty (allow-all) chain"
-                    )
-                    self.policy_chain = PolicyChain(fail_open=True)
-                else:
-                    from hivemind_core.policy import DenyAllPolicy
-                    LOG.exception(
-                        "failed to build policy chain; fail_open=false, "
-                        "installing DenyAllPolicy fallback — every admission "
-                        "will be rejected until configuration is fixed"
-                    )
-                    self.policy_chain = PolicyChain(
-                        policies=[DenyAllPolicy(hm_protocol=self)],
-                        fail_open=False,
-                    )
+                LOG.exception(
+                    "failed to build policy chain; installing DenyAllPolicy "
+                    "fallback — every admission will be rejected until "
+                    "configuration is fixed"
+                )
+                self.policy_chain = PolicyChain(
+                    policies=[DenyAllPolicy(hm_protocol=self)],
+                )
+            else:
+                # ClientACLPolicy is the canonical allowed_types whitelist
+                # enforcement and is non-removable. Prepend it to the
+                # configured chain (deduping if an operator listed it
+                # explicitly).
+                configured = [p for p in chain.policies
+                              if not isinstance(p, ClientACLPolicy)]
+                self.policy_chain = PolicyChain(
+                    policies=[ClientACLPolicy(hm_protocol=self), *configured],
+                )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
         return self.agent_protocol.bus
 
     def handle_new_client(self, client: HiveMindClientConnection):
-        # Populate the deprecated outbound msg_blacklist filter from the
-        # client's stored metadata so it works from the first outbound
-        # message — without this it only gets set when the client first
-        # sends something inbound and OVOSAgentPolicy refreshes it.
-        try:
-            user = self.db.get_client_by_api_key(client.key)
-            if user is not None:
-                client.msg_blacklist = list(
-                    (user.metadata or {}).get("message_blacklist") or []
-                )
-        except Exception:
-            LOG.exception("failed to populate msg_blacklist from DB metadata")
-
         try:
             self.callbacks.on_connect(client)
         except:

@@ -53,21 +53,20 @@ _DEFAULT = {
                          }},
     # policy admission chain — evaluated for every client message before
     # injection into the agent bus. See HiveMind-core#85.
+    #
+    # The chain is ALWAYS fail-closed: any unhandled exception in a
+    # policy becomes Verdict.deny("policy_error", ...). No knob.
+    #
+    # ClientACLPolicy (the allowed_types whitelist enforcement) is
+    # ALWAYS prepended to whatever appears in `chain` below — it cannot
+    # be disabled by configuration. This list is for *additional*
+    # policies layered on top.
     "policy": {
-        # if True, policy plugin errors are logged and skipped instead of
-        # producing Verdict.deny("policy_error", ...). Default fails closed.
-        "fail_open": False,
-        # ordered list of policy plugins to evaluate; each entry is
-        # {"module": "<entry-point-name>", "config": {...}}.
         "chain": [
-            # built-in: allowed_types whitelist (admission-side ACL,
-            # migrated out of HiveMindClientConnection.authorize)
-            {"module": "hivemind-core-acl-policy"},
-            # ships with hivemind-ovos-agent-plugin — the default agent
-            # protocol — and replaces the legacy skill/intent/msg
-            # blacklist injection that used to live in _update_blacklist
-            # (now _install_client_session). Drop this
-            # entry if you're running a non-OVOS agent plugin.
+            # OVOSAgentPolicy ships with hivemind-ovos-agent-plugin
+            # (the default agent_protocol) and injects skill/intent
+            # blacklists from Client.metadata into the OVOS session.
+            # Drop this entry if running a non-OVOS agent.
             {"module": "hivemind-ovos-agent-policy"},
         ],
     },

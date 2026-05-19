@@ -110,19 +110,11 @@ class TestPolicyChainReview(unittest.TestCase):
         self.assertEqual(v.data, {"limit": 10})
         self.assertEqual(seen.seen, [])  # never reached
 
-    def test_exception_fails_closed_by_default(self):
+    def test_exception_always_fails_closed(self):
         chain = PolicyChain(policies=[_RaisingPolicy()])
         v = chain.review(_msg(), client=None)
         self.assertTrue(v.denied)
         self.assertEqual(v.code, "policy_error")
-
-    def test_exception_fails_open_when_configured(self):
-        downstream = _AllowPolicy()
-        chain = PolicyChain(policies=[_RaisingPolicy(), downstream],
-                            fail_open=True)
-        v = chain.review(_msg("speak"), client=None)
-        self.assertFalse(v.denied)
-        self.assertEqual(downstream.seen, ["speak"])  # chain continued
 
 
 class TestPolicyChainBinary(unittest.TestCase):
@@ -136,16 +128,11 @@ class TestPolicyChainBinary(unittest.TestCase):
         self.assertTrue(v.denied)
         self.assertEqual(v.code, "oversize")
 
-    def test_exception_fails_closed_on_binary(self):
+    def test_exception_always_fails_closed_on_binary(self):
         chain = PolicyChain(policies=[_RaisingBinaryPolicy()])
         v = chain.review_binary(b"x", None)
         self.assertTrue(v.denied)
         self.assertEqual(v.code, "policy_error")
-
-    def test_exception_fails_open_on_binary(self):
-        chain = PolicyChain(policies=[_RaisingBinaryPolicy()], fail_open=True)
-        v = chain.review_binary(b"x", None)
-        self.assertFalse(v.denied)
 
 
 class TestPolicyChainObserve(unittest.TestCase):
@@ -169,14 +156,12 @@ class TestPolicyChainFromConfig(unittest.TestCase):
     def test_empty_config_yields_empty_chain(self):
         chain = PolicyChain.from_config({})
         self.assertEqual(chain.policies, [])
-        self.assertFalse(chain.fail_open)
 
     def test_loads_plugins_via_factory(self):
         with patch("hivemind_core.policy.PolicyPluginFactory.create",
                    return_value=_AllowPolicy()) as create:
             chain = PolicyChain.from_config({
                 "policy": {
-                    "fail_open": True,
                     "chain": [{"module": "my-policy",
                                "config": {"k": "v"}}],
                 },
@@ -184,26 +169,16 @@ class TestPolicyChainFromConfig(unittest.TestCase):
         create.assert_called_once_with("my-policy",
                                        config={"k": "v"}, hm_protocol="HM")
         self.assertEqual(len(chain.policies), 1)
-        self.assertTrue(chain.fail_open)
 
-    def test_load_failure_propagates_when_fail_closed(self):
+    def test_load_failure_always_propagates(self):
+        """No fail_open knob — chain build failures must crash startup
+        so the DenyAllPolicy fallback can install."""
         with patch("hivemind_core.policy.PolicyPluginFactory.create",
                    side_effect=KeyError("missing")):
             with self.assertRaises(KeyError):
                 PolicyChain.from_config({
                     "policy": {"chain": [{"module": "missing"}]},
                 })
-
-    def test_load_failure_skipped_when_fail_open(self):
-        with patch("hivemind_core.policy.PolicyPluginFactory.create",
-                   side_effect=KeyError("missing")):
-            chain = PolicyChain.from_config({
-                "policy": {
-                    "fail_open": True,
-                    "chain": [{"module": "missing"}],
-                },
-            })
-        self.assertEqual(chain.policies, [])
 
     def test_chain_entry_without_module_is_skipped(self):
         chain = PolicyChain.from_config({
@@ -217,8 +192,9 @@ class TestPolicyChainFromConfig(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class _FakeClient:
-    def __init__(self, allowed_types=None):
+    def __init__(self, allowed_types=None, is_admin=False):
         self.allowed_types = list(allowed_types or [])
+        self.is_admin = is_admin
 
 
 class TestClientACLPolicy(unittest.TestCase):
@@ -257,6 +233,12 @@ class TestClientACLPolicy(unittest.TestCase):
         v = p.review(_msg("forbidden"), client)
         self.assertIn("forbidden", v.reason)
 
+    def test_admin_bypasses_whitelist(self):
+        p = ClientACLPolicy()
+        client = _FakeClient(allowed_types=[], is_admin=True)
+        v = p.review(_msg("anything"), client)
+        self.assertFalse(v.denied)
+
 
 # ---------------------------------------------------------------------------
 # DenyAllPolicy — fail-closed fallback when chain construction fails
@@ -275,32 +257,18 @@ class TestDenyAllPolicy(unittest.TestCase):
 
 
 class TestFromConfigUnknownPlugin(unittest.TestCase):
-    """from_config raises a KeyError for an unknown entry-point name when
-    fail_open=False, so the protocol's __post_init__ can install the
-    DenyAllPolicy fallback. Locks the contract that the audit flagged.
+    """An unknown entry-point name raises so the protocol's __post_init__
+    can install the DenyAllPolicy fallback. There is no fail_open
+    bypass — startup either gets the configured chain or fails closed.
     """
 
-    def test_unknown_module_raises_under_fail_closed(self):
+    def test_unknown_module_raises(self):
         with patch("hivemind_core.policy.PolicyPluginFactory.create",
                    side_effect=KeyError("missing-plugin")):
             with self.assertRaises(KeyError):
                 PolicyChain.from_config({
-                    "policy": {
-                        "fail_open": False,
-                        "chain": [{"module": "missing-plugin"}],
-                    },
+                    "policy": {"chain": [{"module": "missing-plugin"}]},
                 })
-
-    def test_unknown_module_skipped_under_fail_open(self):
-        with patch("hivemind_core.policy.PolicyPluginFactory.create",
-                   side_effect=KeyError("missing-plugin")):
-            chain = PolicyChain.from_config({
-                "policy": {
-                    "fail_open": True,
-                    "chain": [{"module": "missing-plugin"}],
-                },
-            })
-        self.assertEqual(chain.policies, [])
 
 
 if __name__ == "__main__":

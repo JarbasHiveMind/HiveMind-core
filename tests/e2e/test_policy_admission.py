@@ -36,7 +36,7 @@ def _wait_for(condition, timeout: float = 2.0, interval: float = 0.02) -> bool:
     return False
 
 
-def _build(allowed_types=None, skill_bl=None, intent_bl=None, msg_bl=None):
+def _build(allowed_types=None, skill_bl=None, intent_bl=None):
     """Build a topology where the satellite registers under its own
     auto-generated access_key (not a pre-chosen one), so the live DB row
     matches the connection key. Pass per-client ACL fields through
@@ -50,23 +50,26 @@ def _build(allowed_types=None, skill_bl=None, intent_bl=None, msg_bl=None):
         allowed_types=allowed_types,
         skill_blacklist=skill_bl,
         intent_blacklist=intent_bl,
-        msg_blacklist=msg_bl,
     )
     return b, m
 
 
-def _swap_chain(master, chain_entries):
+def _swap_chain(master, configured_entries):
     """Replace the in-memory policy chain on an already-built master.
 
-    Avoids round-tripping through ``get_server_config()`` so tests can
-    pick their own chain without touching XDG state. ``chain_entries``
-    is a list of ``{"module": "...", "config": {...}}`` dicts, matching
-    the on-disk config shape.
+    Mirrors ``HiveMindListenerProtocol.__post_init__`` semantics:
+    always prepends a ``ClientACLPolicy`` to the configured chain so
+    the allowed_types whitelist is never bypassable.
     """
-    from hivemind_core.policy import PolicyChain
-    master.hm_protocol.policy_chain = PolicyChain.from_config(
-        {"policy": {"chain": chain_entries, "fail_open": False}},
+    from hivemind_core.policy import ClientACLPolicy, PolicyChain
+    chain = PolicyChain.from_config(
+        {"policy": {"chain": configured_entries}},
         hm_protocol=master.hm_protocol,
+    )
+    configured = [p for p in chain.policies
+                  if not isinstance(p, ClientACLPolicy)]
+    master.hm_protocol.policy_chain = PolicyChain(
+        policies=[ClientACLPolicy(hm_protocol=master.hm_protocol), *configured],
     )
 
 
@@ -107,7 +110,7 @@ def test_disallowed_type_is_denied_and_notifies_client():
     try:
         b.start_all()
         s = b.get_satellite("S0")
-        _swap_chain(m, [{"module": "hivemind-core-acl-policy"}])
+        _swap_chain(m, [])
 
         emitted = []
         m.agent_protocol.bus.on("speak", emitted.append)
@@ -139,7 +142,7 @@ def test_allowed_type_is_admitted():
     try:
         b.start_all()
         s = b.get_satellite("S0")
-        _swap_chain(m, [{"module": "hivemind-core-acl-policy"}])
+        _swap_chain(m, [])
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
@@ -153,22 +156,34 @@ def test_allowed_type_is_admitted():
         b.stop_all()
 
 
-def test_empty_chain_passes_everything_through():
-    """Chain disabled by config ⇒ messages flow regardless of allowed_types."""
-    b, m = _build(allowed_types=[])  # empty allowed_types would normally deny
+def test_empty_allowed_types_denies_all():
+    """ClientACLPolicy is always prepended and cannot be removed. Empty
+    allowed_types ⇒ everything is denied, even with an otherwise-empty
+    configured chain."""
+    b, m = _build(allowed_types=[])
     try:
         b.start_all()
         s = b.get_satellite("S0")
-        _swap_chain(m, [])  # no policies at all
+        _swap_chain(m, [])
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
+        denied = []
+        s.shim.emitter.on(
+            HiveMessageType.BUS,
+            lambda msg: (
+                denied.append(msg.payload)
+                if isinstance(msg.payload, Message)
+                and msg.payload.msg_type == "hive.policy.denied"
+                else None
+            ),
+        )
 
         _send_utterance(s)
 
-        assert _wait_for(lambda: len(seen) >= 1), (
-            f"empty chain dropped a message: {seen}"
-        )
+        assert _wait_for(lambda: len(denied) >= 1), denied
+        assert seen == [], seen
+        assert denied[0].data["code"] == "acl_disallowed_type"
     finally:
         b.stop_all()
 
@@ -186,10 +201,7 @@ def test_skill_blacklist_injected_into_session():
     try:
         b.start_all()
         s = b.get_satellite("S0")
-        _swap_chain(m, [
-            {"module": "hivemind-core-acl-policy"},
-            {"module": "hivemind-ovos-agent-policy"},
-        ])
+        _swap_chain(m, [{"module": "hivemind-ovos-agent-policy"}])
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
@@ -210,10 +222,7 @@ def test_intent_blacklist_injected_into_session():
     try:
         b.start_all()
         s = b.get_satellite("S0")
-        _swap_chain(m, [
-            {"module": "hivemind-core-acl-policy"},
-            {"module": "hivemind-ovos-agent-policy"},
-        ])
+        _swap_chain(m, [{"module": "hivemind-ovos-agent-policy"}])
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
@@ -241,10 +250,7 @@ def test_db_changes_picked_up_between_messages():
     try:
         b.start_all()
         s = b.get_satellite("S0")
-        _swap_chain(m, [
-            {"module": "hivemind-core-acl-policy"},
-            {"module": "hivemind-ovos-agent-policy"},
-        ])
+        _swap_chain(m, [{"module": "hivemind-ovos-agent-policy"}])
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
@@ -276,40 +282,35 @@ def test_db_changes_picked_up_between_messages():
 
 
 # ---------------------------------------------------------------------------
-# Outbound msg_blacklist — outbound-side filter is unaffected by the chain
+# Fail-closed semantics
 # ---------------------------------------------------------------------------
 
-def test_missing_plugin_falls_back_to_deny_all_under_fail_closed():
-    """Audit fix: a configured policy entry-point that fails to resolve
-    must NOT silently install an empty (allow-all) chain when the
-    operator runs fail_open=false. Verifies the DenyAllPolicy fallback
-    in HiveMindListenerProtocol.__post_init__.
+def test_missing_plugin_falls_back_to_deny_all():
+    """A configured policy entry-point that fails to resolve installs
+    the DenyAllPolicy fallback rather than silently allowing traffic.
+    Verifies the always-fail-closed contract in
+    HiveMindListenerProtocol.__post_init__.
     """
-    from hivemind_core.policy import DenyAllPolicy
+    from hivemind_core.policy import DenyAllPolicy, PolicyChain
 
     b, m = _build(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         s = b.get_satellite("S0")
 
-        # Force a chain rebuild that would have failed at startup.
-        from hivemind_core.policy import PolicyChain
+        # from_config must raise on a missing entry point — no silent skip.
         try:
             PolicyChain.from_config({
-                "policy": {
-                    "fail_open": False,
-                    "chain": [{"module": "does-not-exist-policy"}],
-                },
+                "policy": {"chain": [{"module": "does-not-exist-policy"}]},
             }, hm_protocol=m.hm_protocol)
             raised = False
         except Exception:
             raised = True
-        assert raised, "from_config should raise under fail_open=false"
+        assert raised, "from_config should raise on missing entry point"
 
-        # Simulate the protocol's __post_init__ fallback path.
+        # Simulate __post_init__'s DenyAllPolicy fallback.
         m.hm_protocol.policy_chain = PolicyChain(
             policies=[DenyAllPolicy(hm_protocol=m.hm_protocol)],
-            fail_open=False,
         )
 
         seen = []
@@ -338,8 +339,8 @@ def test_missing_plugin_falls_back_to_deny_all_under_fail_closed():
 
 def test_policy_exception_becomes_policy_error_under_fail_closed():
     """A policy raising in review() is converted to
-    Verdict.deny('policy_error', ...) under the default fail_open=false,
-    and the client receives hive.policy.denied.
+    Verdict.deny('policy_error', ...) — the chain is always fail-closed.
+    Client receives hive.policy.denied.
     """
     from hivemind_core.policy import PolicyChain
     from hivemind_plugin_manager import PolicyPlugin
@@ -354,7 +355,6 @@ def test_policy_exception_becomes_policy_error_under_fail_closed():
         s = b.get_satellite("S0")
         m.hm_protocol.policy_chain = PolicyChain(
             policies=[_ExplodingPolicy(hm_protocol=m.hm_protocol)],
-            fail_open=False,
         )
 
         seen = []
@@ -398,7 +398,6 @@ def test_review_binary_deny_blocks_dispatch():
         s = b.get_satellite("S0")
         m.hm_protocol.policy_chain = PolicyChain(
             policies=[_DenyBinaryPolicy(hm_protocol=m.hm_protocol)],
-            fail_open=False,
         )
 
         # Spy on the binary handler — denial must short-circuit it.
@@ -435,41 +434,5 @@ def test_review_binary_deny_blocks_dispatch():
             assert denied[0].data["denied_type"] == "binary"
         finally:
             m.hm_protocol.binary_data_protocol.handle_microphone_input = orig
-    finally:
-        b.stop_all()
-
-
-def test_outbound_msg_blacklist_still_filters_after_refactor():
-    """The send()-side filter on ``client.msg_blacklist`` predates the
-    chain and is orthogonal. Verifies the refactor didn't break it."""
-    b, m = _build(allowed_types=["recognizer_loop:utterance"])
-    try:
-        b.start_all()
-        s = b.get_satellite("S0")
-        # Default chain — exercises both built-in policies.
-
-        conn = m.hm_protocol.clients[s.peer]
-        conn.msg_blacklist = ["speak"]
-
-        seen_speak = []
-        s.shim.emitter.on(
-            HiveMessageType.BUS,
-            lambda msg: seen_speak.append(msg)
-            if isinstance(msg.payload, Message) and msg.payload.msg_type == "speak"
-            else None,
-        )
-
-        m.send_to_satellite(
-            s.peer,
-            HiveMessage(
-                HiveMessageType.BUS,
-                payload=Message("speak", {"utterance": "should not arrive"}),
-            ),
-        )
-
-        time.sleep(0.3)
-        assert seen_speak == [], (
-            f"blacklisted outbound 'speak' was delivered: {seen_speak}"
-        )
     finally:
         b.stop_all()

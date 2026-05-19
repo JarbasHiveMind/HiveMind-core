@@ -28,13 +28,18 @@ class PolicyChain:
     """Ordered list of policy plugins evaluated for every admission decision.
 
     A verdict from one policy can either short-circuit the chain
-    (`Verdict.deny`) or contribute mutations that are applied to the
-    message before the next policy runs. Exceptions raised by any policy
-    are converted to ``Verdict.deny("policy_error", ...)`` — fail-closed.
+    (``Verdict.deny``) or contribute mutations that are applied to the
+    message before the next policy runs.
+
+    **Always fail-closed.** Any exception raised by a policy (or by a
+    mutation's ``apply``) is converted to ``Verdict.deny("policy_error",
+    ...)``. There is no operator knob to disable this — the hivemind bus
+    is unauthenticated and private; lenient-on-error behaviour would be
+    a security footgun. A policy that wants to swallow its own errors
+    can do so in its own ``try/except`` and return ``Verdict.allow()``.
     """
 
     policies: List[PolicyPlugin] = field(default_factory=list)
-    fail_open: bool = False  # if True, exceptions become Verdict.allow()
 
     @classmethod
     def from_config(cls, config: Dict[str, Any],
@@ -45,7 +50,6 @@ class PolicyChain:
 
             {
               "policy": {
-                "fail_open": false,
                 "chain": [
                   {"module": "hivemind-intent-quota-policy",
                    "config": {"limit": 100}},
@@ -53,10 +57,17 @@ class PolicyChain:
                 ]
               }
             }
+
+        ``ClientACLPolicy`` is **not** listed here — it is always
+        prepended to the chain by ``HiveMindListenerProtocol`` and
+        cannot be removed by configuration. The whitelist enforcement
+        on ``allowed_types`` is the canonical admission gate.
+
+        Raises if any configured plugin fails to instantiate — startup
+        must crash rather than silently install a partial chain.
         """
         policy_cfg = config.get("policy") or {}
         chain_cfg = policy_cfg.get("chain") or []
-        fail_open = bool(policy_cfg.get("fail_open", False))
         policies: List[PolicyPlugin] = []
         for entry in chain_cfg:
             name = entry.get("module")
@@ -71,15 +82,14 @@ class PolicyChain:
                 LOG.info(f"loaded policy plugin: {name}")
             except Exception as e:
                 LOG.error(f"failed to load policy plugin '{name}': {e}")
-                if not fail_open:
-                    raise
-        return cls(policies=policies, fail_open=fail_open)
+                raise
+        return cls(policies=policies)
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
         """Run every policy's ``review`` hook in order, applying mutations
-        as we go. Returns the first deny verdict, or an allow verdict with
-        the accumulated mutations already applied to ``message``.
+        as we go. Returns the first deny verdict, or an allow verdict
+        with the accumulated mutations already applied to ``message``.
         """
         accumulated: List = []
         for policy in self.policies:
@@ -87,8 +97,6 @@ class PolicyChain:
                 verdict = policy.review(message, client)
             except Exception as e:
                 LOG.exception(f"policy {type(policy).__name__} raised")
-                if self.fail_open:
-                    continue
                 return Verdict.deny("policy_error",
                                     f"{type(policy).__name__}: {e}")
             if verdict.denied:
@@ -99,26 +107,22 @@ class PolicyChain:
                     accumulated.append(mutation)
                 except Exception as e:
                     LOG.exception("mutation application failed")
-                    if not self.fail_open:
-                        return Verdict.deny(
-                            "policy_error",
-                            f"mutation {type(mutation).__name__}: {e}",
-                        )
+                    return Verdict.deny(
+                        "policy_error",
+                        f"mutation {type(mutation).__name__}: {e}",
+                    )
         return Verdict.allow(*accumulated)
 
     def review_binary(self, payload: bytes,
                       client: "HiveMindClientConnection") -> Verdict:
-        """Run every policy's ``review_binary`` hook. Binary mutations are
-        not currently supported — mutations on a binary verdict are ignored
-        and logged. Deny short-circuits as usual.
+        """Run every policy's ``review_binary`` hook. Mutations on a
+        binary verdict are ignored (not supported); deny short-circuits.
         """
         for policy in self.policies:
             try:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
                 LOG.exception(f"policy {type(policy).__name__} review_binary raised")
-                if self.fail_open:
-                    continue
                 return Verdict.deny("policy_error",
                                     f"{type(policy).__name__}: {e}")
             if verdict.denied:
@@ -145,14 +149,12 @@ class PolicyChain:
 
 
 class DenyAllPolicy(PolicyPlugin):
-    """Fail-closed fallback policy installed when chain construction fails
-    under ``fail_open=false``.
+    """Fail-closed fallback policy installed when chain construction fails.
 
     Denies every inbound message + binary payload with
     ``code="policy_chain_unavailable"`` so operators see a loud signal
     in the client and in logs that the configured policy chain didn't
-    build. Better than silently installing an empty (allow-all) chain
-    when the operator asked for fail-closed semantics.
+    build. Better than silently installing an empty (allow-all) chain.
     """
 
     REASON = (
@@ -171,18 +173,22 @@ class DenyAllPolicy(PolicyPlugin):
 
 class ClientACLPolicy(PolicyPlugin):
     """Built-in admission policy enforcing the per-client ``allowed_types``
-    whitelist that previously lived in
-    :meth:`HiveMindClientConnection.authorize`.
+    whitelist. Always present in the chain — non-removable.
 
-    Returns ``Verdict.deny("acl_disallowed_type", ...)`` when the client's
-    ``allowed_types`` list does not include the inbound message type, else
-    ``Verdict.allow()``. No mutations and no DB sync — that responsibility
-    moves to agent-specific policies (e.g. ``OVOSAgentPolicy`` in
-    ``hivemind-ovos-agent-plugin``).
+    - Admin clients (``client.is_admin``) bypass the whitelist entirely.
+      They are operator-controlled and have full access by definition.
+    - Non-admin clients are denied when ``message.msg_type`` is not in
+      ``client.allowed_types``. Empty ``allowed_types`` ⇒ deny everything
+      (deny-by-default; the model is whitelist-only).
+
+    No mutations, no DB sync. Agent-specific concerns (skill/intent
+    blacklists, etc.) live in agent policies like ``OVOSAgentPolicy``.
     """
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
+        if getattr(client, "is_admin", False):
+            return Verdict.allow()
         allowed = list(getattr(client, "allowed_types", []) or [])
         msg_type = getattr(message, "msg_type", None)
         if msg_type not in allowed:
