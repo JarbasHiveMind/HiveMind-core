@@ -127,9 +127,9 @@ built-in code only when the semantics match.
 
 ## Wire Format: `hive.policy.denied`
 
-When the chain returns a deny verdict, the client receives an
-out-of-band notification routed via `HiveMessageType.THIRDPRTY`
-(the signal channel, not the agent bus). The message payload:
+When the chain returns a deny verdict, the client receives a
+`HiveMessageType.BUS` message of type `hive.policy.denied`. The
+payload:
 
 ```json
 {

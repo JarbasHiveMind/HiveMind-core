@@ -171,9 +171,10 @@ class HiveMindClientConnection:
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
+                plaintext = message.serialize()
+                LOG.debug(f"unencrypted payload size: {len(plaintext)} bytes")
                 payload = encrypt_as_json(
-                    key=self.crypto_key, plaintext=message.serialize(),
+                    key=self.crypto_key, plaintext=plaintext,
                     cipher=self.cipher, encoding=self.encoding
                 )  # json string
             LOG.debug(f"encrypted payload size: {len(payload)} bytes")
@@ -522,8 +523,7 @@ class HiveMindListenerProtocol:
                 {"source": "hivemind-core", "destination": client.peer},
             )
             try:
-                # THIRDPRTY: out-of-band server-to-client signal.
-                client.send(HiveMessage(HiveMessageType.THIRDPRTY, payload=denied))
+                client.send(HiveMessage(HiveMessageType.BUS, payload=denied))
             except Exception:
                 LOG.exception("failed to send hive.policy.denied for binary")
             return
@@ -1010,11 +1010,7 @@ class HiveMindListenerProtocol:
             {"source": "hivemind-core", "destination": client.peer},
         )
         try:
-            # THIRDPRTY: out-of-band server-to-client signal that never
-            # touches the agent bus. Using BUS here would re-enter the
-            # admission path and risk the client treating a denial as a
-            # legitimate bus message.
-            client.send(HiveMessage(HiveMessageType.THIRDPRTY, payload=payload))
+            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
         except Exception:
             LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
 

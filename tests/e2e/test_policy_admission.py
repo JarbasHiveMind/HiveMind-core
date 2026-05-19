@@ -36,6 +36,23 @@ def _wait_for(condition, timeout: float = 2.0, interval: float = 0.02) -> bool:
     return False
 
 
+def _capture_denied(satellite):
+    """Subscribe to ``hive.policy.denied`` notifications on the satellite.
+
+    Delivered as a BUS-wrapped ``Message`` with type ``hive.policy.denied``.
+    Returns a list that the caller can assert on once the message arrives.
+    """
+    captured: list = []
+
+    def _on(msg):
+        payload = getattr(msg, "payload", None)
+        if isinstance(payload, Message) and payload.msg_type == "hive.policy.denied":
+            captured.append(payload)
+
+    satellite.shim.emitter.on(HiveMessageType.BUS, _on)
+    return captured
+
+
 def _build(allowed_types=None, skill_bl=None, intent_bl=None):
     """Build a topology where the satellite registers under its own
     auto-generated access_key (not a pre-chosen one), so the live DB row
@@ -115,14 +132,7 @@ def test_disallowed_type_is_denied_and_notifies_client():
         emitted = []
         m.agent_protocol.bus.on("speak", emitted.append)
 
-        denied = []
-
-        def on_bus(msg):
-            payload = getattr(msg, "payload", None)
-            if isinstance(payload, Message) and payload.msg_type == "hive.policy.denied":
-                denied.append(payload)
-
-        s.shim.emitter.on(HiveMessageType.BUS, on_bus)
+        denied = _capture_denied(s)
 
         _send_speak(s)
 
@@ -168,16 +178,7 @@ def test_empty_allowed_types_denies_all():
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
-        denied = []
-        s.shim.emitter.on(
-            HiveMessageType.BUS,
-            lambda msg: (
-                denied.append(msg.payload)
-                if isinstance(msg.payload, Message)
-                and msg.payload.msg_type == "hive.policy.denied"
-                else None
-            ),
-        )
+        denied = _capture_denied(s)
 
         _send_utterance(s)
 
@@ -315,14 +316,7 @@ def test_missing_plugin_falls_back_to_deny_all():
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
-        denied = []
-
-        def on_bus(msg):
-            payload = getattr(msg, "payload", None)
-            if isinstance(payload, Message) and payload.msg_type == "hive.policy.denied":
-                denied.append(payload)
-
-        s.shim.emitter.on(HiveMessageType.BUS, on_bus)
+        denied = _capture_denied(s)
 
         _send_utterance(s)
 
@@ -359,16 +353,7 @@ def test_policy_exception_becomes_policy_error_under_fail_closed():
 
         seen = []
         m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
-        denied = []
-        s.shim.emitter.on(
-            HiveMessageType.BUS,
-            lambda msg: (
-                denied.append(msg.payload)
-                if isinstance(msg.payload, Message)
-                and msg.payload.msg_type == "hive.policy.denied"
-                else None
-            ),
-        )
+        denied = _capture_denied(s)
 
         _send_utterance(s)
 
@@ -407,16 +392,7 @@ def test_review_binary_deny_blocks_dispatch():
             lambda *a, **kw: called.append(a)
         )
 
-        denied = []
-        s.shim.emitter.on(
-            HiveMessageType.BUS,
-            lambda msg: (
-                denied.append(msg.payload)
-                if isinstance(msg.payload, Message)
-                and msg.payload.msg_type == "hive.policy.denied"
-                else None
-            ),
-        )
+        denied = _capture_denied(s)
 
         s.send(HiveMessage(
             HiveMessageType.BINARY,
