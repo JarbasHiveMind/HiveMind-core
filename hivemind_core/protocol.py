@@ -634,10 +634,13 @@ class HiveMindListenerProtocol:
         sess = Session.from_message(payload)
         if sent_pipeline:
             sess.pipeline = raw_session.get("pipeline")
-        if sess.session_id == "default" and not client.is_admin:
-            LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
-            client.disconnect()
-            return
+        # The per-message "session_id == 'default'" gate moved to
+        # OVOSAgentPolicy.review (HiveMind-core#85). Non-admin clients
+        # injecting a default-session payload get Verdict.deny(
+        # "session_id_default_forbidden", ...) and the message is dropped
+        # with a hive.policy.denied response — replacing the previous
+        # severe `client.disconnect()` reaction. The HELLO-time check at
+        # handle_hello_message stays as connection-establishment gate.
 
         if sess.session_id != "default" and client.sess.session_id == sess.session_id:
             if not sent_pipeline:

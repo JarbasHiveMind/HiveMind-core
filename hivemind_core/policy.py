@@ -90,9 +90,17 @@ class PolicyChain:
         """Run every policy's ``review`` hook in order, applying mutations
         as we go. Returns the first deny verdict, or an allow verdict
         with the accumulated mutations already applied to ``message``.
+
+        Policies that declare ``BYPASS_ADMIN = True`` are skipped when
+        ``client.is_admin`` is truthy. Quotas / audit / rate-limiting
+        policies should leave the default (``False``) so admins remain
+        subject to them.
         """
+        is_admin = bool(getattr(client, "is_admin", False))
         accumulated: List = []
         for policy in self.policies:
+            if is_admin and getattr(type(policy), "BYPASS_ADMIN", False):
+                continue
             try:
                 verdict = policy.review(message, client)
             except Exception as e:
@@ -117,8 +125,13 @@ class PolicyChain:
                       client: "HiveMindClientConnection") -> Verdict:
         """Run every policy's ``review_binary`` hook. Mutations on a
         binary verdict are ignored (not supported); deny short-circuits.
+
+        Same ``BYPASS_ADMIN`` semantics as :meth:`review`.
         """
+        is_admin = bool(getattr(client, "is_admin", False))
         for policy in self.policies:
+            if is_admin and getattr(type(policy), "BYPASS_ADMIN", False):
+                continue
             try:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
@@ -175,23 +188,24 @@ class ClientACLPolicy(PolicyPlugin):
     """Built-in admission policy enforcing the per-client ``allowed_types``
     whitelist. Always present in the chain — non-removable.
 
-    - Admin clients (``client.is_admin``) bypass the whitelist entirely.
-      They are operator-controlled and have full access by definition.
-    - Non-admin clients are denied when ``message.msg_type`` is not in
-      ``client.allowed_types``. Empty ``allowed_types`` ⇒ deny everything
-      (deny-by-default; the model is whitelist-only).
+    Admins bypass via ``BYPASS_ADMIN`` (skipped at chain-runner level
+    when ``client.is_admin``). Non-admin clients are denied when
+    ``message.msg_type`` is not in ``client.allowed_types``. Empty
+    ``allowed_types`` ⇒ deny everything (deny-by-default; the model is
+    whitelist-only).
 
-    No mutations, no DB sync. Agent-specific concerns (skill/intent
-    blacklists, etc.) live in agent policies like ``OVOSAgentPolicy``.
+    Refreshes ``allowed_types`` from the DB on each admission so
+    ``hivemind-core allow-msg`` / ``blacklist-msg`` take effect
+    immediately without forcing a reconnect.
+
+    No mutations. Agent-specific concerns (skill/intent blacklists, etc.)
+    live in agent policies like ``OVOSAgentPolicy``.
     """
+
+    BYPASS_ADMIN = True
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
-        # Refresh is_admin and allowed_types from the DB on each admission
-        # so an operator running `revoke-admin` / `blacklist-msg` mid-session
-        # takes effect immediately, without forcing the client to reconnect.
-        # Falls back to the cached connection values if the DB lookup fails.
-        is_admin = getattr(client, "is_admin", False)
         allowed = list(getattr(client, "allowed_types", []) or [])
         db = getattr(self.hm_protocol, "db", None)
         if db is not None:
@@ -199,14 +213,11 @@ class ClientACLPolicy(PolicyPlugin):
                 db.sync()
                 user = db.get_client_by_api_key(client.key)
                 if user is not None:
-                    is_admin = bool(getattr(user, "is_admin", is_admin))
                     allowed = list(getattr(user, "allowed_types", allowed) or [])
             except Exception:
-                LOG.debug("ClientACLPolicy: DB refresh failed; using cached values",
+                LOG.debug("ClientACLPolicy: DB refresh failed; using cached value",
                           exc_info=True)
 
-        if is_admin:
-            return Verdict.allow()
         msg_type = getattr(message, "msg_type", None)
         if msg_type not in allowed:
             return Verdict.deny(

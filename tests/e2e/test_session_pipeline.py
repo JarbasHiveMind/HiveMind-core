@@ -152,24 +152,22 @@ def test_agent_bus_callback_fires_exactly_once_per_bus_message():
         b.stop_all()
 
 
-def test_non_admin_default_session_id_is_disconnected():
-    """Non-admin client may not use the reserved ``default`` session id."""
+def test_non_admin_default_session_id_is_denied_by_policy():
+    """Non-admin client injecting session_id='default' is denied by
+    OVOSAgentPolicy (previously caused a connection disconnect; the
+    check moved to the policy chain in HiveMind-core#85 / #89 so the
+    response is now a clean ``hive.policy.denied`` with
+    ``code='session_id_default_forbidden'``)."""
     b = _non_admin_satellite()
     try:
         b.start_all()
         m = b.get_master("M0")
         s = b.get_satellite("S0")
 
-        peer = next(iter(m.hm_protocol.clients))
-        client = m.hm_protocol.clients[peer]
-        client.disconnect = MagicMock()
-
         _send_bus(s, {"session_id": "default", "site_id": "client-site"})
 
-        assert _wait_for(lambda: client.disconnect.called), (
-            "non-admin client using session_id='default' was not disconnected"
-        )
-        # And the message must not have reached the agent bus.
+        time.sleep(0.5)
+        # The message must not have reached the agent bus.
         assert not any(
             msg.msg_type == "recognizer_loop:utterance"
             for msg in m.agent_protocol.injected
@@ -178,28 +176,27 @@ def test_non_admin_default_session_id_is_disconnected():
         b.stop_all()
 
 
-def test_non_admin_payload_without_session_is_disconnected():
-    """Missing session in payload defaults to ``default`` and is rejected."""
+def test_non_admin_payload_without_session_is_denied_by_policy():
+    """Missing session in payload defaults to ``default`` and is denied
+    by OVOSAgentPolicy (was a disconnect, now a policy deny)."""
     b = _non_admin_satellite()
     try:
         b.start_all()
         m = b.get_master("M0")
         s = b.get_satellite("S0")
 
-        peer = next(iter(m.hm_protocol.clients))
-        client = m.hm_protocol.clients[peer]
-        client.disconnect = MagicMock()
-
         # Build the BUS message with NO session in context — Session.from_message
-        # will fall back to the reserved 'default' id, which a non-admin may not use.
+        # will fall back to the reserved 'default' id; OVOSAgentPolicy denies.
         msg = Message(
             "recognizer_loop:utterance", {"utterances": ["hello"]}, {}
         )
         s.send(HiveMessage(HiveMessageType.BUS, payload=msg))
 
-        assert _wait_for(lambda: client.disconnect.called), (
-            "non-admin client whose payload had no session was not disconnected"
-        )
+        time.sleep(0.5)
+        assert not any(
+            mm.msg_type == "recognizer_loop:utterance"
+            for mm in m.agent_protocol.injected
+        ), m.agent_protocol.injected
     finally:
         b.stop_all()
 

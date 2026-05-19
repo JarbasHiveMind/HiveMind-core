@@ -33,6 +33,10 @@ def _make_client(protocol, pipeline):
     )
     client.name = "test-client"
     client.allowed_types = ["recognizer_loop:utterance"]
+    # These tests target session-pipeline plumbing, not admission ACL.
+    # Mark the client admin so the always-on ClientACLPolicy + OVOSAgentPolicy
+    # bypass it (BYPASS_ADMIN=True), removing chain-induced noise.
+    client.is_admin = True
     client.sess = Session("session-1", site_id="client-site", pipeline=pipeline)
     return client
 

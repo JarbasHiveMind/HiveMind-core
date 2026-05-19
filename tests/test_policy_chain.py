@@ -236,38 +236,35 @@ class TestClientACLPolicy(unittest.TestCase):
         v = p.review(_msg("forbidden"), client)
         self.assertIn("forbidden", v.reason)
 
-    def test_admin_bypasses_whitelist(self):
+    def test_bypass_admin_class_attribute_is_set(self):
+        """ClientACLPolicy opts in to admin bypass at the chain-runner
+        level. The policy itself does NOT short-circuit on is_admin —
+        that's the chain's job. See test_chain_skips_bypass_admin_policies
+        below for the end-to-end behaviour."""
+        self.assertTrue(ClientACLPolicy.BYPASS_ADMIN)
+
+    def test_review_still_checks_allowed_types_when_called_directly(self):
+        """Even when called with is_admin=True, the policy honours
+        allowed_types if invoked directly (the chain runner is what
+        actually skips it for admins)."""
         p = ClientACLPolicy()
         client = _FakeClient(allowed_types=[], is_admin=True)
         v = p.review(_msg("anything"), client)
-        self.assertFalse(v.denied)
-
-    def test_db_refresh_picks_up_revoked_admin(self):
-        """Mid-session admin revoke: connection cached is_admin=True,
-        DB row has is_admin=False — DB wins."""
-        from types import SimpleNamespace
-        client = _FakeClient(allowed_types=[], is_admin=True)
-        client.key = "k"
-        revoked_user = SimpleNamespace(is_admin=False, allowed_types=[])
-        db = MagicMock()
-        db.sync = MagicMock()
-        db.get_client_by_api_key = MagicMock(return_value=revoked_user)
-        p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
-        v = p.review(_msg("speak"), client)
         self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
 
-    def test_db_refresh_picks_up_granted_admin(self):
-        """Reverse: connection cached is_admin=False but DB row has been
-        promoted. DB wins, request is allowed."""
+    def test_db_refresh_picks_up_allowed_type_grant(self):
+        """Mid-session grant via `allow-msg`: connection cached
+        allowed_types=[], DB row has the type — DB wins."""
         from types import SimpleNamespace
         client = _FakeClient(allowed_types=[], is_admin=False)
         client.key = "k"
-        promoted = SimpleNamespace(is_admin=True, allowed_types=[])
+        granted = SimpleNamespace(allowed_types=["recognizer_loop:utterance"])
         db = MagicMock()
         db.sync = MagicMock()
-        db.get_client_by_api_key = MagicMock(return_value=promoted)
+        db.get_client_by_api_key = MagicMock(return_value=granted)
         p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
-        v = p.review(_msg("anything"), client)
+        v = p.review(_msg("recognizer_loop:utterance"), client)
         self.assertFalse(v.denied)
 
     def test_db_failure_falls_back_to_cached_values(self):
@@ -281,6 +278,44 @@ class TestClientACLPolicy(unittest.TestCase):
         p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
         v = p.review(_msg("ok"), client)
         self.assertFalse(v.denied)  # used cached allowed_types
+
+
+class TestChainAdminBypass(unittest.TestCase):
+    """The chain runner itself enforces BYPASS_ADMIN: policies with
+    BYPASS_ADMIN=True are skipped for admin clients."""
+
+    def test_chain_skips_bypass_admin_policies_for_admin(self):
+        admin = _FakeClient(allowed_types=[], is_admin=True)
+        v = PolicyChain(policies=[ClientACLPolicy()]).review(
+            _msg("speak"), admin,
+        )
+        self.assertFalse(v.denied)
+
+    def test_chain_runs_non_bypass_admin_policies_for_admin(self):
+        """A custom policy without BYPASS_ADMIN (e.g. a quota policy)
+        still applies to admins."""
+
+        class _AlwaysDeny(PolicyPlugin):
+            BYPASS_ADMIN = False
+
+            def review(self, message, client):
+                return Verdict.deny("nope", "admins not exempt")
+
+        admin = _FakeClient(allowed_types=["speak"], is_admin=True)
+        v = PolicyChain(policies=[_AlwaysDeny()]).review(_msg("speak"), admin)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "nope")
+
+    def test_chain_review_binary_honours_bypass_admin(self):
+        class _DenyBinary(PolicyPlugin):
+            BYPASS_ADMIN = True
+
+            def review_binary(self, payload, client):
+                return Verdict.deny("nope")
+
+        admin = _FakeClient(is_admin=True)
+        v = PolicyChain(policies=[_DenyBinary()]).review_binary(b"x", admin)
+        self.assertFalse(v.denied)
 
 
 # ---------------------------------------------------------------------------
