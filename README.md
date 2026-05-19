@@ -101,6 +101,11 @@ The default configuration
       "port": 5679
     }
   },
+  "policy": {
+    "chain": [
+      {"module": "hivemind-ovos-agent-policy"}
+    ]
+  },
   "database": {
     "module": "hivemind-json-db-plugin",
     "hivemind-json-db-plugin": {
@@ -110,6 +115,64 @@ The default configuration
   }
 }
 ```
+
+### Policy Admission Chain
+
+Every inbound message passes through an ordered **policy admission chain** before reaching the agent bus. See [issue #85](https://github.com/JarbasHiveMind/HiveMind-core/issues/85) for the full spec.
+
+**How it works:**
+
+1. `ClientACLPolicy` is **always prepended** to the chain and cannot be removed by configuration. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. Admin clients bypass the whitelist entirely. — `hivemind_core/policy.py:174`
+2. Configured plugins in `policy.chain` run after `ClientACLPolicy`, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
+3. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator knob to override this. — `hivemind_core/policy.py:36`
+4. If the chain fails to build at startup, a `DenyAllPolicy` fallback is installed, rejecting every message with `code="policy_chain_unavailable"` until configuration is fixed. — `hivemind_core/policy.py:151`
+
+**Denied messages** receive a `hive.policy.denied` BUS response with payload:
+
+```json
+{
+  "denied_type": "<msg_type or 'binary'>",
+  "code": "<verdict code>",
+  "reason": "<human-readable reason>",
+  "data": {}
+}
+```
+
+`handle_inject_agent_msg` runs `policy_chain.review()` then `policy_chain.observe()` for every accepted message. `handle_binary_message` runs `policy_chain.review_binary()`. — `hivemind_core/protocol.py:908`, `hivemind_core/protocol.py:457`
+
+**ACL model — whitelist-only, deny-by-default:**
+
+- `allowed_types` is the only ACL field on `HiveMindClientConnection`. There is no message blacklist. — `hivemind_core/protocol.py:92`
+- A freshly created client (via `add-client`) has an **empty** `allowed_types` list and will be denied all messages until the operator explicitly grants types with `allow-msg`.
+- Admin clients (`is_admin=True`) bypass `ClientACLPolicy` entirely.
+
+To grant a message type:
+
+```bash
+$ hivemind-core allow-msg "recognizer_loop:utterance" 1
+$ hivemind-core allow-msg "speak" 1
+```
+
+**Removing a type** (mutates `allowed_types`; not deprecated):
+
+```bash
+$ hivemind-core blacklist-msg "speak" 1
+```
+
+**Skill and intent filtering** are OVOS-specific concerns handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`, the default `agent_protocol`). The CLI commands `blacklist-skill`, `allow-skill`, `blacklist-intent`, and `allow-intent` are preserved for backwards compatibility but emit a deprecation warning and write through `Client.metadata` rather than a first-class field. — `hivemind_core/scripts.py:464`
+
+To add additional policies, extend the `policy.chain` list with plugin module names:
+
+```json
+"policy": {
+  "chain": [
+    {"module": "hivemind-ovos-agent-policy"},
+    {"module": "hivemind-intent-quota-policy", "config": {"limit": 100}}
+  ]
+}
+```
+
+Drop `hivemind-ovos-agent-policy` from the list only if you are running a non-OVOS agent backend.
 
 
 ---
@@ -165,17 +228,23 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  add-client        add credentials for a client
-  allow-intent      remove intents from a client blacklist
-  allow-msg         allow message types to be sent from a client
-  allow-skill       remove skills from a client blacklist
-  blacklist-intent  blacklist intents from being triggered by a client
-  blacklist-msg     blacklist message types from being sent from a client
-  blacklist-skill   blacklist skills from being triggered by a client
-  delete-client     remove credentials for a client
-  list-clients      list clients and credentials
-  listen            start listening for HiveMind connections
-  rename-client     Rename a client in the database
+  add-client           add credentials for a client
+  allow-msg            allow a message type to be sent from a client
+  blacklist-msg        remove a message type from a client's allowed list
+  allow-escalate       allow ESCALATE messages from a client
+  blacklist-escalate   deny ESCALATE messages from a client
+  allow-propagate      allow PROPAGATE messages from a client
+  blacklist-propagate  deny PROPAGATE messages from a client
+  delete-client        remove credentials for a client
+  list-clients         list clients and credentials
+  listen               start listening for HiveMind connections
+  make-admin           grant administrator privileges to a client
+  revoke-admin         revoke administrator privileges from a client
+  rename-client        rename a client in the database
+  allow-intent         (deprecated) remove an intent from a client blacklist
+  allow-skill          (deprecated) remove a skill from a client blacklist
+  blacklist-intent     (deprecated) blacklist an intent for a client
+  blacklist-skill      (deprecated) blacklist a skill for a client
 ```
 
 For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
@@ -249,17 +318,15 @@ $ hivemind-core delete-client 1
 
 ### `allow-msg`
 
-By default only some messages are allowed, extra messages can be allowed per client
-
-Allow specific message types to be sent by a client.
+Grant a specific message type to a client’s `allowed_types` whitelist. New clients have an **empty** whitelist and are denied all messages until at least one type is granted.
 
 ```bash
-$ hivemind-core allow-msg "speak"
+$ hivemind-core allow-msg "recognizer_loop:utterance" 1
+$ hivemind-core allow-msg "speak" 1
 ```
 
 - **When to use**:  
-  Use this command to enable certain message types, particularly when extending a client’s communication capabilities (
-  e.g., allowing TTS commands).
+  Use this command after `add-client` to grant the message types the client needs. Without any `allow-msg` calls the client is effectively locked out (deny-by-default).
 
 ---
 
@@ -277,57 +344,18 @@ $ hivemind-core blacklist-msg "speak"
 
 ---
 
-### `blacklist-skill`
+### `blacklist-skill` / `allow-skill` / `blacklist-intent` / `allow-intent` (deprecated)
 
-Prevent a specific skill from being triggered by a client.
-
-```bash
-$ hivemind-core blacklist-skill "skill-weather" 1
-```
-
-- **When to use**:  
-  Use this command to restrict a client’s access to particular skills, such as preventing a device from accessing
-  certain skills for safety or appropriateness.
-
----
-
-### `allow-skill`
-
-Remove a skill from a client’s blacklist, allowing it to be triggered.
+> **Deprecated.** These commands emit a deprecation warning to stderr and write through `Client.metadata` rather than a first-class field. Skill and intent filtering is an OVOS-specific concern now handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`). The commands are preserved for backwards compatibility with existing deployment scripts. — `hivemind_core/scripts.py:464`
 
 ```bash
+$ hivemind-core blacklist-skill "skill-weather" 1   # writes Client.metadata["skill_blacklist"]
 $ hivemind-core allow-skill "skill-weather" 1
-```
-
-- **When to use**:  
-  If restrictions on a skill are no longer needed, use this command to reinstate access to the skill.
-
----
-
-### `blacklist-intent`
-
-Block a specific intent from being triggered by a client.
-
-```bash
-$ hivemind-core blacklist-intent "intent.check_weather" 1
-```
-
-- **When to use**:  
-  Use this command to block a specific intent from being triggered by a client. This is useful for managing permissions
-  in environments with shared skills.
-
----
-
-### `allow-intent`
-
-Remove a specific intent from a client’s blacklist.
-
-```bash
+$ hivemind-core blacklist-intent "intent.check_weather" 1  # writes Client.metadata["intent_blacklist"]
 $ hivemind-core allow-intent "intent.check_weather" 1
 ```
 
-- **When to use**:  
-  Use this command to re-enable access to previously blocked intents, restoring functionality for the client.
+For new deployments, configure `OVOSAgentPolicy` directly or set `Client.metadata["skill_blacklist"]` / `Client.metadata["intent_blacklist"]` via `add-client --metadata`.
 
 ---
 
