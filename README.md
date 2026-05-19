@@ -161,6 +161,8 @@ $ hivemind-core blacklist-msg "speak" 1
 
 **Skill and intent filtering** are OVOS-specific concerns handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`, the default `agent_protocol`). The CLI commands `blacklist-skill`, `allow-skill`, `blacklist-intent`, and `allow-intent` are preserved for backwards compatibility but emit a deprecation warning and write through `Client.metadata` rather than a first-class field. — `hivemind_core/scripts.py:464`
 
+**On-disk migration of legacy blacklist fields.** Database backends (e.g. `hivemind-sqlite-database`, `hivemind-redis-database`) implement the new `AbstractDB.migrate(from_version)` hook from `hivemind-plugin-manager` and run a one-shot `v1 → v2` migration on first open. The migration folds any legacy top-level `intent_blacklist` / `skill_blacklist` / `message_blacklist` storage (SQLite columns, JSON keys, Redis hash fields) into each row's `metadata` dict via `setdefault` (explicit metadata wins), then clears the legacy storage. Backends track their schema version natively (SQLite `PRAGMA user_version`, Redis sentinel key) so the migration runs exactly once per database. Third-party backends that do not override `migrate()` keep working — the property shims on `Client` ensure read-path code is agnostic to on-disk shape.
+
 To add additional policies, extend the `policy.chain` list with plugin module names:
 
 ```json
