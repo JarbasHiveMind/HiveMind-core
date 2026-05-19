@@ -13,9 +13,11 @@ Spec: https://github.com/JarbasHiveMind/HiveMind-core/issues/85
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
-from hivemind_plugin_manager import PolicyPlugin, PolicyPluginFactory, Verdict
+from hivemind_plugin_manager import (DenyCodes, PolicyPlugin,
+                                     PolicyPluginFactory,
+                                     RESOLVED_CLIENT_CTX_KEY, Verdict)
 from ovos_bus_client.message import Message
 from ovos_utils.log import LOG
 
@@ -40,6 +42,7 @@ class PolicyChain:
     """
 
     policies: List[PolicyPlugin] = field(default_factory=list)
+    on_verdict: Optional[Callable[[PolicyPlugin, Verdict], None]] = None
 
     @classmethod
     def from_config(cls, config: Dict[str, Any],
@@ -101,21 +104,41 @@ class PolicyChain:
                 verdict = policy.review(message, client)
             except Exception as e:
                 LOG.exception(f"policy {type(policy).__name__} raised")
-                return Verdict.deny("policy_error",
-                                    f"{type(policy).__name__}: {e}")
+                verdict = Verdict.deny(
+                    DenyCodes.POLICY_ERROR, "policy raised",
+                    policy=type(policy).__name__, error=str(e),
+                )
+                self._fire_on_verdict(policy, verdict)
+                return verdict
+            self._fire_on_verdict(policy, verdict)
             if verdict.denied:
                 return verdict
             for mutation in verdict.mutations:
                 try:
-                    mutation.apply(message, client)
+                    result = mutation.apply(message, client)
+                    if result is not None:
+                        message = result
                     accumulated.append(mutation)
                 except Exception as e:
                     LOG.exception("mutation application failed")
                     return Verdict.deny(
-                        "policy_error",
-                        f"mutation {type(mutation).__name__}: {e}",
+                        DenyCodes.POLICY_ERROR, "mutation raised",
+                        policy=type(policy).__name__,
+                        mutation=type(mutation).__name__,
+                        error=str(e),
                     )
         return Verdict.allow(*accumulated)
+
+    def _fire_on_verdict(self, policy: PolicyPlugin, verdict: Verdict) -> None:
+        """Invoke the optional ``on_verdict`` trace hook. Never raises —
+        exceptions are logged and swallowed so a buggy tracer can't break
+        the admission path."""
+        if self.on_verdict is None:
+            return
+        try:
+            self.on_verdict(policy, verdict)
+        except Exception:
+            LOG.exception("on_verdict tracer raised — ignored")
 
     def review_binary(self, payload: bytes,
                       client: "HiveMindClientConnection") -> Verdict:
@@ -130,8 +153,10 @@ class PolicyChain:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
                 LOG.exception(f"policy {type(policy).__name__} review_binary raised")
-                return Verdict.deny("policy_error",
-                                    f"{type(policy).__name__}: {e}")
+                return Verdict.deny(
+                    DenyCodes.POLICY_ERROR, "policy raised",
+                    policy=type(policy).__name__, error=str(e),
+                )
             if verdict.denied:
                 return verdict
             if verdict.mutations:
@@ -171,11 +196,11 @@ class DenyAllPolicy(PolicyPlugin):
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
-        return Verdict.deny("policy_chain_unavailable", self.REASON)
+        return Verdict.deny(DenyCodes.POLICY_CHAIN_UNAVAILABLE, self.REASON)
 
     def review_binary(self, payload: bytes,
                        client: "HiveMindClientConnection") -> Verdict:
-        return Verdict.deny("policy_chain_unavailable", self.REASON)
+        return Verdict.deny(DenyCodes.POLICY_CHAIN_UNAVAILABLE, self.REASON)
 
 
 class MessageTypeACLPolicy(PolicyPlugin):
@@ -192,6 +217,11 @@ class MessageTypeACLPolicy(PolicyPlugin):
     ``hivemind-core allow-msg`` / ``blacklist-msg`` take effect
     immediately without forcing a reconnect.
 
+    Convention: on a successful DB lookup, the resolved client row is
+    stashed on ``message.context[RESOLVED_CLIENT_CTX_KEY]`` so downstream
+    policies in the same chain pass can reuse it instead of issuing
+    their own DB query. Reserved key — do not use it for unrelated data.
+
     No mutations. Agent-specific concerns (skill/intent blacklists, etc.)
     live in agent policies like ``OVOSAgentPolicy``.
     """
@@ -206,14 +236,23 @@ class MessageTypeACLPolicy(PolicyPlugin):
                 user = db.get_client_by_api_key(client.key)
                 if user is not None:
                     allowed = list(getattr(user, "allowed_types", allowed) or [])
+                    # Memoise the resolved client on message.context so
+                    # downstream policies (e.g. OVOSAgentPolicy) skip a
+                    # second DB hit.
+                    try:
+                        ctx = getattr(message, "context", None)
+                        if isinstance(ctx, dict):
+                            ctx[RESOLVED_CLIENT_CTX_KEY] = user
+                    except Exception:
+                        pass
             except Exception:
-                LOG.debug("MessageTypeACLPolicy: DB refresh failed; using cached value",
-                          exc_info=True)
+                LOG.warning("MessageTypeACLPolicy: DB refresh failed; using cached value",
+                            exc_info=True)
 
         msg_type = getattr(message, "msg_type", None)
         if msg_type not in allowed:
             return Verdict.deny(
-                "acl_disallowed_type",
+                DenyCodes.ACL_DISALLOWED_TYPE,
                 f"{msg_type} not in allowed_types",
                 msg_type=msg_type,
                 allowed=allowed,

@@ -553,5 +553,66 @@ def unblacklist_intent(intent_id, node_id):
     _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=False)
 
 
+@hmcore_cmds.group(name="policy", help="Inspect the policy admission chain.")
+def policy_group():
+    """Subcommands for introspecting the configured policy chain."""
+    pass
+
+
+@policy_group.command(name="list", help="Print the loaded policy chain.")
+def policy_list():
+    """List ``MessageTypeACLPolicy`` (always first, non-removable) followed
+    by every plugin built from ``policy.chain`` in server config."""
+    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    cfg = get_server_config()
+    builtin = MessageTypeACLPolicy()
+    try:
+        chain = PolicyChain.from_config(cfg)
+    except Exception as e:
+        click.echo(f"failed to build chain from config: {e}", err=True)
+        chain = PolicyChain()
+    table = Table(title="Policy Chain")
+    table.add_column("Position", justify="right", style="cyan")
+    table.add_column("Plugin", style="magenta")
+    table.add_column("Source", style="yellow")
+    table.add_row("0", type(builtin).__name__, "builtin")
+    for i, plug in enumerate(chain.policies, start=1):
+        table.add_row(str(i), type(plug).__name__, "config")
+    Console().print(table)
+
+
+@policy_group.command(name="test", help="Dry-run a message through the chain.")
+@click.argument("api_key", required=True, type=str)
+@click.argument("msg_type", required=True, type=str)
+def policy_test(api_key, msg_type):
+    """Construct a fake ``Message`` of ``msg_type``, look up the client by
+    ``api_key``, run the full chain (MessageTypeACLPolicy + configured
+    plugins), and print the verdict."""
+    from ovos_bus_client.message import Message
+    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    db = ClientDatabase()
+    client = db.get_client_by_api_key(api_key)
+    if client is None:
+        click.echo(f"no client found for api_key={api_key!r}", err=True)
+        raise click.Abort()
+    cfg = get_server_config()
+    policies = [MessageTypeACLPolicy()]
+    try:
+        chain = PolicyChain.from_config(cfg)
+        policies.extend(chain.policies)
+    except Exception as e:
+        click.echo(f"chain build failed: {e}", err=True)
+    full_chain = PolicyChain(policies=policies)
+    msg = Message(msg_type, {}, {})
+    verdict = full_chain.review(msg, client)
+    click.echo(json.dumps({
+        "denied": verdict.denied,
+        "code": verdict.code,
+        "reason": verdict.reason,
+        "data": verdict.data,
+        "mutations": [type(m).__name__ for m in verdict.mutations],
+    }, indent=2, default=str))
+
+
 if __name__ == "__main__":
     hmcore_cmds()

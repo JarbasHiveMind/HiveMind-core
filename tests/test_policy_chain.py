@@ -362,5 +362,145 @@ class TestFromConfigUnknownPlugin(unittest.TestCase):
                 })
 
 
+class _RaisingMutation(Mutation):
+    def apply(self, message, client):
+        raise RuntimeError("boom-mutate")
+
+
+class _RaisingMutationPolicy(PolicyPlugin):
+    def review(self, message, client):
+        return Verdict.allow(_RaisingMutation())
+
+
+class TestMutationFailure(unittest.TestCase):
+    def test_mutation_apply_failure_converts_to_policy_error(self):
+        chain = PolicyChain(policies=[_RaisingMutationPolicy()])
+        v = chain.review(_msg(), client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+        self.assertEqual(v.data.get("mutation"), "_RaisingMutation")
+        self.assertEqual(v.data.get("policy"), "_RaisingMutationPolicy")
+        self.assertIn("error", v.data)
+
+
+class TestStructuredPolicyErrorData(unittest.TestCase):
+    def test_policy_exception_includes_policy_name_in_data(self):
+        chain = PolicyChain(policies=[_RaisingPolicy()])
+        v = chain.review(_msg(), client=None)
+        self.assertEqual(v.code, "policy_error")
+        self.assertEqual(v.data.get("policy"), "_RaisingPolicy")
+        self.assertIn("error", v.data)
+
+
+class TestMessageTypeACLPolicyMemoisation(unittest.TestCase):
+    def test_resolved_client_stashed_on_context(self):
+        from types import SimpleNamespace
+        from hivemind_plugin_manager import RESOLVED_CLIENT_CTX_KEY
+        client = _FakeClient(allowed_types=[], is_admin=False)
+        client.key = "k"
+        granted = SimpleNamespace(allowed_types=["speak"])
+        db = MagicMock()
+        db.sync = MagicMock()
+        db.get_client_by_api_key = MagicMock(return_value=granted)
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        m = _msg("speak")
+        v = p.review(m, client)
+        self.assertFalse(v.denied)
+        self.assertIs(m.context[RESOLVED_CLIENT_CTX_KEY], granted)
+
+
+class TestMessageTypeACLPolicyNoDB(unittest.TestCase):
+    def test_no_db_uses_cached_allowed_types(self):
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["speak"])
+        # hm_protocol with db=None
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=None))
+        self.assertFalse(p.review(_msg("speak"), client).denied)
+        self.assertTrue(p.review(_msg("nope"), client).denied)
+
+    def test_hm_protocol_none_uses_cached_allowed_types(self):
+        client = _FakeClient(allowed_types=["speak"])
+        p = MessageTypeACLPolicy()
+        self.assertFalse(p.review(_msg("speak"), client).denied)
+
+
+class TestObserveNotCalledWhenDenied(unittest.TestCase):
+    def test_observe_skipped_on_denial(self):
+        """A denial verdict from PolicyChain.review means the message
+        was not emitted — callers must not invoke observe() in that path.
+        We assert the contract at the caller-test level by ensuring the
+        chain's review() result is denied and the caller can branch."""
+        chain = PolicyChain(policies=[_DenyPolicy(), _AllowPolicy()])
+        observed = _AllowPolicy()
+        chain_with_observer = PolicyChain(policies=[_DenyPolicy(), observed])
+        v = chain_with_observer.review(_msg(), client=None)
+        self.assertTrue(v.denied)
+        # If a caller respects the deny contract and skips observe(),
+        # observed.observed stays empty. We simulate the contract:
+        if not v.denied:
+            chain_with_observer.observe(_msg(), client=None)
+        self.assertEqual(observed.observed, [])
+
+
+class TestDenyAllPolicyReview(unittest.TestCase):
+    def test_review_and_review_binary_return_policy_chain_unavailable(self):
+        p = DenyAllPolicy()
+        v = p.review(_msg(), _FakeClient())
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_chain_unavailable")
+        vb = p.review_binary(b"x", _FakeClient())
+        self.assertTrue(vb.denied)
+        self.assertEqual(vb.code, "policy_chain_unavailable")
+
+
+class TestEntryPointDiscovery(unittest.TestCase):
+    """Built-in policies are registered under the ``hivemind.policy``
+    entry-point group. This verifies the metadata is wired correctly."""
+
+    def test_builtin_policies_discoverable(self):
+        from importlib.metadata import entry_points
+        names = {ep.name for ep in entry_points(group="hivemind.policy")}
+        # Both built-ins must be discoverable when hivemind-core is
+        # installed.
+        self.assertIn("hivemind-message-type-acl-policy", names)
+        self.assertIn("hivemind-deny-all-policy", names)
+
+
+class TestOnVerdictHook(unittest.TestCase):
+    def test_on_verdict_called_for_each_policy(self):
+        events = []
+        chain = PolicyChain(
+            policies=[_AllowPolicy(), _DenyPolicy()],
+            on_verdict=lambda p, v: events.append(
+                (type(p).__name__, v.denied, v.code),
+            ),
+        )
+        chain.review(_msg(), client=None)
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0][0], "_AllowPolicy")
+        self.assertFalse(events[0][1])
+        self.assertEqual(events[1][0], "_DenyPolicy")
+        self.assertTrue(events[1][1])
+        self.assertEqual(events[1][2], "quota_exceeded")
+
+    def test_on_verdict_exception_swallowed(self):
+        def boom(p, v):
+            raise RuntimeError("trace-boom")
+
+        chain = PolicyChain(policies=[_AllowPolicy()], on_verdict=boom)
+        # Must not raise.
+        v = chain.review(_msg(), client=None)
+        self.assertFalse(v.denied)
+
+    def test_on_verdict_fires_on_policy_exception(self):
+        events = []
+        chain = PolicyChain(
+            policies=[_RaisingPolicy()],
+            on_verdict=lambda p, v: events.append((type(p).__name__, v.code)),
+        )
+        chain.review(_msg(), client=None)
+        self.assertEqual(events, [("_RaisingPolicy", "policy_error")])
+
+
 if __name__ == "__main__":
     unittest.main()

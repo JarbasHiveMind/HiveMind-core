@@ -477,7 +477,8 @@ class HiveMindListenerProtocol:
                 {"source": "hivemind-core", "destination": client.peer},
             )
             try:
-                client.send(HiveMessage(HiveMessageType.BUS, payload=denied))
+                # THIRDPRTY: out-of-band server-to-client signal.
+                client.send(HiveMessage(HiveMessageType.THIRDPRTY, payload=denied))
             except Exception:
                 LOG.exception("failed to send hive.policy.denied for binary")
             return
@@ -964,7 +965,11 @@ class HiveMindListenerProtocol:
             {"source": "hivemind-core", "destination": client.peer},
         )
         try:
-            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
+            # THIRDPRTY: out-of-band server-to-client signal that never
+            # touches the agent bus. Using BUS here would re-enter the
+            # admission path and risk the client treating a denial as a
+            # legitimate bus message.
+            client.send(HiveMessage(HiveMessageType.THIRDPRTY, payload=payload))
         except Exception:
             LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
 
