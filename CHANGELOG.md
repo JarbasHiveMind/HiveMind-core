@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.2.0a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.2.0a3) (2026-05-19)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.2.0a2...4.2.0a3)
+
+**Merged pull requests:**
+
+- ci: add lint workflow [\#91](https://github.com/JarbasHiveMind/HiveMind-core/pull/91) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.2.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.2.0a2) (2026-05-18)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.2.0a1...4.2.0a2)
