@@ -38,6 +38,8 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
 from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from hivemind_plugin_manager.database import Client
+from hivemind_plugin_manager.policy import PolicyPlugin
 from hivemind_core.policy import PolicyChain
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
@@ -101,6 +103,41 @@ class HiveMindClientConnection:
 
     cipher: Literal[SupportedCiphers] = SupportedCiphers.AES_GCM
     encoding: Literal[SupportedEncodings] = SupportedEncodings.JSON_HEX
+
+    # Connection-scoped resolved-user cache. Policies call ``resolve_user``
+    # which hits the DB at most once per ``ttl`` window; ``invalidate_user``
+    # forces the next call to refetch. Avoids per-policy DB sync() storms
+    # on the admission hot path. Not part of the public field set.
+    _resolved_user: Optional[Client] = field(default=None, init=False, repr=False)
+    _resolved_user_ts: float = field(default=0.0, init=False, repr=False)
+
+    def resolve_user(self, db, ttl: float = 5.0,
+                     force: bool = False) -> Optional[Client]:
+        """Return the cached DB row for this connection, refetching at
+        most every ``ttl`` seconds (or unconditionally when ``force``).
+
+        Looks up by ``client_id`` (via ``db.refresh``) when available,
+        falling back to the api-key path otherwise. Exceptions from the
+        DB propagate — callers fail-closed.
+        """
+        if (not force
+                and self._resolved_user is not None
+                and time.time() - self._resolved_user_ts <= ttl):
+            return self._resolved_user
+        client_id = getattr(self._resolved_user, "client_id", None)
+        if client_id is not None:
+            user = db.refresh(client_id)
+        else:
+            user = db.get_client_by_api_key(self.key)
+        self._resolved_user = user
+        self._resolved_user_ts = time.time()
+        return self._resolved_user
+
+    def invalidate_user(self) -> None:
+        """Drop the cached resolved user so the next ``resolve_user`` call
+        forces a fresh DB lookup."""
+        self._resolved_user = None
+        self._resolved_user_ts = 0.0
 
     def __post_init__(self):
         self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
@@ -237,11 +274,19 @@ class HiveMindListenerProtocol:
                 # MessageTypeACLPolicy is the canonical allowed_types whitelist
                 # enforcement and is non-removable. Prepend it to the
                 # configured chain (deduping if an operator listed it
-                # explicitly).
-                configured = [p for p in chain.policies
-                              if not isinstance(p, MessageTypeACLPolicy)]
+                # explicitly). Always mandatory — _optional[0] = False.
+                configured: List[PolicyPlugin] = []
+                configured_optional: List[bool] = []
+                for i, p in enumerate(chain.policies):
+                    if isinstance(p, MessageTypeACLPolicy):
+                        continue
+                    configured.append(p)
+                    configured_optional.append(
+                        chain._optional[i] if i < len(chain._optional) else False
+                    )
                 self.policy_chain = PolicyChain(
                     policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
+                    _optional=[False, *configured_optional],
                 )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:

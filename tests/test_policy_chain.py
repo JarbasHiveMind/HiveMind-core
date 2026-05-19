@@ -198,6 +198,25 @@ class _FakeClient:
     def __init__(self, allowed_types=None, is_admin=False):
         self.allowed_types = list(allowed_types or [])
         self.is_admin = is_admin
+        self.key = "k"
+        self._resolved = None
+        self._resolve_calls = 0
+
+    def resolve_user(self, db, ttl: float = 5.0, force: bool = False):
+        """Test stand-in for HiveMindClientConnection.resolve_user — the
+        chain treats _FakeClient as a connection, so we mirror that
+        method shape here. Uses a single-shot cache so we can assert on
+        ``_resolve_calls``."""
+        self._resolve_calls += 1
+        if self._resolved is None or force:
+            try:
+                self._resolved = db.get_client_by_api_key(self.key)
+            except Exception:
+                raise
+        return self._resolved
+
+    def invalidate_user(self):
+        self._resolved = None
 
 
 class TestMessageTypeACLPolicy(unittest.TestCase):
@@ -251,23 +270,23 @@ class TestMessageTypeACLPolicy(unittest.TestCase):
         allowed_types=[], DB row has the type — DB wins."""
         from types import SimpleNamespace
         client = _FakeClient(allowed_types=[], is_admin=False)
-        client.key = "k"
         granted = SimpleNamespace(allowed_types=["recognizer_loop:utterance"])
         db = MagicMock()
-        db.sync = MagicMock()
         db.get_client_by_api_key = MagicMock(return_value=granted)
         p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
         v = p.review(_msg("recognizer_loop:utterance"), client)
         self.assertFalse(v.denied)
 
     def test_db_failure_falls_back_to_cached_values(self):
-        """If db.sync or db.get raise, MessageTypeACLPolicy uses the cached
+        """If resolve_user raises, MessageTypeACLPolicy uses the cached
         connection fields (no fail-open exception leak)."""
         from types import SimpleNamespace
         client = _FakeClient(allowed_types=["ok"], is_admin=False)
-        client.key = "k"
+
+        def boom(db, ttl=5.0, force=False):
+            raise RuntimeError("db down")
+        client.resolve_user = boom
         db = MagicMock()
-        db.sync = MagicMock(side_effect=Exception("db down"))
         p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
         v = p.review(_msg("ok"), client)
         self.assertFalse(v.denied)  # used cached allowed_types
@@ -393,20 +412,19 @@ class TestStructuredPolicyErrorData(unittest.TestCase):
 
 
 class TestMessageTypeACLPolicyMemoisation(unittest.TestCase):
-    def test_resolved_client_stashed_on_context(self):
+    def test_resolve_user_cached_across_chain(self):
+        """MessageTypeACLPolicy calls client.resolve_user; downstream
+        policies in the same chain pass reuse the cached row."""
         from types import SimpleNamespace
-        from hivemind_plugin_manager import RESOLVED_CLIENT_CTX_KEY
         client = _FakeClient(allowed_types=[], is_admin=False)
-        client.key = "k"
         granted = SimpleNamespace(allowed_types=["speak"])
         db = MagicMock()
-        db.sync = MagicMock()
         db.get_client_by_api_key = MagicMock(return_value=granted)
         p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
-        m = _msg("speak")
-        v = p.review(m, client)
+        v = p.review(_msg("speak"), client)
         self.assertFalse(v.denied)
-        self.assertIs(m.context[RESOLVED_CLIENT_CTX_KEY], granted)
+        self.assertIs(client._resolved, granted)
+        self.assertEqual(client._resolve_calls, 1)
 
 
 class TestMessageTypeACLPolicyNoDB(unittest.TestCase):
@@ -500,6 +518,49 @@ class TestOnVerdictHook(unittest.TestCase):
         )
         chain.review(_msg(), client=None)
         self.assertEqual(events, [("_RaisingPolicy", "policy_error")])
+
+
+class TestOptionalPolicyFlag(unittest.TestCase):
+    def test_optional_policy_exception_does_not_block_chain(self):
+        chain = PolicyChain(
+            policies=[_RaisingPolicy(), _AllowPolicy()],
+            _optional=[True, False],
+        )
+        v = chain.review(_msg(), client=None)
+        self.assertFalse(v.denied)
+
+    def test_mandatory_policy_exception_blocks_chain(self):
+        chain = PolicyChain(
+            policies=[_RaisingPolicy(), _AllowPolicy()],
+            _optional=[False, False],
+        )
+        v = chain.review(_msg(), client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+    def test_optional_flag_defaults_to_false(self):
+        chain = PolicyChain.from_config({
+            "policy": {"chain": [
+                {"module": "hivemind-deny-all-policy"},
+            ]},
+        })
+        self.assertEqual(chain._optional, [False])
+
+
+class TestOnVerdictAccumulatedMutations(unittest.TestCase):
+    def test_on_verdict_receives_accumulated_mutations_on_allow(self):
+        events = []
+        chain = PolicyChain(
+            policies=[_MutatePolicy(), _AllowPolicy()],
+            on_verdict=lambda p, v: events.append((p, list(v.mutations))),
+        )
+        v = chain.review(_msg(), client=None)
+        self.assertFalse(v.denied)
+        # Last event is the synthetic chain-complete verdict with
+        # policy=None and the accumulated mutation list.
+        self.assertIsNone(events[-1][0])
+        self.assertEqual(len(events[-1][1]), 1)
+        self.assertEqual(len(v.mutations), 1)
 
 
 if __name__ == "__main__":

@@ -64,8 +64,8 @@ Mutation classes are agent-specific and live with the agent plugin
   first. Enforces the per-client `allowed_types` whitelist; an empty
   whitelist denies everything (deny-by-default). Refreshes the
   whitelist from the database on every admission so
-  `hivemind-core allow-msg` takes effect without a reconnect. Stashes
-  the resolved client on `message.context["_resolved_client"]` so
+  `hivemind-core allow-msg` takes effect without a reconnect. Caches
+  the resolved client row on the connection (`client.resolve_user`) so
   downstream policies skip a second DB hit.
 - **`DenyAllPolicy`** — fail-closed fallback installed when
   `PolicyChain.from_config` raises. Denies every message and binary
@@ -83,9 +83,19 @@ policy:
       config:
         limit: 100
     - module: hivemind-ovos-agent-policy
+    - module: my-experimental-policy
+      optional: true
 ```
 
 `MessageTypeACLPolicy` is implicit and always first — do not list it.
+
+### `optional` flag
+
+Per-chain-entry `optional: true` marks the policy as non-load-bearing:
+if its `review` / `review_binary` raises, the chain logs a warning and
+treats the verdict as allow (no mutations, chain continues). Default
+is `false` — exceptions fail closed with `policy_error`. The implicit
+`MessageTypeACLPolicy` is always mandatory and ignores this flag.
 
 `allowed_types` is the canonical admission whitelist for a client.
 Grant message types with `hivemind-core allow-msg <msg_type> <node_id>`;
@@ -114,3 +124,27 @@ built-in code only when the semantics match.
   then configured plugins).
 - `hivemind-core policy test <api_key> <msg_type>` — dry-run a fake
   message through the chain and print the verdict as JSON.
+
+## Wire Format: `hive.policy.denied`
+
+When the chain returns a deny verdict, the client receives an
+out-of-band notification routed via `HiveMessageType.THIRDPRTY`
+(the signal channel, not the agent bus). The message payload:
+
+```json
+{
+  "denied_type": "<original msg_type>",
+  "code": "<DenyCode value>",
+  "reason": "<human-readable>",
+  "data": { "...": "policy-specific structured fields" }
+}
+```
+
+- `denied_type` — the `msg_type` of the message that was rejected.
+- `code` — stable machine-readable identifier; see the Deny-Code
+  Reference above.
+- `reason` — human-readable explanation for logs / UIs.
+- `data` — free-form structured payload set by the policy
+  (`msg_type`, `allowed`, `policy`, `error`, etc. depending on code).
+
+Clients SHOULD branch on `code`; `reason` is informational only.

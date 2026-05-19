@@ -16,8 +16,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 from hivemind_plugin_manager import (DenyCodes, PolicyPlugin,
-                                     PolicyPluginFactory,
-                                     RESOLVED_CLIENT_CTX_KEY, Verdict)
+                                     PolicyPluginFactory, Verdict)
 from ovos_bus_client.message import Message
 from ovos_utils.log import LOG
 
@@ -42,7 +41,12 @@ class PolicyChain:
     """
 
     policies: List[PolicyPlugin] = field(default_factory=list)
-    on_verdict: Optional[Callable[[PolicyPlugin, Verdict], None]] = None
+    on_verdict: Optional[Callable[[Optional[PolicyPlugin], Verdict], None]] = None
+    # Parallel to ``policies``: True ⇒ exceptions from that policy are
+    # logged and treated as Verdict.allow() (chain continues). False
+    # (default) ⇒ exception fails the chain closed with POLICY_ERROR.
+    # The force-prepended MessageTypeACLPolicy is always mandatory.
+    _optional: List[bool] = field(default_factory=list)
 
     @classmethod
     def from_config(cls, config: Dict[str, Any],
@@ -72,6 +76,7 @@ class PolicyChain:
         policy_cfg = config.get("policy") or {}
         chain_cfg = policy_cfg.get("chain") or []
         policies: List[PolicyPlugin] = []
+        optional_flags: List[bool] = []
         for entry in chain_cfg:
             name = entry.get("module")
             if not name:
@@ -82,11 +87,13 @@ class PolicyChain:
                     hm_protocol=hm_protocol,
                 )
                 policies.append(plug)
-                LOG.info(f"loaded policy plugin: {name}")
+                optional_flags.append(bool(entry.get("optional", False)))
+                LOG.info(f"loaded policy plugin: {name}"
+                         f"{' (optional)' if optional_flags[-1] else ''}")
             except Exception as e:
                 LOG.error(f"failed to load policy plugin '{name}': {e}")
                 raise
-        return cls(policies=policies)
+        return cls(policies=policies, _optional=optional_flags)
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
@@ -99,10 +106,17 @@ class PolicyChain:
         status branch on ``client.is_admin`` themselves.
         """
         accumulated: List = []
-        for policy in self.policies:
+        for i, policy in enumerate(self.policies):
+            is_optional = self._optional[i] if i < len(self._optional) else False
             try:
                 verdict = policy.review(message, client)
             except Exception as e:
+                if is_optional:
+                    LOG.warning(
+                        f"optional policy {type(policy).__name__} raised; "
+                        f"continuing chain: {e}"
+                    )
+                    continue
                 LOG.exception(f"policy {type(policy).__name__} raised")
                 verdict = Verdict.deny(
                     DenyCodes.POLICY_ERROR, "policy raised",
@@ -127,9 +141,13 @@ class PolicyChain:
                         mutation=type(mutation).__name__,
                         error=str(e),
                     )
-        return Verdict.allow(*accumulated)
+        final = Verdict.allow(*accumulated)
+        # Synthetic chain-complete trace: fire on_verdict with policy=None
+        # so tracers can see the full accumulated mutation set.
+        self._fire_on_verdict(None, final)
+        return final
 
-    def _fire_on_verdict(self, policy: PolicyPlugin, verdict: Verdict) -> None:
+    def _fire_on_verdict(self, policy: Optional[PolicyPlugin], verdict: Verdict) -> None:
         """Invoke the optional ``on_verdict`` trace hook. Never raises —
         exceptions are logged and swallowed so a buggy tracer can't break
         the admission path."""
@@ -148,10 +166,17 @@ class PolicyChain:
         ``Client.is_admin`` is informational only here too — no
         runner-level bypass; policies branch on it themselves.
         """
-        for policy in self.policies:
+        for i, policy in enumerate(self.policies):
+            is_optional = self._optional[i] if i < len(self._optional) else False
             try:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
+                if is_optional:
+                    LOG.warning(
+                        f"optional policy {type(policy).__name__} "
+                        f"review_binary raised; continuing chain: {e}"
+                    )
+                    continue
                 LOG.exception(f"policy {type(policy).__name__} review_binary raised")
                 return Verdict.deny(
                     DenyCodes.POLICY_ERROR, "policy raised",
@@ -217,10 +242,9 @@ class MessageTypeACLPolicy(PolicyPlugin):
     ``hivemind-core allow-msg`` / ``blacklist-msg`` take effect
     immediately without forcing a reconnect.
 
-    Convention: on a successful DB lookup, the resolved client row is
-    stashed on ``message.context[RESOLVED_CLIENT_CTX_KEY]`` so downstream
-    policies in the same chain pass can reuse it instead of issuing
-    their own DB query. Reserved key — do not use it for unrelated data.
+    The resolved DB row is cached on the connection via
+    ``client.resolve_user(db)`` so downstream policies in the same chain
+    pass reuse it instead of issuing their own DB query.
 
     No mutations. Agent-specific concerns (skill/intent blacklists, etc.)
     live in agent policies like ``OVOSAgentPolicy``.
@@ -232,19 +256,9 @@ class MessageTypeACLPolicy(PolicyPlugin):
         db = getattr(self.hm_protocol, "db", None)
         if db is not None:
             try:
-                db.sync()
-                user = db.get_client_by_api_key(client.key)
+                user = client.resolve_user(db)
                 if user is not None:
                     allowed = list(getattr(user, "allowed_types", allowed) or [])
-                    # Memoise the resolved client on message.context so
-                    # downstream policies (e.g. OVOSAgentPolicy) skip a
-                    # second DB hit.
-                    try:
-                        ctx = getattr(message, "context", None)
-                        if isinstance(ctx, dict):
-                            ctx[RESOLVED_CLIENT_CTX_KEY] = user
-                    except Exception:
-                        pass
             except Exception:
                 LOG.warning("MessageTypeACLPolicy: DB refresh failed; using cached value",
                             exc_info=True)
