@@ -17,6 +17,8 @@ def _make_protocol():
     db_user.skill_blacklist = []
     db_user.intent_blacklist = []
     db_user.message_blacklist = []
+    db_user.allowed_types = ["recognizer_loop:utterance"]
+    db_user.is_admin = True
 
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
@@ -34,8 +36,10 @@ def _make_client(protocol, pipeline):
     client.name = "test-client"
     client.allowed_types = ["recognizer_loop:utterance"]
     # These tests target session-pipeline plumbing, not admission ACL.
-    # Mark the client admin so the always-on ClientACLPolicy + OVOSAgentPolicy
-    # bypass it (BYPASS_ADMIN=True), removing chain-induced noise.
+    # Marked admin so OVOSAgentPolicy lets ``session_id == "default"``
+    # payloads through (the only check it gates on is_admin).
+    # MessageTypeACLPolicy ignores is_admin — allowed_types is set explicitly
+    # above to cover its whitelist check.
     client.is_admin = True
     client.sess = Session("session-1", site_id="client-site", pipeline=pipeline)
     return client

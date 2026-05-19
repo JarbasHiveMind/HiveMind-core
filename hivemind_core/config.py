@@ -58,7 +58,7 @@ _DEFAULT = {
     # The chain is ALWAYS fail-closed: any unhandled exception in a
     # policy becomes Verdict.deny("policy_error", ...). No knob.
     #
-    # ClientACLPolicy (the allowed_types whitelist enforcement) is
+    # MessageTypeACLPolicy (the allowed_types whitelist enforcement) is
     # ALWAYS prepended to whatever appears in `chain` below — it cannot
     # be disabled by configuration. This list is for *additional*
     # policies layered on top.

@@ -2,7 +2,7 @@
 
 Exercises the chain through a real master/satellite stack via hivescope:
 
-- ClientACLPolicy (built-in, ``allowed_types`` enforcement) replaces the
+- MessageTypeACLPolicy (built-in, ``allowed_types`` enforcement) replaces the
   static check that used to live in ``HiveMindClientConnection.authorize``.
 - OVOSAgentPolicy (from ``hivemind-ovos-agent-plugin``) replaces the
   side-effecting skill/intent/msg blacklist injection that used to live
@@ -58,18 +58,18 @@ def _swap_chain(master, configured_entries):
     """Replace the in-memory policy chain on an already-built master.
 
     Mirrors ``HiveMindListenerProtocol.__post_init__`` semantics:
-    always prepends a ``ClientACLPolicy`` to the configured chain so
+    always prepends a ``MessageTypeACLPolicy`` to the configured chain so
     the allowed_types whitelist is never bypassable.
     """
-    from hivemind_core.policy import ClientACLPolicy, PolicyChain
+    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
     chain = PolicyChain.from_config(
         {"policy": {"chain": configured_entries}},
         hm_protocol=master.hm_protocol,
     )
     configured = [p for p in chain.policies
-                  if not isinstance(p, ClientACLPolicy)]
+                  if not isinstance(p, MessageTypeACLPolicy)]
     master.hm_protocol.policy_chain = PolicyChain(
-        policies=[ClientACLPolicy(hm_protocol=master.hm_protocol), *configured],
+        policies=[MessageTypeACLPolicy(hm_protocol=master.hm_protocol), *configured],
     )
 
 
@@ -99,7 +99,7 @@ def _send_speak(satellite, text="blocked"):
 
 
 # ---------------------------------------------------------------------------
-# ClientACLPolicy — allowed_types
+# MessageTypeACLPolicy — allowed_types
 # ---------------------------------------------------------------------------
 
 def test_disallowed_type_is_denied_and_notifies_client():
@@ -157,7 +157,7 @@ def test_allowed_type_is_admitted():
 
 
 def test_empty_allowed_types_denies_all():
-    """ClientACLPolicy is always prepended and cannot be removed. Empty
+    """MessageTypeACLPolicy is always prepended and cannot be removed. Empty
     allowed_types ⇒ everything is denied, even with an otherwise-empty
     configured chain."""
     b, m = _build(allowed_types=[])

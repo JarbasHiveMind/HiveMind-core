@@ -54,7 +54,8 @@ Homepage = "https://github.com/JarbasHiveMind/HiveMind-core"
 hivemind-core = "hivemind_core.scripts:hmcore_cmds"
 
 [project.entry-points."hivemind.policy"]
-"hivemind-core-acl-policy" = "hivemind_core.policy:ClientACLPolicy"
+"hivemind-message-type-acl-policy" = "hivemind_core.policy:MessageTypeACLPolicy"
+"hivemind-deny-all-policy" = "hivemind_core.policy:DenyAllPolicy"
 
 [tool.setuptools]
 packages = ["hivemind_core"]

@@ -58,7 +58,7 @@ class PolicyChain:
               }
             }
 
-        ``ClientACLPolicy`` is **not** listed here — it is always
+        ``MessageTypeACLPolicy`` is **not** listed here — it is always
         prepended to the chain by ``HiveMindListenerProtocol`` and
         cannot be removed by configuration. The whitelist enforcement
         on ``allowed_types`` is the canonical admission gate.
@@ -91,16 +91,12 @@ class PolicyChain:
         as we go. Returns the first deny verdict, or an allow verdict
         with the accumulated mutations already applied to ``message``.
 
-        Policies that declare ``BYPASS_ADMIN = True`` are skipped when
-        ``client.is_admin`` is truthy. Quotas / audit / rate-limiting
-        policies should leave the default (``False``) so admins remain
-        subject to them.
+        ``Client.is_admin`` is informational only — the runner does not
+        skip any policy based on it. Policies that care about admin
+        status branch on ``client.is_admin`` themselves.
         """
-        is_admin = bool(getattr(client, "is_admin", False))
         accumulated: List = []
         for policy in self.policies:
-            if is_admin and getattr(type(policy), "BYPASS_ADMIN", False):
-                continue
             try:
                 verdict = policy.review(message, client)
             except Exception as e:
@@ -126,12 +122,10 @@ class PolicyChain:
         """Run every policy's ``review_binary`` hook. Mutations on a
         binary verdict are ignored (not supported); deny short-circuits.
 
-        Same ``BYPASS_ADMIN`` semantics as :meth:`review`.
+        ``Client.is_admin`` is informational only here too — no
+        runner-level bypass; policies branch on it themselves.
         """
-        is_admin = bool(getattr(client, "is_admin", False))
         for policy in self.policies:
-            if is_admin and getattr(type(policy), "BYPASS_ADMIN", False):
-                continue
             try:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
@@ -184,15 +178,15 @@ class DenyAllPolicy(PolicyPlugin):
         return Verdict.deny("policy_chain_unavailable", self.REASON)
 
 
-class ClientACLPolicy(PolicyPlugin):
+class MessageTypeACLPolicy(PolicyPlugin):
     """Built-in admission policy enforcing the per-client ``allowed_types``
     whitelist. Always present in the chain — non-removable.
 
-    Admins bypass via ``BYPASS_ADMIN`` (skipped at chain-runner level
-    when ``client.is_admin``). Non-admin clients are denied when
-    ``message.msg_type`` is not in ``client.allowed_types``. Empty
-    ``allowed_types`` ⇒ deny everything (deny-by-default; the model is
-    whitelist-only).
+    Every client (admin or not) is denied when ``message.msg_type`` is
+    not in ``client.allowed_types``. Empty ``allowed_types`` ⇒ deny
+    everything (deny-by-default; the model is whitelist-only). Admins
+    are not exempt — operators grant the message types they need via
+    ``hivemind-core allow-msg`` like any other client.
 
     Refreshes ``allowed_types`` from the DB on each admission so
     ``hivemind-core allow-msg`` / ``blacklist-msg`` take effect
@@ -201,8 +195,6 @@ class ClientACLPolicy(PolicyPlugin):
     No mutations. Agent-specific concerns (skill/intent blacklists, etc.)
     live in agent policies like ``OVOSAgentPolicy``.
     """
-
-    BYPASS_ADMIN = True
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
@@ -215,7 +207,7 @@ class ClientACLPolicy(PolicyPlugin):
                 if user is not None:
                     allowed = list(getattr(user, "allowed_types", allowed) or [])
             except Exception:
-                LOG.debug("ClientACLPolicy: DB refresh failed; using cached value",
+                LOG.debug("MessageTypeACLPolicy: DB refresh failed; using cached value",
                           exc_info=True)
 
         msg_type = getattr(message, "msg_type", None)

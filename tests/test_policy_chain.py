@@ -10,7 +10,7 @@ Covers:
 - observe swallows exceptions.
 - from_config loads plugins via PolicyPluginFactory; unknown entry
   points raise so __post_init__ can install DenyAllPolicy.
-- ClientACLPolicy: allowed_types whitelist + admin bypass.
+- MessageTypeACLPolicy: allowed_types whitelist (admins are not exempt).
 - DenyAllPolicy: rejects every admission with policy_chain_unavailable.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 from hivemind_plugin_manager import Mutation, PolicyPlugin, Verdict
 from ovos_bus_client.message import Message
 
-from hivemind_core.policy import ClientACLPolicy, DenyAllPolicy, PolicyChain
+from hivemind_core.policy import MessageTypeACLPolicy, DenyAllPolicy, PolicyChain
 
 
 class AddBlacklistedSkill(Mutation):
@@ -191,7 +191,7 @@ class TestPolicyChainFromConfig(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# ClientACLPolicy — built-in allowed_types enforcement
+# MessageTypeACLPolicy — built-in allowed_types enforcement
 # ---------------------------------------------------------------------------
 
 class _FakeClient:
@@ -200,16 +200,16 @@ class _FakeClient:
         self.is_admin = is_admin
 
 
-class TestClientACLPolicy(unittest.TestCase):
+class TestMessageTypeACLPolicy(unittest.TestCase):
     def test_allowed_type_allows(self):
-        p = ClientACLPolicy()
+        p = MessageTypeACLPolicy()
         client = _FakeClient(allowed_types=["recognizer_loop:utterance"])
         v = p.review(_msg("recognizer_loop:utterance"), client)
         self.assertFalse(v.denied)
         self.assertEqual(v.mutations, [])
 
     def test_disallowed_type_denies(self):
-        p = ClientACLPolicy()
+        p = MessageTypeACLPolicy()
         client = _FakeClient(allowed_types=["recognizer_loop:utterance"])
         v = p.review(_msg("speak"), client)
         self.assertTrue(v.denied)
@@ -218,36 +218,29 @@ class TestClientACLPolicy(unittest.TestCase):
         self.assertEqual(v.data["allowed"], ["recognizer_loop:utterance"])
 
     def test_empty_allowed_denies_everything(self):
-        p = ClientACLPolicy()
+        p = MessageTypeACLPolicy()
         client = _FakeClient(allowed_types=[])
         v = p.review(_msg("recognizer_loop:utterance"), client)
         self.assertTrue(v.denied)
         self.assertEqual(v.code, "acl_disallowed_type")
 
     def test_none_allowed_types_treated_as_empty(self):
-        p = ClientACLPolicy()
+        p = MessageTypeACLPolicy()
         client = _FakeClient(allowed_types=None)
         v = p.review(_msg("anything"), client)
         self.assertTrue(v.denied)
 
     def test_reason_string_includes_msg_type(self):
-        p = ClientACLPolicy()
+        p = MessageTypeACLPolicy()
         client = _FakeClient(allowed_types=["ok"])
         v = p.review(_msg("forbidden"), client)
         self.assertIn("forbidden", v.reason)
 
-    def test_bypass_admin_class_attribute_is_set(self):
-        """ClientACLPolicy opts in to admin bypass at the chain-runner
-        level. The policy itself does NOT short-circuit on is_admin —
-        that's the chain's job. See test_chain_skips_bypass_admin_policies
-        below for the end-to-end behaviour."""
-        self.assertTrue(ClientACLPolicy.BYPASS_ADMIN)
-
-    def test_review_still_checks_allowed_types_when_called_directly(self):
-        """Even when called with is_admin=True, the policy honours
-        allowed_types if invoked directly (the chain runner is what
-        actually skips it for admins)."""
-        p = ClientACLPolicy()
+    def test_admins_are_not_exempt_from_allowed_types(self):
+        """is_admin is informational only — MessageTypeACLPolicy honours
+        allowed_types for every client. Operators grant message types
+        to admins via ``allow-msg`` like any other client."""
+        p = MessageTypeACLPolicy()
         client = _FakeClient(allowed_types=[], is_admin=True)
         v = p.review(_msg("anything"), client)
         self.assertTrue(v.denied)
@@ -263,41 +256,43 @@ class TestClientACLPolicy(unittest.TestCase):
         db = MagicMock()
         db.sync = MagicMock()
         db.get_client_by_api_key = MagicMock(return_value=granted)
-        p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
         v = p.review(_msg("recognizer_loop:utterance"), client)
         self.assertFalse(v.denied)
 
     def test_db_failure_falls_back_to_cached_values(self):
-        """If db.sync or db.get raise, ClientACLPolicy uses the cached
+        """If db.sync or db.get raise, MessageTypeACLPolicy uses the cached
         connection fields (no fail-open exception leak)."""
         from types import SimpleNamespace
         client = _FakeClient(allowed_types=["ok"], is_admin=False)
         client.key = "k"
         db = MagicMock()
         db.sync = MagicMock(side_effect=Exception("db down"))
-        p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
         v = p.review(_msg("ok"), client)
         self.assertFalse(v.denied)  # used cached allowed_types
 
 
-class TestChainAdminBypass(unittest.TestCase):
-    """The chain runner itself enforces BYPASS_ADMIN: policies with
-    BYPASS_ADMIN=True are skipped for admin clients."""
+class TestChainAdminHandling(unittest.TestCase):
+    """The chain runner gives ``client.is_admin`` no special treatment.
+    Every policy runs for every client; policies that care branch on
+    is_admin themselves."""
 
-    def test_chain_skips_bypass_admin_policies_for_admin(self):
+    def test_chain_runs_all_policies_for_admin(self):
+        """An admin client with empty allowed_types still gets denied
+        by MessageTypeACLPolicy. Admins are subject to the whitelist."""
         admin = _FakeClient(allowed_types=[], is_admin=True)
-        v = PolicyChain(policies=[ClientACLPolicy()]).review(
+        v = PolicyChain(policies=[MessageTypeACLPolicy()]).review(
             _msg("speak"), admin,
         )
-        self.assertFalse(v.denied)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
 
-    def test_chain_runs_non_bypass_admin_policies_for_admin(self):
-        """A custom policy without BYPASS_ADMIN (e.g. a quota policy)
-        still applies to admins."""
+    def test_chain_runs_custom_policies_for_admin(self):
+        """A custom policy always applies to admins unless the policy
+        itself opts out by branching on client.is_admin."""
 
         class _AlwaysDeny(PolicyPlugin):
-            BYPASS_ADMIN = False
-
             def review(self, message, client):
                 return Verdict.deny("nope", "admins not exempt")
 
@@ -306,16 +301,34 @@ class TestChainAdminBypass(unittest.TestCase):
         self.assertTrue(v.denied)
         self.assertEqual(v.code, "nope")
 
-    def test_chain_review_binary_honours_bypass_admin(self):
-        class _DenyBinary(PolicyPlugin):
-            BYPASS_ADMIN = True
+    def test_chain_review_binary_runs_for_admin(self):
+        """review_binary likewise has no runner-level admin bypass."""
 
+        class _DenyBinary(PolicyPlugin):
             def review_binary(self, payload, client):
                 return Verdict.deny("nope")
 
         admin = _FakeClient(is_admin=True)
         v = PolicyChain(policies=[_DenyBinary()]).review_binary(b"x", admin)
-        self.assertFalse(v.denied)
+        self.assertTrue(v.denied)
+
+    def test_policy_can_self_branch_on_is_admin(self):
+        """Policies that want admin-exemption check client.is_admin
+        themselves — there's no class-level switch."""
+
+        class _AdminAware(PolicyPlugin):
+            def review(self, message, client):
+                if getattr(client, "is_admin", False):
+                    return Verdict.allow()
+                return Verdict.deny("non_admin", "only admins")
+
+        chain = PolicyChain(policies=[_AdminAware()])
+
+        admin = _FakeClient(allowed_types=["speak"], is_admin=True)
+        self.assertFalse(chain.review(_msg("speak"), admin).denied)
+
+        guest = _FakeClient(allowed_types=["speak"], is_admin=False)
+        self.assertTrue(chain.review(_msg("speak"), guest).denied)
 
 
 # ---------------------------------------------------------------------------

@@ -85,8 +85,8 @@ class HiveMindClientConnection:
     pub_key: Optional[str] = None  # TODO add field to database
 
     # admission whitelist — list of ovos message_type values this client
-    # may inject onto the agent bus. Enforced by ClientACLPolicy
-    # (hivemind_core.policy.ClientACLPolicy). Empty = deny everything.
+    # may inject onto the agent bus. Enforced by MessageTypeACLPolicy
+    # (hivemind_core.policy.MessageTypeACLPolicy). Empty = deny everything.
     # This is the only ACL field on the connection. There is no message
     # blacklist by design: hivemind-core is whitelist-only, deny-by-default.
     allowed_types: List[str] = field(default_factory=list)
@@ -173,7 +173,7 @@ class HiveMindClientConnection:
         injection without going through the policy chain.
 
         The allowed_types whitelist that used to live here moved to
-        ClientACLPolicy in hivemind_core/policy.py (see #85). Kept as a
+        MessageTypeACLPolicy in hivemind_core/policy.py (see #85). Kept as a
         default-True stub so subclasses overriding it for ad-hoc
         admission gates continue to work.
         """
@@ -220,7 +220,7 @@ class HiveMindListenerProtocol:
         else:
             self.binary_data_protocol.hm_protocol = self
         if self.policy_chain is None:
-            from hivemind_core.policy import ClientACLPolicy, DenyAllPolicy
+            from hivemind_core.policy import MessageTypeACLPolicy, DenyAllPolicy
             cfg = get_server_config()
             try:
                 chain = PolicyChain.from_config(cfg, hm_protocol=self)
@@ -234,14 +234,14 @@ class HiveMindListenerProtocol:
                     policies=[DenyAllPolicy(hm_protocol=self)],
                 )
             else:
-                # ClientACLPolicy is the canonical allowed_types whitelist
+                # MessageTypeACLPolicy is the canonical allowed_types whitelist
                 # enforcement and is non-removable. Prepend it to the
                 # configured chain (deduping if an operator listed it
                 # explicitly).
                 configured = [p for p in chain.policies
-                              if not isinstance(p, ClientACLPolicy)]
+                              if not isinstance(p, MessageTypeACLPolicy)]
                 self.policy_chain = PolicyChain(
-                    policies=[ClientACLPolicy(hm_protocol=self), *configured],
+                    policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
                 )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:

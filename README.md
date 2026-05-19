@@ -122,8 +122,8 @@ Every inbound message passes through an ordered **policy admission chain** befor
 
 **How it works:**
 
-1. `ClientACLPolicy` is **always prepended** to the chain and cannot be removed by configuration. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. Admin clients bypass the whitelist entirely. — `hivemind_core/policy.py:174`
-2. Configured plugins in `policy.chain` run after `ClientACLPolicy`, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
+1. `MessageTypeACLPolicy` is **always prepended** to the chain and cannot be removed by configuration. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. `Client.is_admin` is informational and gives no admission bypass — admins are subject to the whitelist like any other client. — `hivemind_core/policy.py:174`
+2. Configured plugins in `policy.chain` run after `MessageTypeACLPolicy`, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
 3. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator knob to override this. — `hivemind_core/policy.py:36`
 4. If the chain fails to build at startup, a `DenyAllPolicy` fallback is installed, rejecting every message with `code="policy_chain_unavailable"` until configuration is fixed. — `hivemind_core/policy.py:151`
 
@@ -143,8 +143,7 @@ Every inbound message passes through an ordered **policy admission chain** befor
 **ACL model — whitelist-only, deny-by-default:**
 
 - `allowed_types` is the only ACL field on `HiveMindClientConnection`. There is no message blacklist. — `hivemind_core/protocol.py:92`
-- A freshly created client (via `add-client`) has an **empty** `allowed_types` list and will be denied all messages until the operator explicitly grants types with `allow-msg`.
-- Admin clients (`is_admin=True`) bypass `ClientACLPolicy` entirely.
+- A freshly created client (via `add-client`) has an **empty** `allowed_types` list and will be denied all messages until the operator explicitly grants types with `allow-msg`. This applies to admin clients too — `Client.is_admin` is informational only and gives no admission bypass.
 
 To grant a message type:
 
