@@ -14,4 +14,4 @@ jobs:
       test_path: 'tests/e2e/'
       # TEMPORARY: drop the branch pins once hivemind-plugin-manager#27
       # and hivemind-ovos-agent-plugin#3 are released to PyPI.
-      pre_install_pip: '"hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev" "hivemind-plugin-manager @ git+https://github.com/JarbasHiveMind/hivemind-plugin-manager@feat/policy-plugins" "hivemind-ovos-agent-plugin @ git+https://github.com/JarbasHiveMind/hivemind-ovos-agent-plugin@feat/ovos-agent-policy"'
+      pre_install_pip: '"hivescope @ git+https://github.com/JarbasHiveMind/hivescope@feat/drop-dead-acl-caches" "hivemind-plugin-manager @ git+https://github.com/JarbasHiveMind/hivemind-plugin-manager@feat/policy-plugins" "hivemind-ovos-agent-plugin @ git+https://github.com/JarbasHiveMind/hivemind-ovos-agent-plugin@feat/ovos-agent-policy"'

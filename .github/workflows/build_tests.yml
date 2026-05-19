@@ -13,5 +13,5 @@ jobs:
       # TEMPORARY: drop the hivemind-plugin-manager + ovos-agent-plugin
       # branch pins once #27 (policy primitives) and #3 (OVOSAgentPolicy)
       # are released to PyPI. Tracking: #85.
-      pre_install_pip: '"hivescope @ git+https://github.com/JarbasHiveMind/hivescope@dev" "hivemind-plugin-manager @ git+https://github.com/JarbasHiveMind/hivemind-plugin-manager@feat/policy-plugins" "hivemind-ovos-agent-plugin @ git+https://github.com/JarbasHiveMind/hivemind-ovos-agent-plugin@feat/ovos-agent-policy"'
+      pre_install_pip: '"hivescope @ git+https://github.com/JarbasHiveMind/hivescope@feat/drop-dead-acl-caches" "hivemind-plugin-manager @ git+https://github.com/JarbasHiveMind/hivemind-plugin-manager@feat/policy-plugins" "hivemind-ovos-agent-plugin @ git+https://github.com/JarbasHiveMind/hivemind-ovos-agent-plugin@feat/ovos-agent-policy"'
       test_path: 'tests/'

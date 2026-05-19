@@ -89,17 +89,15 @@ class HiveMindClientConnection:
     # (hivemind_core.policy.ClientACLPolicy). Empty = deny everything.
     allowed_types: List[str] = field(default_factory=list)
 
-    # --- Deprecated connection-level caches ---
-    # These fields cache OVOS-specific per-client ACL data populated by
-    # OVOSAgentPolicy (hivemind-ovos-agent-plugin) from
-    # ``Client.metadata`` at admission time. They exist as a
-    # backwards-compat surface for callers that read attributes
-    # directly off the live connection (notably the outbound send()
-    # filter on msg_blacklist below). New code should use the policy
-    # chain or Client.metadata.
+    # Outbound message-type filter (DEPRECATED). Populated from
+    # ``Client.metadata["message_blacklist"]`` at connect time
+    # (``handle_new_client``) so the filter is independent of inbound
+    # traffic, and refreshed by ``OVOSAgentPolicy`` on every admission
+    # to pick up mid-session DB changes. New code should NOT rely on
+    # this — the canonical admission model is whitelist-only via
+    # ``allowed_types`` and ``ClientACLPolicy``. Field preserved for
+    # back-compat with the outbound ``send()`` filter below.
     msg_blacklist: List[str] = field(default_factory=list)
-    skill_blacklist: List[str] = field(default_factory=list)
-    intent_blacklist: List[str] = field(default_factory=list)
     binarize: bool = False
     site_id: str = "unknown"
     can_escalate: bool = True
@@ -276,6 +274,19 @@ class HiveMindListenerProtocol:
         return self.agent_protocol.bus
 
     def handle_new_client(self, client: HiveMindClientConnection):
+        # Populate the deprecated outbound msg_blacklist filter from the
+        # client's stored metadata so it works from the first outbound
+        # message — without this it only gets set when the client first
+        # sends something inbound and OVOSAgentPolicy refreshes it.
+        try:
+            user = self.db.get_client_by_api_key(client.key)
+            if user is not None:
+                client.msg_blacklist = list(
+                    (user.metadata or {}).get("message_blacklist") or []
+                )
+        except Exception:
+            LOG.exception("failed to populate msg_blacklist from DB metadata")
+
         try:
             self.callbacks.on_connect(client)
         except:
@@ -909,13 +920,18 @@ class HiveMindListenerProtocol:
         return False
 
     # HiveMind mycroft bus messages -  from slave -> master
-    def _update_blacklist(self, message: Message, client: HiveMindClientConnection):
-        """Install the per-client session onto an inbound bus message.
+    def _install_client_session(self, message: Message,
+                                 client: HiveMindClientConnection):
+        """Copy the client's serialised session onto an inbound bus message.
+
+        Must run BEFORE the policy chain so policies see the canonical
+        session (skill/intent injection mutations will land on this
+        dict).
 
         Skill / intent / message-type blacklist injection moved to
-        OVOSAgentPolicy in hivemind-ovos-agent-plugin (see #85). This
-        method now only handles the session-rewrite half of the original
-        ``_update_blacklist``: copy the client's serialised session onto
+        ``OVOSAgentPolicy`` in ``hivemind-ovos-agent-plugin`` (see #85).
+        This method only handles the session-rewrite half of what used
+        to be ``_update_blacklist``: copy ``client.sess.serialize()`` onto
         the message, taking care not to reattach a stale pipeline.
         """
         raw_session = message.context.get("session") or {}
@@ -942,7 +958,7 @@ class HiveMindListenerProtocol:
             return
 
         # ensure client specific session data is injected in query to ovos
-        message = self._update_blacklist(message, client)
+        message = self._install_client_session(message, client)
         if message.msg_type == "speak":
             message.context["destination"] = ["audio"]  # make audible, this is injected "speak" command
         elif message.context.get("destination") is None:

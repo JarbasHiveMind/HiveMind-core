@@ -65,7 +65,8 @@ _DEFAULT = {
             {"module": "hivemind-core-acl-policy"},
             # ships with hivemind-ovos-agent-plugin — the default agent
             # protocol — and replaces the legacy skill/intent/msg
-            # blacklist injection from _update_blacklist. Drop this
+            # blacklist injection that used to live in _update_blacklist
+            # (now _install_client_session). Drop this
             # entry if you're running a non-OVOS agent plugin.
             {"module": "hivemind-ovos-agent-policy"},
         ],

@@ -336,6 +336,109 @@ def test_missing_plugin_falls_back_to_deny_all_under_fail_closed():
         b.stop_all()
 
 
+def test_policy_exception_becomes_policy_error_under_fail_closed():
+    """A policy raising in review() is converted to
+    Verdict.deny('policy_error', ...) under the default fail_open=false,
+    and the client receives hive.policy.denied.
+    """
+    from hivemind_core.policy import PolicyChain
+    from hivemind_plugin_manager import PolicyPlugin
+
+    class _ExplodingPolicy(PolicyPlugin):
+        def review(self, message, client):
+            raise RuntimeError("kaboom")
+
+    b, m = _build(allowed_types=["recognizer_loop:utterance"])
+    try:
+        b.start_all()
+        s = b.get_satellite("S0")
+        m.hm_protocol.policy_chain = PolicyChain(
+            policies=[_ExplodingPolicy(hm_protocol=m.hm_protocol)],
+            fail_open=False,
+        )
+
+        seen = []
+        m.agent_protocol.bus.on("recognizer_loop:utterance", seen.append)
+        denied = []
+        s.shim.emitter.on(
+            HiveMessageType.BUS,
+            lambda msg: (
+                denied.append(msg.payload)
+                if isinstance(msg.payload, Message)
+                and msg.payload.msg_type == "hive.policy.denied"
+                else None
+            ),
+        )
+
+        _send_utterance(s)
+
+        assert _wait_for(lambda: len(denied) >= 1), denied
+        assert seen == [], seen
+        assert denied[0].data["code"] == "policy_error"
+    finally:
+        b.stop_all()
+
+
+def test_review_binary_deny_blocks_dispatch():
+    """A policy that denies on review_binary blocks the binary handler
+    from running and notifies the client.
+    """
+    from hivemind_bus_client.message import HiveMindBinaryPayloadType
+    from hivemind_core.policy import PolicyChain
+    from hivemind_plugin_manager import PolicyPlugin, Verdict
+
+    class _DenyBinaryPolicy(PolicyPlugin):
+        def review_binary(self, payload, client):
+            return Verdict.deny("oversize",
+                                "binary payloads disallowed in this test")
+
+    b, m = _build(allowed_types=["recognizer_loop:utterance"])
+    try:
+        b.start_all()
+        s = b.get_satellite("S0")
+        m.hm_protocol.policy_chain = PolicyChain(
+            policies=[_DenyBinaryPolicy(hm_protocol=m.hm_protocol)],
+            fail_open=False,
+        )
+
+        # Spy on the binary handler — denial must short-circuit it.
+        called = []
+        orig = m.hm_protocol.binary_data_protocol.handle_microphone_input
+        m.hm_protocol.binary_data_protocol.handle_microphone_input = (
+            lambda *a, **kw: called.append(a)
+        )
+
+        denied = []
+        s.shim.emitter.on(
+            HiveMessageType.BUS,
+            lambda msg: (
+                denied.append(msg.payload)
+                if isinstance(msg.payload, Message)
+                and msg.payload.msg_type == "hive.policy.denied"
+                else None
+            ),
+        )
+
+        s.send(HiveMessage(
+            HiveMessageType.BINARY,
+            payload=b"\x00" * 32,
+            bin_type=HiveMindBinaryPayloadType.RAW_AUDIO,
+            metadata={"sample_rate": 16000, "sample_width": 2},
+        ))
+
+        try:
+            assert _wait_for(lambda: len(denied) >= 1), denied
+            assert called == [], (
+                f"binary handler ran despite review_binary deny: {called}"
+            )
+            assert denied[0].data["code"] == "oversize"
+            assert denied[0].data["denied_type"] == "binary"
+        finally:
+            m.hm_protocol.binary_data_protocol.handle_microphone_input = orig
+    finally:
+        b.stop_all()
+
+
 def test_outbound_msg_blacklist_still_filters_after_refactor():
     """The send()-side filter on ``client.msg_blacklist`` predates the
     chain and is orthogonal. Verifies the refactor didn't break it."""
