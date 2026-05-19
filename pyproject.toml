@@ -30,12 +30,22 @@ dependencies = [
     "hivemind_bus_client>=0.7.0a2,<1.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
-    "hivemind-plugin-manager>=0.6.0a1,<1.0.0",
+    # NOTE: floor stays at 0.5.0 while #27 is in CI as a branch install
+    # (gh-automations only bumps version.py on merge to dev). Tighten
+    # to >=0.6.0a1 once #27 is released.
+    "hivemind-plugin-manager>=0.5.0,<1.0.0",
     "ovos-bus-client>=1.3.1,<2.0.0",
     "json-database>=0.9.1,<1.0.0",
     "hivemind-websocket-protocol>=0.0.3,<1.0.0",
     "setuptools",
 ]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-cov"]
+# Alias so gh-automations' `pip install -e ".[dev]"` first-attempt path
+# resolves; without it the workflow falls through to a buggy
+# `pip install test` literal branch.
+dev = ["pytest", "pytest-cov"]
 
 [project.urls]
 Homepage = "https://github.com/JarbasHiveMind/HiveMind-core"
