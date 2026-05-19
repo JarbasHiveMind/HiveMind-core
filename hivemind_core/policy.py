@@ -187,9 +187,26 @@ class ClientACLPolicy(PolicyPlugin):
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
-        if getattr(client, "is_admin", False):
-            return Verdict.allow()
+        # Refresh is_admin and allowed_types from the DB on each admission
+        # so an operator running `revoke-admin` / `blacklist-msg` mid-session
+        # takes effect immediately, without forcing the client to reconnect.
+        # Falls back to the cached connection values if the DB lookup fails.
+        is_admin = getattr(client, "is_admin", False)
         allowed = list(getattr(client, "allowed_types", []) or [])
+        db = getattr(self.hm_protocol, "db", None)
+        if db is not None:
+            try:
+                db.sync()
+                user = db.get_client_by_api_key(client.key)
+                if user is not None:
+                    is_admin = bool(getattr(user, "is_admin", is_admin))
+                    allowed = list(getattr(user, "allowed_types", allowed) or [])
+            except Exception:
+                LOG.debug("ClientACLPolicy: DB refresh failed; using cached values",
+                          exc_info=True)
+
+        if is_admin:
+            return Verdict.allow()
         msg_type = getattr(message, "msg_type", None)
         if msg_type not in allowed:
             return Verdict.deny(

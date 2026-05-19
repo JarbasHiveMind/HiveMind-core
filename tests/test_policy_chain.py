@@ -4,11 +4,14 @@ Covers:
 - Empty chain allows everything.
 - Allow + mutations are applied to the message.
 - Deny short-circuits the chain.
-- Exceptions are converted to Verdict.deny("policy_error", ...) when
-  fail_closed (default); to allow when fail_open=True.
+- Exceptions are always converted to Verdict.deny("policy_error", ...) —
+  chain is unconditionally fail-closed.
 - review_binary deny short-circuits.
 - observe swallows exceptions.
-- from_config loads plugins via PolicyPluginFactory.
+- from_config loads plugins via PolicyPluginFactory; unknown entry
+  points raise so __post_init__ can install DenyAllPolicy.
+- ClientACLPolicy: allowed_types whitelist + admin bypass.
+- DenyAllPolicy: rejects every admission with policy_chain_unavailable.
 """
 from __future__ import annotations
 
@@ -238,6 +241,46 @@ class TestClientACLPolicy(unittest.TestCase):
         client = _FakeClient(allowed_types=[], is_admin=True)
         v = p.review(_msg("anything"), client)
         self.assertFalse(v.denied)
+
+    def test_db_refresh_picks_up_revoked_admin(self):
+        """Mid-session admin revoke: connection cached is_admin=True,
+        DB row has is_admin=False — DB wins."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=[], is_admin=True)
+        client.key = "k"
+        revoked_user = SimpleNamespace(is_admin=False, allowed_types=[])
+        db = MagicMock()
+        db.sync = MagicMock()
+        db.get_client_by_api_key = MagicMock(return_value=revoked_user)
+        p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        v = p.review(_msg("speak"), client)
+        self.assertTrue(v.denied)
+
+    def test_db_refresh_picks_up_granted_admin(self):
+        """Reverse: connection cached is_admin=False but DB row has been
+        promoted. DB wins, request is allowed."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=[], is_admin=False)
+        client.key = "k"
+        promoted = SimpleNamespace(is_admin=True, allowed_types=[])
+        db = MagicMock()
+        db.sync = MagicMock()
+        db.get_client_by_api_key = MagicMock(return_value=promoted)
+        p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        v = p.review(_msg("anything"), client)
+        self.assertFalse(v.denied)
+
+    def test_db_failure_falls_back_to_cached_values(self):
+        """If db.sync or db.get raise, ClientACLPolicy uses the cached
+        connection fields (no fail-open exception leak)."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["ok"], is_admin=False)
+        client.key = "k"
+        db = MagicMock()
+        db.sync = MagicMock(side_effect=Exception("db down"))
+        p = ClientACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        v = p.review(_msg("ok"), client)
+        self.assertFalse(v.denied)  # used cached allowed_types
 
 
 # ---------------------------------------------------------------------------

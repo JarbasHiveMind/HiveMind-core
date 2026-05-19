@@ -16,6 +16,7 @@
 import os.path
 
 from json_database import JsonStorageXDG
+from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_config_home, xdg_data_home
 
 
@@ -88,4 +89,19 @@ def get_server_config() -> JsonStorageXDG:
     for k, v in _DEFAULT.items():
         if k not in db:
             db[k] = v
+    # back-compat for the policy block: legacy installs may have
+    # `policy.fail_open` (removed — chain is unconditionally fail-closed)
+    # or be missing `policy.chain` (we default to OVOSAgentPolicy).
+    policy_cfg = db.get("policy") or {}
+    if not isinstance(policy_cfg, dict):
+        policy_cfg = {}
+    if "fail_open" in policy_cfg:
+        LOG.warning(
+            "policy.fail_open is no longer honoured — the chain is "
+            "always fail-closed. Remove this key from server.json."
+        )
+        policy_cfg.pop("fail_open", None)
+    if "chain" not in policy_cfg:
+        policy_cfg["chain"] = list(_DEFAULT["policy"]["chain"])
+    db["policy"] = policy_cfg
     return db

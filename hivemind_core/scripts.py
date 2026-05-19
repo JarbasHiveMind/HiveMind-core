@@ -187,6 +187,14 @@ def add_client(name, access_key, password, crypto_key, admin, metadata):
             "WARNING: Encryption Key is deprecated, only use if your client does not support password"
         )
 
+        if not user.is_admin and not user.allowed_types:
+            print(
+                "\nNOTE: Allowed message types is empty — this client will be DENIED on every message.\n"
+                "      Grant access explicitly, e.g.:\n"
+                f"      hivemind-core allow-msg recognizer_loop:utterance {user.client_id}\n"
+                "      (admin clients bypass the whitelist; use 'make-admin' if appropriate)"
+            )
+
 
 @hmcore_cmds.command(help="Rename a client in the database.", name="rename-client")
 @click.argument("node_id", required=False, type=int)
