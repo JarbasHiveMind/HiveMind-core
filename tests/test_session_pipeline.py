@@ -102,7 +102,9 @@ class TestSessionPipelineHandling(unittest.TestCase):
         )
         self.assertEqual(client.sess.pipeline, ["client-sent-pipeline"])
 
-    def test_explicit_none_pipeline_is_kept(self):
+    def test_explicit_none_pipeline_is_treated_as_absent(self):
+        # OVOS-SESSION-1 §2: a null field is treated as omitted; the bridge
+        # strips it rather than forwarding an explicit null.
         protocol = _make_protocol()
         client = _make_client(protocol, ["old-pipeline"])
         raw_session = {
@@ -117,7 +119,7 @@ class TestSessionPipelineHandling(unittest.TestCase):
         )
 
         emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
-        self.assertIsNone(emitted.context["session"]["pipeline"])
+        self.assertNotIn("pipeline", emitted.context["session"])
         self.assertIsNone(client.sess.pipeline)
 
     def test_invalid_bus_payload_is_ignored(self):
