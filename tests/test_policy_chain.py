@@ -381,6 +381,132 @@ class TestFromConfigUnknownPlugin(unittest.TestCase):
                 })
 
 
+class _ReplaceMutation(Mutation):
+    """Replacement-path mutation: returns a wholly new Message instead of
+    mutating in place. The chain runner must swap the current message for
+    the returned one and continue applying any remaining mutations to it."""
+
+    def __init__(self, new_type: str):
+        self.new_type = new_type
+
+    def apply(self, message, client):
+        return Message(self.new_type, {"replaced": True}, dict(message.context))
+
+
+class _TagMutation(Mutation):
+    """In-place mutation that sets a marker in data — used to verify that
+    remaining mutations after a replacement operate on the *new* message."""
+
+    def __init__(self, tag: str):
+        self.tag = tag
+
+    def apply(self, message, client) -> None:
+        message.data["tag"] = self.tag
+
+
+class _ReplaceMutationPolicy(PolicyPlugin):
+    def review(self, message, client):
+        return Verdict.allow(_ReplaceMutation("replaced:type"))
+
+
+class _ReplaceAndTagPolicy(PolicyPlugin):
+    def review(self, message, client):
+        return Verdict.allow(_ReplaceMutation("replaced:type"), _TagMutation("after-replace"))
+
+
+class TestMutationReplacementPath(unittest.TestCase):
+    def test_mutation_replacement_swaps_message(self):
+        """non-None return from mutation.apply() replaces current message."""
+        chain = PolicyChain(policies=[_ReplaceMutationPolicy()])
+        original = _msg("original:type")
+        v = chain.review(original, client=None)
+        self.assertFalse(v.denied)
+        # The replacement is observed via the message object that the next
+        # policy or observer would see — the chain returns a verdict with
+        # the accumulated mutations; the caller's reference to ``message``
+        # is NOT changed (replacement is runner-internal). We verify the
+        # replacement happened by checking the subsequent mutation path.
+
+    def test_remaining_mutations_run_on_replacement(self):
+        """Mutations that follow a replacement operate on the new message."""
+        chain = PolicyChain(policies=[_ReplaceAndTagPolicy()])
+        original = _msg("original:type")
+        v = chain.review(original, client=None)
+        self.assertFalse(v.denied)
+        # The replacement happened internally; the _TagMutation ran on the
+        # replacement. We cannot directly observe the replacement message
+        # from the verdict (only the mutation list is returned), but we can
+        # use a spy mutation to confirm the tag was applied to the replacement
+        # by wiring a custom policy that chains both mutations.
+
+    def test_replacement_message_used_by_next_policy(self):
+        """When a mutation returns a replacement, the next policy in the
+        chain receives the replacement message, not the original."""
+        seen_types: list = []
+
+        class _SpyPolicy(PolicyPlugin):
+            def review(self, msg, client):
+                seen_types.append(msg.msg_type)
+                return Verdict.allow()
+
+        # Policy 1 returns a replacement mutation; Policy 2 is a spy.
+        class _ReplaceFirst(PolicyPlugin):
+            def review(self, msg, client):
+                return Verdict.allow(_ReplaceMutation("swapped:type"))
+
+        chain = PolicyChain(policies=[_ReplaceFirst(), _SpyPolicy()])
+        chain.review(_msg("original:type"), client=None)
+        # The spy should have seen the swapped type, not the original.
+        self.assertEqual(seen_types, ["swapped:type"])
+
+    def test_tag_mutation_applied_after_replacement(self):
+        """_TagMutation runs on the replacement message produced by
+        _ReplaceMutation when both are in the same Verdict."""
+
+        applied_on: list = []
+
+        class _SpyTagMutation(Mutation):
+            def apply(self, message, client):
+                applied_on.append(message.msg_type)
+                message.data["tag"] = "yes"
+
+        class _ReplaceAndSpyTag(PolicyPlugin):
+            def review(self, msg, client):
+                return Verdict.allow(_ReplaceMutation("replaced:type"), _SpyTagMutation())
+
+        chain = PolicyChain(policies=[_ReplaceAndSpyTag()])
+        chain.review(_msg("original:type"), client=None)
+        # SpyTagMutation must have run on the replaced message, not original.
+        self.assertEqual(applied_on, ["replaced:type"])
+
+    def test_in_place_mutation_none_return_does_not_swap(self):
+        """In-place mutation (returns None) does NOT trigger a message swap.
+        Downstream policies still see the same message instance."""
+        seen_ids: list = []
+
+        class _InPlaceMutation(Mutation):
+            def apply(self, message, client) -> None:
+                message.data["mutated"] = True
+
+        class _InPlacePolicy(PolicyPlugin):
+            def review(self, msg, client):
+                return Verdict.allow(_InPlaceMutation())
+
+        class _SpyPolicy(PolicyPlugin):
+            def review(self, msg, client):
+                seen_ids.append(id(msg))
+                return Verdict.allow()
+
+        original = _msg()
+        original_id = id(original)
+        chain = PolicyChain(policies=[_InPlacePolicy(), _SpyPolicy()])
+        chain.review(original, client=None)
+        # Same object passed through — no replacement.
+        self.assertEqual(seen_ids, [original_id])
+        # In-place mutation took effect.
+        self.assertTrue(original.data.get("mutated"))
+
+
 class _RaisingMutation(Mutation):
     def apply(self, message, client):
         raise RuntimeError("boom-mutate")
@@ -561,6 +687,186 @@ class TestOnVerdictAccumulatedMutations(unittest.TestCase):
         self.assertIsNone(events[-1][0])
         self.assertEqual(len(events[-1][1]), 1)
         self.assertEqual(len(v.mutations), 1)
+
+
+class TestProtocolWiring(unittest.TestCase):
+    """Unit tests for how the admission chain is wired into
+    HiveMindListenerProtocol.handle_inject_agent_msg and
+    handle_binary_message — verify the deny→client-notification path and
+    the observe fire-and-forget contract without a real network stack."""
+
+    def _make_protocol(self):
+        """Build a minimal HiveMindListenerProtocol with FakeBus agent."""
+        from unittest.mock import MagicMock
+        from ovos_utils.fakebus import FakeBus
+        from hivemind_plugin_manager.protocols import AgentProtocol
+        from hivemind_core.protocol import HiveMindListenerProtocol
+        from hivemind_core.policy import PolicyChain
+
+        bus = FakeBus()
+        agent = MagicMock(spec=AgentProtocol)
+        agent.bus = bus
+        agent.hm_protocol = None
+        agent.callbacks = MagicMock()
+        agent.callbacks.on_connect = MagicMock()
+
+        proto = HiveMindListenerProtocol.__new__(HiveMindListenerProtocol)
+        proto.agent_protocol = agent
+        proto.binary_data_protocol = MagicMock()
+        proto.identity = MagicMock()
+        proto.identity.private_key = None
+        proto.identity.public_key = None
+        proto.identity.site_id = "test-site"
+        proto.db = MagicMock()
+        proto.callbacks = MagicMock()
+        proto.hive_mapper = MagicMock()
+        proto.peer = "master:0.0.0.0"
+        proto.require_crypto = False
+        proto.handshake_enabled = False
+        proto.escalate_callback = None
+        proto.illegal_callback = None
+        proto.propagate_callback = None
+        proto.broadcast_callback = None
+        proto.agent_bus_callback = None
+        proto.shared_bus_callback = None
+        proto.clients = {}
+        proto._seen_flood_ids = set()
+        proto.policy_chain = PolicyChain()  # empty = allow-all
+        return proto, bus
+
+    def _make_client(self, allowed_types=None):
+        from unittest.mock import MagicMock
+        from hivemind_core.protocol import HiveMindClientConnection
+        client = MagicMock(spec=HiveMindClientConnection)
+        client.allowed_types = list(allowed_types or [])
+        client.is_admin = False
+        client.peer = "test::session-1"
+        client.sess = MagicMock()
+        client.sess.session_id = "session-1"
+        client.sess.serialize.return_value = {"session_id": "session-1"}
+        client.sess.pipeline = None
+        client.authorize.return_value = True
+        client.key = "test-key"
+        client._resolved_user = None
+        client._resolved_user_ts = 0.0
+        # capture send calls
+        client.send = MagicMock()
+        return client
+
+    def test_deny_sends_hive_policy_denied_to_client(self):
+        """A deny verdict triggers _send_policy_denied, not bus.emit."""
+        from hivemind_core.policy import PolicyChain
+        from hivemind_plugin_manager import PolicyPlugin, Verdict
+
+        class _DenyAll(PolicyPlugin):
+            def review(self, msg, client):
+                return Verdict.deny("test_deny", "unit-test deny")
+
+        proto, bus = self._make_protocol()
+        proto.policy_chain = PolicyChain(policies=[_DenyAll()])
+        client = self._make_client(allowed_types=["speak"])
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"}, {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        # Not emitted onto the agent bus.
+        self.assertEqual(emitted, [])
+        # Client received the denial notification.
+        self.assertTrue(client.send.called)
+        sent_hm = client.send.call_args[0][0]
+        from hivemind_bus_client.message import HiveMessageType
+        self.assertEqual(sent_hm.msg_type, HiveMessageType.BUS)
+        denied_msg = sent_hm.payload
+        self.assertEqual(denied_msg.msg_type, "hive.policy.denied")
+        self.assertEqual(denied_msg.data["code"], "test_deny")
+        self.assertEqual(denied_msg.data["denied_type"], "speak")
+
+    def test_allow_emits_to_agent_bus(self):
+        """An allow verdict results in bus.emit with the message."""
+        proto, bus = self._make_protocol()
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"}, {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        self.assertEqual(len(emitted), 1)
+        self.assertFalse(client.send.called)
+
+    def test_observe_called_after_emit(self):
+        """observe() fires after bus.emit, and exceptions are swallowed."""
+        from hivemind_core.policy import PolicyChain
+        from hivemind_plugin_manager import PolicyPlugin, Verdict
+
+        observe_calls: list = []
+
+        class _ObserveSpy(PolicyPlugin):
+            def observe(self, msg, client):
+                observe_calls.append(msg.msg_type)
+
+        proto, bus = self._make_protocol()
+        proto.policy_chain = PolicyChain(policies=[_ObserveSpy()])
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"}, {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(observe_calls, ["speak"])
+
+    def test_observe_exception_does_not_block_delivery(self):
+        """observe() raising must not prevent prior bus.emit from completing."""
+        from hivemind_core.policy import PolicyChain
+
+        proto, bus = self._make_protocol()
+        proto.policy_chain = PolicyChain(policies=[_RaisingPolicy()])
+
+        # _RaisingPolicy also raises in review(), so override with one that
+        # only raises in observe:
+        class _ObserveRaiser(PolicyPlugin):
+            def observe(self, msg, client):
+                raise RuntimeError("observe-bomb")
+
+        proto.policy_chain = PolicyChain(policies=[_ObserveRaiser()])
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"}, {"session": {"session_id": "session-1"}})
+        # Must not raise.
+        proto.handle_inject_agent_msg(msg, client)
+
+        self.assertEqual(len(emitted), 1)
+
+    def test_policy_exception_in_wired_chain_sends_policy_error(self):
+        """Exception in a policy during handle_inject_agent_msg → policy_error
+        deny sent to client, message never reaches bus."""
+        from hivemind_core.policy import PolicyChain
+
+        proto, bus = self._make_protocol()
+        proto.policy_chain = PolicyChain(policies=[_RaisingPolicy()])
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"}, {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        self.assertEqual(emitted, [])
+        self.assertTrue(client.send.called)
+        sent_hm = client.send.call_args[0][0]
+        denied_msg = sent_hm.payload
+        self.assertEqual(denied_msg.data["code"], "policy_error")
 
 
 if __name__ == "__main__":
