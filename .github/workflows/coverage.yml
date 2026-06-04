@@ -12,6 +12,5 @@ jobs:
       python_version: '3.11'
       coverage_source: 'hivemind_core'
       test_path: 'tests/e2e/'
-      # TEMPORARY: drop the branch pins once hivemind-plugin-manager#27
-      # and hivemind-ovos-agent-plugin#3 are released to PyPI.
+      # Pinned to released PyPI prereleases; drop once these ship stable.
       pre_install_pip: '"hivescope==0.2.2a1" "hivemind-plugin-manager==0.6.0a1" "hivemind-ovos-agent-plugin==0.2.0a1"'

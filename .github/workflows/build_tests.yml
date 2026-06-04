@@ -10,8 +10,6 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
     with:
       python_versions: '["3.10", "3.11", "3.12", "3.13"]'
-      # TEMPORARY: drop the hivemind-plugin-manager + ovos-agent-plugin
-      # branch pins once #27 (policy primitives) and #3 (OVOSAgentPolicy)
-      # are released to PyPI. Tracking: #85.
+      # Pinned to released PyPI prereleases; drop once these ship stable.
       pre_install_pip: '"hivescope==0.2.2a1" "hivemind-plugin-manager==0.6.0a1" "hivemind-ovos-agent-plugin==0.2.0a1"'
       test_path: 'tests/'
