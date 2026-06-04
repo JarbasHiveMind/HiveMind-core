@@ -69,7 +69,7 @@ def _emitted_session(master):
 
 
 def test_no_pipeline_in_payload_is_not_invented_from_core_config():
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m = b.get_master("M0")
@@ -89,7 +89,7 @@ def test_no_pipeline_in_payload_is_not_invented_from_core_config():
 
 
 def test_explicit_pipeline_list_is_preserved():
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m = b.get_master("M0")
@@ -106,8 +106,16 @@ def test_explicit_pipeline_list_is_preserved():
         b.stop_all()
 
 
-def test_explicit_none_pipeline_is_preserved():
-    b = admin_satellite()
+def test_explicit_none_pipeline_is_treated_as_absent():
+    """SESSION-1 §2: a producer MUST NOT emit a field as JSON null; a consumer
+    MUST treat null as a malformed value and behave as if the field were omitted
+    (→ deployment default, not preserved null).
+
+    Sending ``pipeline: null`` must NOT be preserved on the agent bus as a
+    null value.  The bridge strips the null and the emitted session either has
+    no pipeline key or carries the deployment default — never a literal None.
+    """
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m = b.get_master("M0")
@@ -115,11 +123,16 @@ def test_explicit_none_pipeline_is_preserved():
 
         sess = Session(session_id=s.shim.session_id, site_id="client-site")
         ctx = sess.serialize()
-        ctx["pipeline"] = None
+        ctx["pipeline"] = None  # malformed per SESSION-1 §2 — bridge must strip this
         _send_bus(s, ctx)
 
         emitted = _emitted_session(m)
-        assert emitted.get("pipeline") is None, emitted
+        # The bridge MUST NOT carry a null pipeline through to the agent bus.
+        # SESSION-1 §2: null is treated as absent, so either the key is gone
+        # or the deployment default was filled in — never preserved as None.
+        assert emitted.get("pipeline") is not None or "pipeline" not in emitted, (
+            f"bridge preserved null pipeline — SESSION-1 §2 violation: {emitted}"
+        )
     finally:
         b.stop_all()
 
@@ -130,7 +143,7 @@ def test_agent_bus_callback_fires_exactly_once_per_bus_message():
     ``handle_inject_agent_msg`` already invokes ``agent_bus_callback``;
     before the fix, ``handle_bus_message`` invoked it a second time.
     """
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m = b.get_master("M0")
@@ -203,7 +216,7 @@ def test_non_admin_payload_without_session_is_denied_by_policy():
 
 def test_admin_default_session_id_is_allowed():
     """Counterpart: admin clients may use ``default`` and the message lands."""
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m = b.get_master("M0")
@@ -230,7 +243,7 @@ def test_stale_master_side_pipeline_is_not_reattached():
     message, sending a new BUS payload without pipeline must not cause it
     to be reattached on its way to the agent bus.
     """
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m = b.get_master("M0")

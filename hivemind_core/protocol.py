@@ -944,6 +944,11 @@ class HiveMindListenerProtocol:
         This method only handles the session-rewrite half of what used
         to be ``_update_blacklist``: copy ``client.sess.serialize()`` onto
         the message, taking care not to reattach a stale pipeline.
+
+        Per SESSION-1 §2: any session field carrying JSON ``null`` is
+        malformed and MUST be treated as absent (not preserved). This
+        method strips null-valued fields from the session before writing
+        it to the message context so downstream consumers never see them.
         """
         raw_session = message.context.get("session") or {}
         session = client.sess.serialize()
@@ -951,6 +956,8 @@ class HiveMindListenerProtocol:
             # Each bus message owns its outbound pipeline; do not reattach
             # one from an earlier message.
             session.pop("pipeline", None)
+        # SESSION-1 §2: strip null-valued fields — null is malformed, treat as absent.
+        session = {k: v for k, v in session.items() if v is not None}
         message.context["session"] = session
         return message
 
