@@ -575,6 +575,32 @@ def set_metadata(node_id, metadata, key, value, unset):
         print("Invalid Node ID!")
 
 
+@hmcore_cmds.command(
+    help="Copy all clients from one database backend to another (e.g. JSON "
+         "to SQLite). Records are copied with their full credentials and "
+         "metadata; the source is left untouched.",
+    name="migrate-db")
+@click.option("--from", "from_module", default="hivemind-json-db-plugin",
+              show_default=True, help="Source database backend module.")
+@click.option("--to", "to_module", default="hivemind-sqlite-db-plugin",
+              show_default=True, help="Target database backend module.")
+def migrate_db(from_module, to_module):
+    """Migrate the client store between backends, preserving each record's
+    api_key, password hash, allowed_types, and metadata."""
+    if from_module == to_module:
+        click.echo("--from and --to are the same backend; nothing to do.", err=True)
+        raise click.Abort()
+    cfg = {"name": "clients", "subfolder": "hivemind-core"}
+    src = ClientDatabase(config={"module": from_module, from_module: cfg})
+    dst = ClientDatabase(config={"module": to_module, to_module: cfg})
+    migrated = 0
+    for client in src:
+        dst.db.add_item(client)
+        migrated += 1
+    dst.sync()
+    print(f"Migrated {migrated} client(s) from {from_module} to {to_module}.")
+
+
 @hmcore_cmds.group(name="policy", help="Inspect the policy admission chain.")
 def policy_group():
     """Subcommands for introspecting the configured policy chain."""

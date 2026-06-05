@@ -59,22 +59,41 @@ _DEFAULT = {
             {"module": "hivemind-ovos-agent-policy"},
         ],
     },
-    "database": {"module": "hivemind-json-db-plugin",
-                 "hivemind-json-db-plugin": {
-                     "name": "clients",
-                     "subfolder": "hivemind-core"
-                 }}
 }
+
+
+def _default_database() -> dict:
+    """Pick the default client-database backend.
+
+    Fresh installs default to **SQLite** — transactional, concurrency-safe,
+    stdlib-only — which suits a server authenticating and policy-checking
+    many clients concurrently. An existing JSON deployment (a ``clients.json``
+    already on disk, with no SQLite db yet) keeps its JSON backend so an
+    upgrade never strands the credentials store; move it with
+    ``hivemind-core migrate-db --to sqlite``.
+    """
+    base = os.path.join(xdg_data_home(), "hivemind-core")
+    json_db = os.path.join(base, "clients.json")
+    sqlite_db = os.path.join(base, "clients.db")
+    if os.path.isfile(json_db) and not os.path.isfile(sqlite_db):
+        module = "hivemind-json-db-plugin"
+    else:
+        module = "hivemind-sqlite-db-plugin"
+    return {"module": module,
+            module: {"name": "clients", "subfolder": "hivemind-core"}}
+
+
 def get_server_config() -> JsonStorageXDG:
     """from ~/.config/hivemind-core/server.json """
+    defaults = {**_DEFAULT, "database": _default_database()}
     db = JsonStorageXDG("server",
                           xdg_folder=xdg_config_home(),
                           subfolder="hivemind-core")
     if not os.path.isfile(db.path):
-        db.merge(_DEFAULT)
+        db.merge(defaults)
         db.store()
     # ensure all top level keys are present
-    for k, v in _DEFAULT.items():
+    for k, v in defaults.items():
         if k not in db:
             db[k] = v
     # back-compat for the policy block: legacy installs may have
