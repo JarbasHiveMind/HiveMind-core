@@ -175,6 +175,14 @@ def add_client(name, access_key, password, crypto_key, admin, metadata):
             "WARNING: Encryption Key is deprecated, only use if your client does not support password"
         )
 
+        if not user.is_admin and not user.allowed_types:
+            print(
+                "\nNOTE: Allowed message types is empty — this client will be DENIED on every message.\n"
+                "      Grant access explicitly, e.g.:\n"
+                f"      hivemind-core allow-msg recognizer_loop:utterance {user.client_id}\n"
+                "      (admin clients bypass the whitelist; use 'make-admin' if appropriate)"
+            )
+
 
 @hmcore_cmds.command(help="Rename a client in the database.", name="rename-client")
 @click.argument("node_id", required=False, type=int)
@@ -450,83 +458,182 @@ def blacklist_propagate(node_id):
 
 
 ##########################
-# skill/intent permissions
+# skill / intent permissions — OVOS-policy-specific. These manage the
+# ``skill_blacklist`` / ``intent_blacklist`` lists in ``Client.metadata``,
+# which OVOSAgentPolicy (hivemind-ovos-agent-plugin) injects into the OVOS
+# session when it is configured in the server's ``policy.chain``. They have
+# no effect unless that policy is active. ``set-metadata`` below writes
+# arbitrary metadata keys for any other policy that reads them.
 
-@hmcore_cmds.command(help="blacklist skills from being triggered by a client", name="blacklist-skill")
+
+def _toggle_metadata_blacklist(metadata_key: str, value: str,
+                               node_id: int, add: bool) -> None:
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id != int(node_id):
+                continue
+            bl = list(client.metadata.get(metadata_key) or [])
+            if add:
+                if value in bl:
+                    print(f"Client {client.name} already has '{value}' "
+                          f"in {metadata_key}")
+                    return
+                bl.append(value)
+            else:
+                if value not in bl:
+                    print(f"'{value}' is not in {metadata_key} for "
+                          f"client {client.name}")
+                    return
+                bl.remove(value)
+            new_meta = dict(client.metadata)
+            new_meta[metadata_key] = bl
+            client.metadata = new_meta
+            db.update_item(client)
+            verb = "Blacklisted" if add else "Unblacklisted"
+            print(f"{verb} '{value}' for {client.name}")
+            return
+        print("Invalid Node ID!")
+
+
+@hmcore_cmds.command(help="Blacklist a skill for a client. OVOS-policy: requires "
+                          "OVOSAgentPolicy in the server's policy.chain.",
+                     name="blacklist-skill")
 @click.argument("skill_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_skill(skill_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if skill_id in client.skill_blacklist:
-                    print(f"Client {client.name} already blacklisted '{skill_id}'")
-                    exit()
-
-                client.skill_blacklist.append(skill_id)
-                db.update_item(client)
-                print(f"Blacklisted '{skill_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=True)
 
 
-@hmcore_cmds.command(help="remove skills from a client blacklist", name="allow-skill")
+@hmcore_cmds.command(help="Remove a skill from a client's blacklist. OVOS-policy: "
+                          "requires OVOSAgentPolicy in the server's policy.chain.",
+                     name="allow-skill")
 @click.argument("skill_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def unblacklist_skill(skill_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if skill_id not in client.skill_blacklist:
-                    print(f"'{skill_id}' is not blacklisted for client {client.name}")
-                    exit()
-                client.skill_blacklist.remove(skill_id)
-                db.update_item(client)
-                print(f"Blacklisted '{skill_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=False)
 
 
-@hmcore_cmds.command(help="blacklist intents from being triggered by a client", name="blacklist-intent")
+@hmcore_cmds.command(help="Blacklist an intent for a client. OVOS-policy: requires "
+                          "OVOSAgentPolicy in the server's policy.chain.",
+                     name="blacklist-intent")
 @click.argument("intent_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_intent(intent_id, node_id):
-    with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if intent_id in client.intent_blacklist:
-                    print(f"Client {client.name} already blacklisted '{intent_id}'")
-                    exit()
-                client.intent_blacklist.append(intent_id)
-                db.update_item(client)
-                print(f"Blacklisted '{intent_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+    _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=True)
 
 
-@hmcore_cmds.command(help="remove intents from a client blacklist", name="allow-intent")
+@hmcore_cmds.command(help="Remove an intent from a client's blacklist. OVOS-policy: "
+                          "requires OVOSAgentPolicy in the server's policy.chain.",
+                     name="allow-intent")
 @click.argument("intent_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def unblacklist_intent(intent_id, node_id):
+    _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=False)
+
+
+@hmcore_cmds.command(
+    help="Set arbitrary metadata on a client. Metadata keys are consumed by "
+         "policy plugins — OVOSAgentPolicy reads 'skill_blacklist'/'intent_blacklist'; "
+         "other policies may read their own keys. Merge a JSON object with --metadata "
+         "and/or set one entry with --key/--value; --unset removes a key.",
+    name="set-metadata")
+@click.argument("node_id", required=False, type=int)
+@click.option("--metadata", required=False, type=str,
+              help="JSON object merged into the client's metadata.")
+@click.option("--key", required=False, type=str,
+              help="A single metadata key to set (use with --value).")
+@click.option("--value", required=False, type=str,
+              help="Value for --key; parsed as JSON when possible, else stored as a string.")
+@click.option("--unset", required=False, type=str, help="Remove a metadata key.")
+def set_metadata(node_id, metadata, key, value, unset):
+    """Merge admin-defined metadata into an existing client's record."""
+    updates = parse_client_metadata(metadata) or {}
+    if key is not None:
+        if value is None:
+            raise click.BadParameter("--key requires --value")
+        try:
+            updates[key] = json.loads(value)
+        except (ValueError, TypeError):
+            updates[key] = value
+    if not updates and unset is None:
+        raise click.BadParameter("pass --metadata, --key/--value, or --unset")
     with ClientDatabase() as db:
         node_id = node_id or prompt_node_id(db)
         for client in db:
-            if client.client_id == int(node_id):
-                if intent_id not in client.intent_blacklist:
-                    print(f" '{intent_id}' not blacklisted for Client {client.name} ")
-                    exit()
-                client.intent_blacklist.remove(intent_id)
-                db.update_item(client)
-                print(f"Unblacklisted '{intent_id}' for {client.name}")
-                break
-        else:
-            print("Invalid Node ID!")
+            if client.client_id != int(node_id):
+                continue
+            new_meta = dict(client.metadata)
+            new_meta.update(updates)
+            if unset is not None:
+                new_meta.pop(unset, None)
+            client.metadata = new_meta
+            db.update_item(client)
+            print(f"Updated metadata for {client.name}:",
+                  json.dumps(client.metadata, sort_keys=True, ensure_ascii=False))
+            return
+        print("Invalid Node ID!")
+
+
+@hmcore_cmds.group(name="policy", help="Inspect the policy admission chain.")
+def policy_group():
+    """Subcommands for introspecting the configured policy chain."""
+    pass
+
+
+@policy_group.command(name="list", help="Print the loaded policy chain.")
+def policy_list():
+    """List ``MessageTypeACLPolicy`` (always first, non-removable) followed
+    by every plugin built from ``policy.chain`` in server config."""
+    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    cfg = get_server_config()
+    builtin = MessageTypeACLPolicy()
+    try:
+        chain = PolicyChain.from_config(cfg)
+    except Exception as e:
+        click.echo(f"failed to build chain from config: {e}", err=True)
+        chain = PolicyChain()
+    table = Table(title="Policy Chain")
+    table.add_column("Position", justify="right", style="cyan")
+    table.add_column("Plugin", style="magenta")
+    table.add_column("Source", style="yellow")
+    table.add_row("0", type(builtin).__name__, "builtin")
+    for i, plug in enumerate(chain.policies, start=1):
+        table.add_row(str(i), type(plug).__name__, "config")
+    Console().print(table)
+
+
+@policy_group.command(name="test", help="Dry-run a message through the chain.")
+@click.argument("api_key", required=True, type=str)
+@click.argument("msg_type", required=True, type=str)
+def policy_test(api_key, msg_type):
+    """Construct a fake ``Message`` of ``msg_type``, look up the client by
+    ``api_key``, run the full chain (MessageTypeACLPolicy + configured
+    plugins), and print the verdict."""
+    from ovos_bus_client.message import Message
+    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    db = ClientDatabase()
+    client = db.get_client_by_api_key(api_key)
+    if client is None:
+        click.echo(f"no client found for api_key={api_key!r}", err=True)
+        raise click.Abort()
+    cfg = get_server_config()
+    policies = [MessageTypeACLPolicy()]
+    try:
+        chain = PolicyChain.from_config(cfg)
+        policies.extend(chain.policies)
+    except Exception as e:
+        click.echo(f"chain build failed: {e}", err=True)
+    full_chain = PolicyChain(policies=policies)
+    msg = Message(msg_type, {}, {})
+    verdict = full_chain.review(msg, client)
+    click.echo(json.dumps({
+        "denied": verdict.denied,
+        "code": verdict.code,
+        "reason": verdict.reason,
+        "data": verdict.data,
+        "mutations": [type(m).__name__ for m in verdict.mutations],
+    }, indent=2, default=str))
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ def _wait_for(condition, timeout: float = 2.0, interval: float = 0.02) -> bool:
 
 def test_satellite_bus_message_reaches_master_bus():
     """A satellite-injected ``recognizer_loop:utterance`` reaches the master's agent bus."""
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m0 = b.get_master("M0")
@@ -42,7 +42,7 @@ def test_satellite_bus_message_reaches_master_bus():
 
 def test_satellite_session_id_attached_to_inbound_bus_messages():
     """Master-side bus message context carries the satellite's session_id."""
-    b = admin_satellite()
+    b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
         b.start_all()
         m0 = b.get_master("M0")

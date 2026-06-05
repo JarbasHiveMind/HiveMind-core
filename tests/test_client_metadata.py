@@ -5,7 +5,12 @@ from click import BadParameter
 from click.testing import CliRunner
 
 from hivemind_core.database import ClientDatabase
-from hivemind_core.scripts import add_client, parse_client_metadata
+from hivemind_core.scripts import (
+    add_client,
+    blacklist_skill,
+    parse_client_metadata,
+    set_metadata,
+)
 
 
 class MemoryDB:
@@ -207,3 +212,71 @@ def test_cli_add_client_without_metadata_omits_metadata_line():
 
     assert result.exit_code == 0, result.output
     assert "Metadata:" not in result.output
+
+
+# --- set-metadata + OVOS-policy blacklist commands ---------------------------
+
+
+def _seed_client(fake_db, metadata=None):
+    fake_db.add_client(name="sat", key="ak", metadata=metadata or {})
+    return fake_db.get_client_by_api_key("ak")
+
+
+def test_cli_set_metadata_merges_json_object():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db, {"account_id": "acct_1"})
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(set_metadata, [str(client.client_id), "--metadata", '{"tier":"pro"}'])
+    assert result.exit_code == 0, result.output
+    assert fake_db.get_client_by_api_key("ak").metadata == {"account_id": "acct_1", "tier": "pro"}
+
+
+def test_cli_set_metadata_key_value_parses_json():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db)
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(set_metadata, [str(client.client_id), "--key", "skill_blacklist", "--value", '["skill-weather"]'])
+    assert result.exit_code == 0, result.output
+    assert fake_db.get_client_by_api_key("ak").metadata["skill_blacklist"] == ["skill-weather"]
+
+
+def test_cli_set_metadata_value_falls_back_to_string():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db)
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(set_metadata, [str(client.client_id), "--key", "tier", "--value", "pro"])
+    assert result.exit_code == 0, result.output
+    assert fake_db.get_client_by_api_key("ak").metadata["tier"] == "pro"
+
+
+def test_cli_set_metadata_unset_removes_key():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db, {"tier": "pro", "keep": 1})
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(set_metadata, [str(client.client_id), "--unset", "tier"])
+    assert result.exit_code == 0, result.output
+    assert fake_db.get_client_by_api_key("ak").metadata == {"keep": 1}
+
+
+def test_cli_set_metadata_requires_an_argument():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db)
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(set_metadata, [str(client.client_id)])
+    assert result.exit_code != 0
+
+
+def test_cli_blacklist_skill_writes_metadata_without_deprecation():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db)
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(blacklist_skill, ["skill-weather", str(client.client_id)])
+    assert result.exit_code == 0, result.output
+    assert "eprecat" not in result.output
+    assert fake_db.get_client_by_api_key("ak").metadata["skill_blacklist"] == ["skill-weather"]

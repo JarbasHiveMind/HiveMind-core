@@ -17,6 +17,8 @@ def _make_protocol():
     db_user.skill_blacklist = []
     db_user.intent_blacklist = []
     db_user.message_blacklist = []
+    db_user.allowed_types = ["recognizer_loop:utterance"]
+    db_user.is_admin = True
 
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
@@ -33,6 +35,12 @@ def _make_client(protocol, pipeline):
     )
     client.name = "test-client"
     client.allowed_types = ["recognizer_loop:utterance"]
+    # These tests target session-pipeline plumbing, not admission ACL.
+    # Marked admin so OVOSAgentPolicy lets ``session_id == "default"``
+    # payloads through (the only check it gates on is_admin).
+    # MessageTypeACLPolicy ignores is_admin — allowed_types is set explicitly
+    # above to cover its whitelist check.
+    client.is_admin = True
     client.sess = Session("session-1", site_id="client-site", pipeline=pipeline)
     return client
 
@@ -94,7 +102,9 @@ class TestSessionPipelineHandling(unittest.TestCase):
         )
         self.assertEqual(client.sess.pipeline, ["client-sent-pipeline"])
 
-    def test_explicit_none_pipeline_is_kept(self):
+    def test_explicit_none_pipeline_is_treated_as_absent(self):
+        # OVOS-SESSION-1 §2: a null field is treated as omitted; the bridge
+        # strips it rather than forwarding an explicit null.
         protocol = _make_protocol()
         client = _make_client(protocol, ["old-pipeline"])
         raw_session = {
@@ -109,7 +119,7 @@ class TestSessionPipelineHandling(unittest.TestCase):
         )
 
         emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
-        self.assertIsNone(emitted.context["session"]["pipeline"])
+        self.assertNotIn("pipeline", emitted.context["session"])
         self.assertIsNone(client.sess.pipeline)
 
     def test_invalid_bus_payload_is_ignored(self):

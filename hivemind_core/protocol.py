@@ -26,6 +26,9 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
 from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
+from hivemind_plugin_manager.database import Client
+from hivemind_plugin_manager.policy import PolicyPlugin
+from hivemind_core.policy import PolicyChain
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
 
@@ -71,18 +74,12 @@ class HiveMindClientConnection:
     crypto_key: Optional[str] = None
     pub_key: Optional[str] = None  # TODO add field to database
 
-    msg_blacklist: List[str] = field(
-        default_factory=list
-    )  # list of ovos message_type to never be sent to this client
-    skill_blacklist: List[str] = field(
-        default_factory=list
-    )  # list of skill_id that can't match for this client
-    intent_blacklist: List[str] = field(
-        default_factory=list
-    )  # list of skill_id:intent_name that can't match for this client
-    allowed_types: List[str] = field(
-        default_factory=list
-    )  # list of ovos message_type to allow to be sent from this client
+    # admission whitelist — list of ovos message_type values this client
+    # may inject onto the agent bus. Enforced by MessageTypeACLPolicy
+    # (hivemind_core.policy.MessageTypeACLPolicy). Empty = deny everything.
+    # This is the only ACL field on the connection. There is no message
+    # blacklist by design: hivemind-core is whitelist-only, deny-by-default.
+    allowed_types: List[str] = field(default_factory=list)
     binarize: bool = False
     site_id: str = "unknown"
     can_escalate: bool = True
@@ -95,6 +92,41 @@ class HiveMindClientConnection:
     cipher: Literal[SupportedCiphers] = SupportedCiphers.AES_GCM
     encoding: Literal[SupportedEncodings] = SupportedEncodings.JSON_HEX
 
+    # Connection-scoped resolved-user cache. Policies call ``resolve_user``
+    # which hits the DB at most once per ``ttl`` window; ``invalidate_user``
+    # forces the next call to refetch. Avoids per-policy DB sync() storms
+    # on the admission hot path. Not part of the public field set.
+    _resolved_user: Optional[Client] = field(default=None, init=False, repr=False)
+    _resolved_user_ts: float = field(default=0.0, init=False, repr=False)
+
+    def resolve_user(self, db, ttl: float = 5.0,
+                     force: bool = False) -> Optional[Client]:
+        """Return the cached DB row for this connection, refetching at
+        most every ``ttl`` seconds (or unconditionally when ``force``).
+
+        Looks up by ``client_id`` (via ``db.refresh``) when available,
+        falling back to the api-key path otherwise. Exceptions from the
+        DB propagate — callers fail-closed.
+        """
+        if (not force
+                and self._resolved_user is not None
+                and time.time() - self._resolved_user_ts <= ttl):
+            return self._resolved_user
+        client_id = getattr(self._resolved_user, "client_id", None)
+        if client_id is not None:
+            user = db.refresh(client_id)
+        else:
+            user = db.get_client_by_api_key(self.key)
+        self._resolved_user = user
+        self._resolved_user_ts = time.time()
+        return self._resolved_user
+
+    def invalidate_user(self) -> None:
+        """Drop the cached resolved user so the next ``resolve_user`` call
+        forces a fresh DB lookup."""
+        self._resolved_user = None
+        self._resolved_user_ts = 0.0
+
     def __post_init__(self):
         self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
 
@@ -106,20 +138,11 @@ class HiveMindClientConnection:
 
     def send(self, message: HiveMessage):
         is_bin = message.msg_type == HiveMessageType.BINARY
-        # TODO some cleaning around HiveMessage
-        if not is_bin:
-            if isinstance(message.payload, dict):
-                _msg_type = message.payload.get("type")
-            else:
-                _msg_type = message.payload.msg_type
-
-            if _msg_type in self.msg_blacklist:
-                LOG.debug(
-                    f"message type {_msg_type} is blacklisted for {self.peer}"
-                )
-                return
-            elif message.msg_type == HiveMessageType.BUS:
-                LOG.debug(f"mycroft_type {_msg_type}")
+        if not is_bin and message.msg_type == HiveMessageType.BUS:
+            _payload_type = (message.payload.get("type")
+                             if isinstance(message.payload, dict)
+                             else message.payload.msg_type)
+            LOG.debug(f"mycroft_type {_payload_type}")
 
         LOG.debug(f"sending to {self.peer}: {message.msg_type}")
 
@@ -136,9 +159,10 @@ class HiveMindClientConnection:
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                LOG.debug(f"unencrypted payload size: {len(message.payload.serialize())} bytes")
+                plaintext = message.serialize()
+                LOG.debug(f"unencrypted payload size: {len(plaintext)} bytes")
                 payload = encrypt_as_json(
-                    key=self.crypto_key, plaintext=message.serialize(),
+                    key=self.crypto_key, plaintext=plaintext,
                     cipher=self.cipher, encoding=self.encoding
                 )  # json string
             LOG.debug(f"encrypted payload size: {len(payload)} bytes")
@@ -171,12 +195,16 @@ class HiveMindClientConnection:
         return HiveMessage(**payload)
 
     def authorize(self, message: Message) -> bool:
-        """parse the message being injected into ovos-core bus
-        if this client is not authorized to inject it return False"""
-        if message.msg_type not in self.allowed_types:
-            return False
+        """Subclass override hook — return False to short-circuit bus
+        injection without going through the policy chain.
 
-        # TODO check intent / skill that will trigger
+        The allowed_types whitelist that used to live here moved to
+        MessageTypeACLPolicy in hivemind_core/policy.py (see #85). Kept as a
+        default-True stub so subclasses overriding it for ad-hoc
+        admission gates continue to work.
+        """
+        # legacy hooks: subclasses may still want to plug intent / skill
+        # decisions here outside the policy chain
         # for OVOS agent this is passed in Session and ignored during match
         # adding it here allows blocking the utterance completely instead
         # or adding a callback for specific agents to decide how to handle
@@ -196,6 +224,7 @@ class HiveMindListenerProtocol:
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
     hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
+    policy_chain: Optional[PolicyChain] = None
 
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
@@ -216,6 +245,38 @@ class HiveMindListenerProtocol:
                                                                   agent_protocol=self.agent_protocol)
         else:
             self.binary_data_protocol.hm_protocol = self
+        if self.policy_chain is None:
+            from hivemind_core.policy import MessageTypeACLPolicy, DenyAllPolicy
+            cfg = get_server_config()
+            try:
+                chain = PolicyChain.from_config(cfg, hm_protocol=self)
+            except Exception:
+                LOG.exception(
+                    "failed to build policy chain; installing DenyAllPolicy "
+                    "fallback — every admission will be rejected until "
+                    "configuration is fixed"
+                )
+                self.policy_chain = PolicyChain(
+                    policies=[DenyAllPolicy(hm_protocol=self)],
+                )
+            else:
+                # MessageTypeACLPolicy is the canonical allowed_types whitelist
+                # enforcement and is non-removable. Prepend it to the
+                # configured chain (deduping if an operator listed it
+                # explicitly). Always mandatory — _optional[0] = False.
+                configured: List[PolicyPlugin] = []
+                configured_optional: List[bool] = []
+                for i, p in enumerate(chain.policies):
+                    if isinstance(p, MessageTypeACLPolicy):
+                        continue
+                    configured.append(p)
+                    configured_optional.append(
+                        chain._optional[i] if i < len(chain._optional) else False
+                    )
+                self.policy_chain = PolicyChain(
+                    policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
+                    _optional=[False, *configured_optional],
+                )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # allow subclasses to use dedicated bus per client
@@ -432,6 +493,29 @@ class HiveMindListenerProtocol:
     ):
         assert message.msg_type == HiveMessageType.BINARY
         bin_data = message.payload
+
+        # policy admission chain — issue #85
+        verdict = self.policy_chain.review_binary(bin_data, client)
+        if verdict.denied:
+            LOG.info(f"policy denied binary payload from {client.peer}: "
+                     f"{verdict.code} ({verdict.reason})")
+            denied = Message(
+                "hive.policy.denied",
+                {
+                    "denied_type": "binary",
+                    "bin_type": str(getattr(message, "bin_type", "")),
+                    "code": verdict.code,
+                    "reason": verdict.reason,
+                    "data": verdict.data,
+                },
+                {"source": "hivemind-core", "destination": client.peer},
+            )
+            try:
+                client.send(HiveMessage(HiveMessageType.BUS, payload=denied))
+            except Exception:
+                LOG.exception("failed to send hive.policy.denied for binary")
+            return
+
         if message.bin_type == HiveMindBinaryPayloadType.RAW_AUDIO:
             sr = message.metadata.get("sample_rate", 16000)
             sw = message.metadata.get("sample_width", 2)
@@ -584,10 +668,13 @@ class HiveMindListenerProtocol:
         sess = Session.from_message(payload)
         if sent_pipeline:
             sess.pipeline = raw_session.get("pipeline")
-        if sess.session_id == "default" and not client.is_admin:
-            LOG.warning("Client tried to inject 'default' session message, action only allowed for administrators!")
-            client.disconnect()
-            return
+        # The per-message "session_id == 'default'" gate moved to
+        # OVOSAgentPolicy.review (HiveMind-core#85). Non-admin clients
+        # injecting a default-session payload get Verdict.deny(
+        # "session_id_default_forbidden", ...) and the message is dropped
+        # with a hive.policy.denied response — replacing the previous
+        # severe `client.disconnect()` reaction. The HELLO-time check at
+        # handle_hello_message stays as connection-establishment gate.
 
         if sess.session_id != "default" and client.sess.session_id == sess.session_id:
             if not sent_pipeline:
@@ -832,34 +919,34 @@ class HiveMindListenerProtocol:
         return False
 
     # HiveMind mycroft bus messages -  from slave -> master
-    def _update_blacklist(self, message: Message, client: HiveMindClientConnection):
-        LOG.debug("replacing message metadata with hivemind client session")
+    def _install_client_session(self, message: Message,
+                                 client: HiveMindClientConnection):
+        """Copy the client's serialised session onto an inbound bus message.
+
+        Must run BEFORE the policy chain so policies see the canonical
+        session (skill/intent injection mutations will land on this
+        dict).
+
+        Skill / intent / message-type blacklist injection moved to
+        ``OVOSAgentPolicy`` in ``hivemind-ovos-agent-plugin`` (see #85).
+        This method only handles the session-rewrite half of what used
+        to be ``_update_blacklist``: copy ``client.sess.serialize()`` onto
+        the message, taking care not to reattach a stale pipeline.
+
+        Per SESSION-1 §2: any session field carrying JSON ``null`` is
+        malformed and MUST be treated as absent (not preserved). This
+        method strips null-valued fields from the session before writing
+        it to the message context so downstream consumers never see them.
+        """
         raw_session = message.context.get("session") or {}
         session = client.sess.serialize()
         if not isinstance(raw_session, dict) or "pipeline" not in raw_session:
-            # Each bus message owns its outbound pipeline; do not reattach one from an earlier message.
+            # Each bus message owns its outbound pipeline; do not reattach
+            # one from an earlier message.
             session.pop("pipeline", None)
+        # SESSION-1 §2: strip null-valued fields — null is malformed, treat as absent.
+        session = {k: v for k, v in session.items() if v is not None}
         message.context["session"] = session
-
-        # update blacklist from db, to account for changes without requiring a restart
-        self.db.sync()
-        user = self.db.get_client_by_api_key(client.key)
-        client.skill_blacklist = user.skill_blacklist or []
-        client.intent_blacklist = user.intent_blacklist or []
-        client.msg_blacklist = user.message_blacklist or []
-
-        # inject client specific blacklist into session
-        if "blacklisted_skills" not in message.context["session"]:
-            message.context["session"]["blacklisted_skills"] = []
-        if "blacklisted_intents" not in message.context["session"]:
-            message.context["session"]["blacklisted_intents"] = []
-
-        message.context["session"]["blacklisted_skills"] += [s for s in client.skill_blacklist
-                                                             if
-                                                             s not in message.context["session"]["blacklisted_skills"]]
-        message.context["session"]["blacklisted_intents"] += [s for s in client.intent_blacklist
-                                                              if s not in message.context["session"][
-                                                                  "blacklisted_intents"]]
         return message
 
     def handle_inject_agent_msg(
@@ -877,11 +964,19 @@ class HiveMindListenerProtocol:
             return
 
         # ensure client specific session data is injected in query to ovos
-        message = self._update_blacklist(message, client)
+        message = self._install_client_session(message, client)
         if message.msg_type == "speak":
             message.context["destination"] = ["audio"]  # make audible, this is injected "speak" command
         elif message.context.get("destination") is None:
             message.context["destination"] = "skills"  # ensure not treated as a broadcast
+
+        # policy admission chain — issue #85
+        verdict = self.policy_chain.review(message, client)
+        if verdict.denied:
+            LOG.info(f"policy denied '{message.msg_type}' from {client.peer}: "
+                     f"{verdict.code} ({verdict.reason})")
+            self._send_policy_denied(client, message, verdict)
+            return
 
         # send client message to internal mycroft bus
         LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
@@ -891,8 +986,28 @@ class HiveMindListenerProtocol:
         bus = self.get_bus(client)
         bus.emit(message)
 
+        self.policy_chain.observe(message, client)
+
         if self.agent_bus_callback:
             self.agent_bus_callback(message)
+
+    def _send_policy_denied(self, client: HiveMindClientConnection,
+                             message: Message, verdict) -> None:
+        """Inform a client that an admission policy denied their message."""
+        payload = Message(
+            "hive.policy.denied",
+            {
+                "denied_type": getattr(message, "msg_type", None),
+                "code": verdict.code,
+                "reason": verdict.reason,
+                "data": verdict.data,
+            },
+            {"source": "hivemind-core", "destination": client.peer},
+        )
+        try:
+            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
+        except Exception:
+            LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
 
     def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
         # this message is going inside the client bus

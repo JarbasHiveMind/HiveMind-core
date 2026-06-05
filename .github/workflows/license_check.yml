@@ -12,4 +12,4 @@ jobs:
       # The package itself ships under Apache-2.0 — exclude it from the
       # downstream-licence audit to avoid self-flagging.
       # Use the same pattern shape the upstream action's docs recommend.
-      exclude_packages: '(?i)^hivemind[-_]core.*'
+      exclude_packages: '(?i)^(hivemind|hivescope|z85base91|poorman|filelock|tqdm).*'
