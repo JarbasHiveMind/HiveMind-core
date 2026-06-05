@@ -112,3 +112,36 @@ def test_cascade_round_trip_single_node():
         assert recv is not None, "satellite never received a CASCADE response"
     finally:
         b.stop_all()
+
+
+def _two_relay_chain():
+    """M0 (answers) <- R1 <- R2 <- S0 (originator). A QUERY from S0 traverses
+    R2 then R1 — neither answers — and only M0, the third node up the chain,
+    answers; the response then routes back down through R1 and R2 to S0."""
+    b = TopologyBuilder()
+    m = b.add_master("M0")
+    m.register_satellite("r1-key", password="p")
+    _s1, r1_master = b.add_relay("R1", upstream=m)
+    r1_master.register_satellite("r2-key", password="p")
+    _s2, r2_master = b.add_relay("R2", upstream=r1_master)
+    r2_master.register_satellite("sat-key", password="p",
+                                 allowed_types=["recognizer_loop:utterance"])
+    b.add_satellite("S0", upstream=r2_master,
+                    allowed_types=["recognizer_loop:utterance"])
+    return b
+
+
+def test_query_traverses_two_relays_only_third_answers():
+    b = _two_relay_chain(); b.start_all()
+    try:
+        # ONLY the top master answers; R2 and R1 have no agent answer -> escalate
+        _answer(b.get_master("M0"), ["answered at the top after two hops"])
+        s = b.get_satellite("S0")
+        s.send(HiveMessage(HiveMessageType.QUERY, payload=_utt(),
+                           metadata={"query_id": "q-deep", "originator_peer": s.peer}))
+        recv = s.recorder.wait_for(HiveMessageType.QUERY.value,
+                                   direction="in", timeout=12.0)
+        assert recv is not None, \
+            "QUERY answered at M0 never routed back through R1+R2 to S0"
+    finally:
+        b.stop_all()
