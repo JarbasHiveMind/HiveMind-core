@@ -212,6 +212,38 @@ class HiveMindClientConnection:
 
 
 @dataclass
+class CascadeResponse:
+    """A single response collected during a CASCADE query."""
+    responder_peer: str
+    responder_site_id: str = ""
+    messages: List[Message] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass
+class CascadeCollector:
+    """Collects CASCADE responses for a given query_id at the originator."""
+    query_id: str
+    originator_peer: str
+    responses: List[CascadeResponse] = field(default_factory=list)
+
+    def add_response(self, message: HiveMessage) -> 'CascadeResponse':
+        meta = message.metadata or {}
+        resp = CascadeResponse(
+            responder_peer=meta.get("responder_peer", "unknown"),
+            responder_site_id=meta.get("responder_site_id", ""),
+            metadata=meta,
+        )
+        inner = message.payload
+        if isinstance(inner, HiveMessage) and inner.msg_type == HiveMessageType.BUS:
+            bus_msg = inner.payload
+            if isinstance(bus_msg, Message):
+                resp.messages.append(bus_msg)
+        self.responses.append(resp)
+        return resp
+
+
+@dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
     binary_data_protocol: Optional[BinaryDataHandlerProtocol] = None
@@ -235,10 +267,12 @@ class HiveMindListenerProtocol:
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
     _upstream_hm = None  # HiveMessageBusClient to the upstream master when this node relays
+    cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
 
     def __post_init__(self):
         self.clients = {}
         self._seen_flood_ids: set = set()
+        self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -472,6 +506,8 @@ class HiveMindListenerProtocol:
             self.handle_escalate_message(message, client)
         elif message.msg_type == HiveMessageType.QUERY:
             self.handle_query_message(message, client)
+        elif message.msg_type == HiveMessageType.CASCADE:
+            self.handle_cascade_message(message, client)
         elif message.msg_type == HiveMessageType.INTERCOM:
             self.handle_intercom_message(message, client)
         elif message.msg_type == HiveMessageType.BINARY:
@@ -835,6 +871,7 @@ class HiveMindListenerProtocol:
         slave.hm.on(HiveMessageType.BROADCAST, self.broadcast_from_master)
         slave.hm.on(HiveMessageType.PROPAGATE, self.propagate_from_master)
         slave.hm.on(HiveMessageType.QUERY, self.query_from_master)
+        slave.hm.on(HiveMessageType.CASCADE, self.cascade_from_master)
 
     def broadcast_from_master(self, message: HiveMessage) -> None:
         """Fan a BROADCAST received from the upstream master out to all
@@ -931,6 +968,27 @@ class HiveMindListenerProtocol:
         client if connected here, else fan to downstream peers)."""
         metadata = message.metadata or {}
         originator_peer = metadata.get("originator_peer", "")
+        # CASCADE disambiguation: collect responses for a select callback at
+        # the originating node, letting it pick a winner progressively.
+        if (message.msg_type == HiveMessageType.CASCADE
+                and self.cascade_select_callback is not None
+                and originator_peer in self.clients):
+            query_id = metadata.get("query_id", "")
+            if query_id not in self._pending_cascades:
+                self._pending_cascades[query_id] = CascadeCollector(
+                    query_id=query_id, originator_peer=originator_peer)
+            collector = self._pending_cascades[query_id]
+            collector.add_response(message)
+            bus = self.get_bus(self.clients[originator_peer])
+            try:
+                selected = self.cascade_select_callback(query_id, collector.responses)
+                if selected is not None:
+                    bus.emit(selected)
+                    del self._pending_cascades[query_id]
+            except Exception:
+                LOG.exception(f"cascade_select_callback error for query_id={query_id}")
+            return
+        # Default routing: forward toward originator
         if originator_peer in self.clients:
             self.clients[originator_peer].send(message)
         else:
@@ -983,6 +1041,61 @@ class HiveMindListenerProtocol:
             client.send(self._build_query_response(
                 HiveMessageType.QUERY, error_bus, query_id,
                 originator_peer, self.peer, route=message.route))
+
+    def cascade_from_master(self, message: HiveMessage) -> None:
+        """Fan a CASCADE received from the upstream master out to downstream clients."""
+        for peer, conn in self.clients.items():
+            conn.send(message)
+
+    def cascade_to_master(self, payload: HiveMessage, metadata: Optional[dict] = None) -> None:
+        """Forward a CASCADE upstream. No-op at the top-level master."""
+        if self._upstream_hm is None:
+            return
+        self._upstream_hm.emit(HiveMessage(HiveMessageType.CASCADE, payload=payload,
+                                           metadata=metadata))
+
+    def handle_cascade_message(self, message: HiveMessage,
+                               client: HiveMindClientConnection):
+        """CASCADE — like PROPAGATE but every node may answer. Request: try the
+        local agent, forward to all other peers + upstream, relay responses
+        (collected for disambiguation at the originator). Response: route
+        downstream toward the originator."""
+        LOG.info(f"Received CASCADE from: {client.peer}")
+        metadata = message.metadata or {}
+        if metadata.get("is_response", False):
+            self._route_query_response(message, client)
+            return
+
+        payload = self._unpack_message(message, client)
+        if not client.can_propagate:
+            LOG.warning("Received CASCADE from client without propagate permission")
+            if self.illegal_callback:
+                self.illegal_callback(payload)
+            client.disconnect()
+            return
+
+        query_id = metadata.get("query_id", str(uuid.uuid4()))
+        originator_peer = metadata.get("originator_peer", client.peer)
+        bus = self.get_bus(client)
+        bus.emit(Message("hive.cascade.received",
+                         {"query_id": query_id, "originator_peer": originator_peer},
+                         {"source": client.peer}))
+
+        inner = message.payload
+        if inner.msg_type == HiveMessageType.BUS:
+            response = self._try_local_agent_query(inner.payload, client, query_id)
+            if response is not None:
+                self._route_query_response(self._build_query_response(
+                    HiveMessageType.CASCADE, response, query_id,
+                    originator_peer, self.peer, route=message.route), client)
+
+        cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
+                                  metadata=metadata)
+        for peer in self.clients:
+            if peer == client.peer:
+                continue
+            self.clients[peer].send(cascade_fwd)
+        self.cascade_to_master(payload, metadata)
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
