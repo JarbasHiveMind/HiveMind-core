@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.5.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.5.0a1) (2026-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.4.0a2...4.5.0a1)
+
+**Merged pull requests:**
+
+- feat: native relay support \(bind\_upstream\) [\#98](https://github.com/JarbasHiveMind/HiveMind-core/pull/98) ([JarbasAl](https://github.com/JarbasAl))
+
+## [4.4.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.4.0a2) (2026-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.4.0a1...4.4.0a2)
+
+**Implemented enhancements:**
+
+- Dynamic ACL policy plugin hook [\#85](https://github.com/JarbasHiveMind/HiveMind-core/issues/85)
+
+**Merged pull requests:**
+
+- docs: zero-to-hero documentation [\#101](https://github.com/JarbasHiveMind/HiveMind-core/pull/101) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.4.0a1) (2026-06-05)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.3.0a2...4.4.0a1)
