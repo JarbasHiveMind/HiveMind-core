@@ -8,23 +8,6 @@ import pytest
 
 pytest.importorskip("hivescope")
 
-import inspect  # noqa: E402
-
-
-def _bus_client_has_query_companion() -> bool:
-    """The QUERY round-trip needs the bus-client companion fix: handle_query
-    must unwrap to ``handle_bus(message.payload)``, not pass the QUERY wrapper."""
-    try:
-        from hivemind_bus_client.protocol import HiveMindSlaveProtocol
-        return "message.payload" in inspect.getsource(HiveMindSlaveProtocol.handle_query)
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _bus_client_has_query_companion(),
-    reason="needs hivemind-bus-client QUERY companion (handle_query -> handle_bus(message.payload))",
-)
 
 from hivemind_bus_client.message import HiveMessage, HiveMessageType  # noqa: E402
 from ovos_bus_client.message import Message  # noqa: E402

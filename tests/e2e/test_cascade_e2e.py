@@ -2,26 +2,6 @@
 through the policy admission chain; a CASCADE response routes back to the
 originator (where the bus client aggregates + selects).
 """
-import inspect
-import time
-
-import pytest
-
-pytest.importorskip("hivescope")
-
-
-def _bus_client_has_cascade_companion() -> bool:
-    try:
-        from hivemind_bus_client.protocol import HiveMindSlaveProtocol
-        return "m.payload" in inspect.getsource(HiveMindSlaveProtocol.handle_cascade)
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(
-    not _bus_client_has_cascade_companion(),
-    reason="needs hivemind-bus-client CASCADE companion (emit_callback unwraps m.payload)",
-)
 
 from hivemind_bus_client.message import HiveMessage, HiveMessageType  # noqa: E402
 from ovos_bus_client.message import Message  # noqa: E402
