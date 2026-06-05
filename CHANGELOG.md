@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.3.0a1) (2026-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.2.0a3...4.3.0a1)
+
+**Merged pull requests:**
+
+- feat: policy admission chain runner \(\#85 phase 2\) [\#89](https://github.com/JarbasHiveMind/HiveMind-core/pull/89) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.2.0a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.2.0a3) (2026-05-19)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.2.0a2...4.2.0a3)
