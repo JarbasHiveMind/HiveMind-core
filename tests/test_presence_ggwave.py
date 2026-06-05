@@ -62,3 +62,54 @@ def test_start_presence_builds_localpresence_when_available():
          mock.patch("hivemind_core.service.create_daemon"):
         svc._start_presence()
     assert LP.called
+
+
+def test_start_presence_omits_unsupported_kwargs():
+    """Against a LocalPresence that exposes only upnp/zeroconf (today's published
+    hivemind-presence), _start_presence must NOT pass beacon/ggwave — else it
+    TypeErrors at startup."""
+    svc = _service()
+
+    class _OldLocalPresence:  # signature without beacon/ggwave
+        def __init__(self, port=5678, ssl=False, service_type="_hivemind._tcp.local.",
+                     name="HiveMind-Node", upnp=False, zeroconf=True):
+            self.kwargs = dict(port=port, ssl=ssl, name=name, upnp=upnp, zeroconf=zeroconf)
+
+        def start(self):
+            pass
+
+    import sys
+    import types
+    fake_mod = types.ModuleType("hivemind_presence")
+    fake_mod.LocalPresence = _OldLocalPresence
+    with mock.patch.dict(sys.modules, {"hivemind_presence": fake_mod}), \
+         mock.patch("hivemind_core.service.create_daemon"):
+        svc._start_presence()  # must not raise
+    assert "beacon" not in svc._presence.kwargs
+    assert "ggwave" not in svc._presence.kwargs
+
+
+def test_start_presence_passes_beacon_ggwave_when_supported():
+    """Against a future LocalPresence that accepts beacon/ggwave, _start_presence
+    forwards them."""
+    svc = _service()
+    captured = {}
+
+    class _NewLocalPresence:
+        def __init__(self, port=5678, ssl=False, name="HiveMind-Node", upnp=False,
+                     zeroconf=True, beacon=True, ggwave=False,
+                     ggwave_add_client_callback=None):
+            captured.update(beacon=beacon, ggwave=ggwave,
+                            has_cb=ggwave_add_client_callback is not None)
+
+        def start(self):
+            pass
+
+    import sys
+    import types
+    fake_mod = types.ModuleType("hivemind_presence")
+    fake_mod.LocalPresence = _NewLocalPresence
+    with mock.patch.dict(sys.modules, {"hivemind_presence": fake_mod}), \
+         mock.patch("hivemind_core.service.create_daemon"):
+        svc._start_presence()
+    assert captured.get("beacon") is True  # default beacon on when supported
