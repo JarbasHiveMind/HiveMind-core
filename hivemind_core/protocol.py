@@ -58,6 +58,12 @@ class HiveMindNodeType(str, Enum):
     # but receiving connections
 
 
+# QUERY/CASCADE answers stream as a sequence of response chunks terminated by a
+# response wrapping this control message — the end-of-stream is part of the
+# protocol content, not loose metadata.
+QUERY_STREAM_END = "hive.query.complete"
+
+
 @dataclass
 class HiveMindClientConnection:
     """represents a connection to the hivemind listener"""
@@ -916,10 +922,10 @@ class HiveMindListenerProtocol:
     def _build_query_response(self, msg_type: HiveMessageType, response: Message,
                               query_id: str, originator_peer: str,
                               responder_peer: str,
-                              route: Optional[list] = None,
-                              is_final: bool = False) -> HiveMessage:
-        """Wrap an OVOS *response* (one streamed ``speak``) as a QUERY/CASCADE
-        response HiveMessage. ``is_final`` marks the end-of-stream sentinel."""
+                              route: Optional[list] = None) -> HiveMessage:
+        """Wrap a *response* — one streamed ``speak``, or the
+        ``QUERY_STREAM_END`` control message that terminates the stream — as a
+        QUERY/CASCADE response HiveMessage."""
         inner = HiveMessage(HiveMessageType.BUS, payload=response)
         msg = HiveMessage(
             msg_type, payload=inner,
@@ -928,7 +934,6 @@ class HiveMindListenerProtocol:
                 "originator_peer": originator_peer,
                 "responder_peer": responder_peer,
                 "is_response": True,
-                "is_final": is_final,
             },
         )
         if route:
@@ -963,7 +968,7 @@ class HiveMindListenerProtocol:
         """Stream a local-agent answer for a QUERY/CASCADE request. Extracts the
         natural-language utterance, runs it through the policy admission gate,
         then streams the agent's answer chunks via ``send_fn`` (one ``speak``
-        per chunk) followed by an ``is_final`` end-of-stream marker. Returns
+        per chunk) followed by a ``QUERY_STREAM_END`` end-of-stream control message. Returns
         True if the agent answered (caller stops), False if it declined (caller
         escalates)."""
         inner = message.payload
@@ -991,13 +996,13 @@ class HiveMindListenerProtocol:
                                {"query_id": query_id})
                 send_fn(self._build_query_response(
                     msg_type, resp, query_id, originator_peer, self.peer,
-                    route=route, is_final=False))
+                    route=route))
         except NotImplementedError:
             return False  # agent has no NL backend -> escalate
         if answered:
             send_fn(self._build_query_response(
-                msg_type, Message("hive.query.complete", {}), query_id,
-                originator_peer, self.peer, route=route, is_final=True))
+                msg_type, Message(QUERY_STREAM_END, {}), query_id,
+                originator_peer, self.peer, route=route))
         return answered
 
     def _route_query_response(self, message: HiveMessage,
@@ -1084,7 +1089,7 @@ class HiveMindListenerProtocol:
                                 {"query_id": query_id, "error": "no_answer"})
             client.send(self._build_query_response(
                 HiveMessageType.QUERY, error_bus, query_id,
-                originator_peer, self.peer, route=message.route, is_final=True))
+                originator_peer, self.peer, route=message.route))
 
     def cascade_from_master(self, message: HiveMessage) -> None:
         """Fan a CASCADE received from the upstream master out to downstream clients."""
