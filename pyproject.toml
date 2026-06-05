@@ -43,6 +43,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+presence = ["hivemind-presence", "hivemind-ggwave"]
 test = [
     "pytest",
     "pytest-cov",
