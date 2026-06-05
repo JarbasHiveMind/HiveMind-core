@@ -91,14 +91,17 @@ The default configuration
     ]
   },
   "database": {
-    "module": "hivemind-json-db-plugin",
-    "hivemind-json-db-plugin": {
+    "module": "hivemind-sqlite-db-plugin",
+    "hivemind-sqlite-db-plugin": {
       "name": "clients",
       "subfolder": "hivemind-core"
     }
   }
 }
 ```
+
+
+> **Default backend:** fresh installs use **SQLite** (transactional, concurrency-safe, stdlib). An existing JSON deployment (a `clients.json` already on disk) keeps using JSON so upgrades never strand the credentials store. Move an existing store with `hivemind-core migrate-db --to sqlite` (also supports `--from`/`--to` for JSON ⇄ SQLite ⇄ Redis).
 
 ### Policy Admission Chain
 
