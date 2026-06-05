@@ -3,11 +3,24 @@ import os
 import tempfile
 from unittest import mock
 
+import pytest
 from click.testing import CliRunner
 
 from hivemind_core import config as C
 from hivemind_core.database import ClientDatabase
 from hivemind_core.scripts import migrate_db
+
+
+def _sqlite_supports_current_client_model() -> bool:
+    """The published sqlite plugin < 0.3.0a1 references the removed
+    Client.message_blacklist field in add_item; skip the migration test
+    until that schema-v2 build (HiveMind-sqlite-database#32) is released."""
+    try:
+        import importlib.metadata as _m
+        from packaging.version import Version
+        return Version(_m.version("hivemind-sqlite-database")) >= Version("0.3.0a1")
+    except Exception:
+        return False
 
 
 def _make_existing(json=False, sqlite=False):
@@ -36,6 +49,9 @@ def test_sqlite_wins_once_present():
         assert C._default_database()["module"] == "hivemind-sqlite-db-plugin"
 
 
+@pytest.mark.skipif(
+    not _sqlite_supports_current_client_model(),
+    reason="needs hivemind-sqlite-database>=0.3.0a1 (current Client model)")
 def test_migrate_db_copies_clients_json_to_sqlite():
     tmp_json = tempfile.mkdtemp()
     tmp_sqlite = tempfile.mkdtemp()
