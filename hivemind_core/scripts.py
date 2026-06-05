@@ -470,21 +470,12 @@ def blacklist_propagate(node_id):
 
 
 ##########################
-# skill / intent permissions — DEPRECATED. These flags are OVOS-specific
-# and live in Client.metadata now (read by OVOSAgentPolicy in
-# hivemind-ovos-agent-plugin). The CLI is preserved for backwards compat
-# with existing deployment scripts and emits a deprecation warning to
-# stderr; mutations are written through Client.metadata directly.
-
-
-def _deprecated_blacklist_cmd(field: str):
-    click.echo(
-        f"DeprecationWarning: 'hivemind-core {field.replace('_', '-')}' "
-        "is deprecated; configure OVOSAgentPolicy in your hivemind-core "
-        "server config (policy.chain) or write directly to "
-        f"Client.metadata['{field}'] instead.",
-        err=True,
-    )
+# skill / intent permissions — OVOS-policy-specific. These manage the
+# ``skill_blacklist`` / ``intent_blacklist`` lists in ``Client.metadata``,
+# which OVOSAgentPolicy (hivemind-ovos-agent-plugin) injects into the OVOS
+# session when it is configured in the server's ``policy.chain``. They have
+# no effect unless that policy is active. ``set-metadata`` below writes
+# arbitrary metadata keys for any other policy that reads them.
 
 
 def _toggle_metadata_blacklist(metadata_key: str, value: str,
@@ -517,40 +508,83 @@ def _toggle_metadata_blacklist(metadata_key: str, value: str,
         print("Invalid Node ID!")
 
 
-@hmcore_cmds.command(help="(deprecated) blacklist a skill for a client",
+@hmcore_cmds.command(help="Blacklist a skill for a client. OVOS-policy: requires "
+                          "OVOSAgentPolicy in the server's policy.chain.",
                      name="blacklist-skill")
 @click.argument("skill_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_skill(skill_id, node_id):
-    _deprecated_blacklist_cmd("skill_blacklist")
     _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=True)
 
 
-@hmcore_cmds.command(help="(deprecated) remove a skill from a client blacklist",
+@hmcore_cmds.command(help="Remove a skill from a client's blacklist. OVOS-policy: "
+                          "requires OVOSAgentPolicy in the server's policy.chain.",
                      name="allow-skill")
 @click.argument("skill_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def unblacklist_skill(skill_id, node_id):
-    _deprecated_blacklist_cmd("skill_blacklist")
     _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=False)
 
 
-@hmcore_cmds.command(help="(deprecated) blacklist an intent for a client",
+@hmcore_cmds.command(help="Blacklist an intent for a client. OVOS-policy: requires "
+                          "OVOSAgentPolicy in the server's policy.chain.",
                      name="blacklist-intent")
 @click.argument("intent_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def blacklist_intent(intent_id, node_id):
-    _deprecated_blacklist_cmd("intent_blacklist")
     _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=True)
 
 
-@hmcore_cmds.command(help="(deprecated) remove an intent from a client blacklist",
+@hmcore_cmds.command(help="Remove an intent from a client's blacklist. OVOS-policy: "
+                          "requires OVOSAgentPolicy in the server's policy.chain.",
                      name="allow-intent")
 @click.argument("intent_id", required=True, type=str)
 @click.argument("node_id", required=False, type=int)
 def unblacklist_intent(intent_id, node_id):
-    _deprecated_blacklist_cmd("intent_blacklist")
     _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=False)
+
+
+@hmcore_cmds.command(
+    help="Set arbitrary metadata on a client. Metadata keys are consumed by "
+         "policy plugins — OVOSAgentPolicy reads 'skill_blacklist'/'intent_blacklist'; "
+         "other policies may read their own keys. Merge a JSON object with --metadata "
+         "and/or set one entry with --key/--value; --unset removes a key.",
+    name="set-metadata")
+@click.argument("node_id", required=False, type=int)
+@click.option("--metadata", required=False, type=str,
+              help="JSON object merged into the client's metadata.")
+@click.option("--key", required=False, type=str,
+              help="A single metadata key to set (use with --value).")
+@click.option("--value", required=False, type=str,
+              help="Value for --key; parsed as JSON when possible, else stored as a string.")
+@click.option("--unset", required=False, type=str, help="Remove a metadata key.")
+def set_metadata(node_id, metadata, key, value, unset):
+    """Merge admin-defined metadata into an existing client's record."""
+    updates = parse_client_metadata(metadata) or {}
+    if key is not None:
+        if value is None:
+            raise click.BadParameter("--key requires --value")
+        try:
+            updates[key] = json.loads(value)
+        except (ValueError, TypeError):
+            updates[key] = value
+    if not updates and unset is None:
+        raise click.BadParameter("pass --metadata, --key/--value, or --unset")
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id != int(node_id):
+                continue
+            new_meta = dict(client.metadata)
+            new_meta.update(updates)
+            if unset is not None:
+                new_meta.pop(unset, None)
+            client.metadata = new_meta
+            db.update_item(client)
+            print(f"Updated metadata for {client.name}:",
+                  json.dumps(client.metadata, sort_keys=True, ensure_ascii=False))
+            return
+        print("Invalid Node ID!")
 
 
 @hmcore_cmds.group(name="policy", help="Inspect the policy admission chain.")

@@ -158,7 +158,7 @@ $ hivemind-core allow-msg "speak" 1
 $ hivemind-core blacklist-msg "speak" 1
 ```
 
-**Skill and intent filtering** are OVOS-specific concerns handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`, the default `agent_protocol`). The CLI commands `blacklist-skill`, `allow-skill`, `blacklist-intent`, and `allow-intent` are preserved for backwards compatibility but emit a deprecation warning and write through `Client.metadata` rather than a first-class field. — `hivemind_core/scripts.py:464`
+**Skill and intent filtering** are OVOS-specific concerns handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`, the default `agent_protocol`). The CLI commands `blacklist-skill`, `allow-skill`, `blacklist-intent`, and `allow-intent` manage the `skill_blacklist` / `intent_blacklist` lists in `Client.metadata`, which `OVOSAgentPolicy` injects into the OVOS session. They take effect only when that policy is configured in `policy.chain`. For any other policy-relevant key, use **`set-metadata`** to write arbitrary `Client.metadata`. — `hivemind_core/scripts.py`
 
 **On-disk migration of legacy blacklist fields.** Database backends (e.g. `hivemind-sqlite-database`, `hivemind-redis-database`) implement the new `AbstractDB.migrate(from_version)` hook from `hivemind-plugin-manager` and run a one-shot `v1 → v2` migration on first open. The migration folds any legacy top-level `intent_blacklist` / `skill_blacklist` / `message_blacklist` storage (SQLite columns, JSON keys, Redis hash fields) into each row's `metadata` dict via `setdefault` (explicit metadata wins), then clears the legacy storage. Backends track their schema version natively (SQLite `PRAGMA user_version`, Redis sentinel key) so the migration runs exactly once per database. Third-party backends that do not override `migrate()` keep working — the property shims on `Client` ensure read-path code is agnostic to on-disk shape.
 
@@ -242,10 +242,11 @@ Commands:
   make-admin           grant administrator privileges to a client
   revoke-admin         revoke administrator privileges from a client
   rename-client        rename a client in the database
-  allow-intent         (deprecated) remove an intent from a client blacklist
-  allow-skill          (deprecated) remove a skill from a client blacklist
-  blacklist-intent     (deprecated) blacklist an intent for a client
-  blacklist-skill      (deprecated) blacklist a skill for a client
+  allow-intent         remove an intent from a client's blacklist (OVOS-policy)
+  allow-skill          remove a skill from a client's blacklist (OVOS-policy)
+  blacklist-intent     blacklist an intent for a client (OVOS-policy)
+  blacklist-skill      blacklist a skill for a client (OVOS-policy)
+  set-metadata         set arbitrary metadata on a client (read by policy plugins)
 ```
 
 For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
@@ -345,9 +346,9 @@ $ hivemind-core blacklist-msg "speak"
 
 ---
 
-### `blacklist-skill` / `allow-skill` / `blacklist-intent` / `allow-intent` (deprecated)
+### `blacklist-skill` / `allow-skill` / `blacklist-intent` / `allow-intent` (OVOS-policy)
 
-> **Deprecated.** These commands emit a deprecation warning to stderr and write through `Client.metadata` rather than a first-class field. Skill and intent filtering is an OVOS-specific concern now handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`). The commands are preserved for backwards compatibility with existing deployment scripts. — `hivemind_core/scripts.py:464`
+> Skill and intent filtering is an OVOS-specific concern handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`). These commands manage the `skill_blacklist` / `intent_blacklist` lists in `Client.metadata`; `OVOSAgentPolicy` injects them into the OVOS session. They take effect only when that policy is configured in `policy.chain`. — `hivemind_core/scripts.py`
 
 ```bash
 $ hivemind-core blacklist-skill "skill-weather" 1   # writes Client.metadata["skill_blacklist"]
@@ -356,7 +357,18 @@ $ hivemind-core blacklist-intent "intent.check_weather" 1  # writes Client.metad
 $ hivemind-core allow-intent "intent.check_weather" 1
 ```
 
-For new deployments, configure `OVOSAgentPolicy` directly or set `Client.metadata["skill_blacklist"]` / `Client.metadata["intent_blacklist"]` via `add-client --metadata`.
+---
+
+### `set-metadata`
+
+Set arbitrary `Client.metadata` on an existing client. Metadata keys are consumed by policy plugins — `OVOSAgentPolicy` reads `skill_blacklist` / `intent_blacklist`; other policies read their own keys. Merge a JSON object, set a single entry, or remove a key:
+
+```bash
+$ hivemind-core set-metadata 1 --metadata '{"tier":"pro","region":"eu"}'   # merge
+$ hivemind-core set-metadata 1 --key skill_blacklist --value '["skill-weather"]'
+$ hivemind-core set-metadata 1 --key tier --value pro    # non-JSON value kept as a string
+$ hivemind-core set-metadata 1 --unset region            # remove a key
+```
 
 ---
 
