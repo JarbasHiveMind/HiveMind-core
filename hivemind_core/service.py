@@ -112,6 +112,8 @@ class HiveMindService:
         hivemind-presence (HiveBeacon UDP broadcast / mDNS). No-op when the
         optional package is not installed or presence is disabled."""
         try:
+            import inspect
+
             from hivemind_presence import LocalPresence
         except ImportError:
             return
@@ -122,16 +124,24 @@ class HiveMindService:
         net = cfg.get("network_protocol", {})
         first = next(iter(net.values()), {}) if net else {}
         ggwave = presence_cfg.get("ggwave", False)
-        self._presence = LocalPresence(
-            port=first.get("port", 5678),
-            ssl=first.get("ssl", False),
-            name=presence_cfg.get("name", "HiveMind-Node"),
-            upnp=presence_cfg.get("upnp", False),
-            zeroconf=presence_cfg.get("zeroconf", True),
-            beacon=presence_cfg.get("beacon", True),
-            ggwave=ggwave,
-            ggwave_add_client_callback=self._ggwave_add_client if ggwave else None,
-        )
+        kwargs = {
+            "port": first.get("port", 5678),
+            "ssl": first.get("ssl", False),
+            "name": presence_cfg.get("name", "HiveMind-Node"),
+            "upnp": presence_cfg.get("upnp", False),
+            "zeroconf": presence_cfg.get("zeroconf", True),
+        }
+        # Only pass the transports this hivemind-presence build accepts —
+        # beacon (HiveBeacon UDP) and ggwave pairing are newer and absent in
+        # older builds, which expose only upnp/zeroconf.
+        supported = set(inspect.signature(LocalPresence.__init__).parameters)
+        if "beacon" in supported:
+            kwargs["beacon"] = presence_cfg.get("beacon", True)
+        if "ggwave" in supported:
+            kwargs["ggwave"] = ggwave
+            kwargs["ggwave_add_client_callback"] = (
+                self._ggwave_add_client if ggwave else None)
+        self._presence = LocalPresence(**kwargs)
         create_daemon(self._presence.start)
         LOG.info("LocalPresence started")
 
