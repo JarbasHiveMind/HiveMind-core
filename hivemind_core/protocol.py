@@ -268,6 +268,8 @@ class HiveMindListenerProtocol:
     shared_bus_callback = None  # passive sharing of slave device bus (info)
     _upstream_hm = None  # HiveMessageBusClient to the upstream master when this node relays
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
+    query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
+    default_lang = "en-US"
 
     def __post_init__(self):
         self.clients = {}
@@ -911,43 +913,13 @@ class HiveMindListenerProtocol:
         self._upstream_hm.emit(HiveMessage(HiveMessageType.QUERY, payload=payload,
                                            metadata=metadata))
 
-    def _try_local_agent_query(self, bus_message: Message,
-                               client: HiveMindClientConnection,
-                               query_id: str) -> Optional[Message]:
-        """Inject *bus_message* into the local agent through the policy
-        admission chain and capture a synchronous response carrying the same
-        ``query_id``. Returns the response Message, or None if the agent did
-        not answer (or the policy denied it)."""
-        bus = self.get_bus(client)
-        holder: List[Message] = []
-        injected_type = bus_message.msg_type
-
-        def _on_response(msg: Union[Message, str]):
-            if isinstance(msg, str):
-                try:
-                    msg = Message.deserialize(msg)
-                except Exception:
-                    return
-            if msg.msg_type == injected_type:
-                return  # the injected request itself
-            if msg.context.get("query_id") == query_id:
-                holder.append(msg)
-
-        bus.on("message", _on_response)
-        try:
-            bus_message.context["query_id"] = query_id
-            # route through the policy admission chain (authorize + review + emit)
-            self.handle_inject_agent_msg(bus_message, client)
-            return holder[0] if holder else None
-        finally:
-            bus.remove("message", _on_response)
-
     def _build_query_response(self, msg_type: HiveMessageType, response: Message,
                               query_id: str, originator_peer: str,
                               responder_peer: str,
-                              route: Optional[list] = None) -> HiveMessage:
-        """Wrap an OVOS *response* as a QUERY/CASCADE response HiveMessage
-        (``is_response=True``)."""
+                              route: Optional[list] = None,
+                              is_final: bool = False) -> HiveMessage:
+        """Wrap an OVOS *response* (one streamed ``speak``) as a QUERY/CASCADE
+        response HiveMessage. ``is_final`` marks the end-of-stream sentinel."""
         inner = HiveMessage(HiveMessageType.BUS, payload=response)
         msg = HiveMessage(
             msg_type, payload=inner,
@@ -956,11 +928,77 @@ class HiveMindListenerProtocol:
                 "originator_peer": originator_peer,
                 "responder_peer": responder_peer,
                 "is_response": True,
+                "is_final": is_final,
             },
         )
         if route:
             msg.replace_route(route)
         return msg
+
+    def _admit_for_query(self, message: Message,
+                         client: HiveMindClientConnection) -> Optional[Message]:
+        """Policy-admit a QUERY/CASCADE inner bus message without injecting it
+        (the agent's ``natural_language_query`` does the answering). Returns the
+        admitted Message, or None if unauthorized / policy-denied."""
+        if not client.authorize(message):
+            LOG.warning(f"{client.peer} sent an unauthorized QUERY/CASCADE message")
+            return None
+        message = self._install_client_session(message, client)
+        if message.context.get("destination") is None:
+            message.context["destination"] = "skills"
+        verdict = self.policy_chain.review(message, client)
+        if verdict.denied:
+            LOG.info(f"policy denied QUERY '{message.msg_type}' from "
+                     f"{client.peer}: {verdict.code} ({verdict.reason})")
+            self._send_policy_denied(client, message, verdict)
+            return None
+        message.context["peer"] = message.context["source"] = client.peer
+        self.policy_chain.observe(message, client)
+        return message
+
+    def _answer_query_locally(self, message: HiveMessage,
+                              client: HiveMindClientConnection, query_id: str,
+                              originator_peer: str, msg_type: HiveMessageType,
+                              route, send_fn) -> bool:
+        """Stream a local-agent answer for a QUERY/CASCADE request. Extracts the
+        natural-language utterance, runs it through the policy admission gate,
+        then streams the agent's answer chunks via ``send_fn`` (one ``speak``
+        per chunk) followed by an ``is_final`` end-of-stream marker. Returns
+        True if the agent answered (caller stops), False if it declined (caller
+        escalates)."""
+        inner = message.payload
+        if inner.msg_type != HiveMessageType.BUS or not isinstance(inner.payload, Message):
+            return False
+        bus_msg = inner.payload
+        if bus_msg.msg_type != "recognizer_loop:utterance":
+            return False  # QUERY/CASCADE answer natural-language utterances only
+        admitted = self._admit_for_query(bus_msg, client)
+        if admitted is None:
+            return False
+        utts = admitted.data.get("utterances") or []
+        utterance = utts[0] if utts else ""
+        lang = (admitted.data.get("lang") or admitted.context.get("lang")
+                or self.default_lang)
+        if not utterance:
+            return False
+        answered = False
+        try:
+            for chunk in self.agent_protocol.natural_language_query(utterance, lang):
+                if chunk is None:
+                    break
+                answered = True
+                resp = Message("speak", {"utterance": chunk, "lang": lang},
+                               {"query_id": query_id})
+                send_fn(self._build_query_response(
+                    msg_type, resp, query_id, originator_peer, self.peer,
+                    route=route, is_final=False))
+        except NotImplementedError:
+            return False  # agent has no NL backend -> escalate
+        if answered:
+            send_fn(self._build_query_response(
+                msg_type, Message("hive.query.complete", {}), query_id,
+                originator_peer, self.peer, route=route, is_final=True))
+        return answered
 
     def _route_query_response(self, message: HiveMessage,
                               client: HiveMindClientConnection):
@@ -975,6 +1013,8 @@ class HiveMindListenerProtocol:
                 and originator_peer in self.clients):
             query_id = metadata.get("query_id", "")
             if query_id not in self._pending_cascades:
+                while len(self._pending_cascades) >= 256:  # bound the collector map
+                    self._pending_cascades.pop(next(iter(self._pending_cascades)))
                 self._pending_cascades[query_id] = CascadeCollector(
                     query_id=query_id, originator_peer=originator_peer)
             collector = self._pending_cascades[query_id]
@@ -988,14 +1028,22 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception(f"cascade_select_callback error for query_id={query_id}")
             return
-        # Default routing: forward toward originator
+        # Default routing: forward toward the originator
         if originator_peer in self.clients:
             self.clients[originator_peer].send(message)
-        else:
-            for peer in self.clients:
-                if peer == client.peer:
-                    continue
-                self.clients[peer].send(message)
+            return
+        # route-aware return: send to the downstream hop on the path back to
+        # the originator (from the request's recorded route) instead of flooding
+        for hop in reversed(message.route or []):
+            src = hop.get("source")
+            if src and src != client.peer and src in self.clients:
+                self.clients[src].send(message)
+                return
+        # unknown return path: fan downstream (excluding the sender) as a last resort
+        for peer in self.clients:
+            if peer == client.peer:
+                continue
+            self.clients[peer].send(message)
 
     def handle_query_message(self, message: HiveMessage,
                              client: HiveMindClientConnection):
@@ -1024,14 +1072,10 @@ class HiveMindListenerProtocol:
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
 
-        inner = message.payload
-        if inner.msg_type == HiveMessageType.BUS:
-            response = self._try_local_agent_query(inner.payload, client, query_id)
-            if response is not None:
-                client.send(self._build_query_response(
-                    HiveMessageType.QUERY, response, query_id,
-                    originator_peer, self.peer, route=message.route))
-                return
+        if self._answer_query_locally(message, client, query_id, originator_peer,
+                                      HiveMessageType.QUERY, message.route,
+                                      client.send):
+            return
 
         if self._upstream_hm is not None:
             self.query_to_master(payload, metadata)
@@ -1040,7 +1084,7 @@ class HiveMindListenerProtocol:
                                 {"query_id": query_id, "error": "no_answer"})
             client.send(self._build_query_response(
                 HiveMessageType.QUERY, error_bus, query_id,
-                originator_peer, self.peer, route=message.route))
+                originator_peer, self.peer, route=message.route, is_final=True))
 
     def cascade_from_master(self, message: HiveMessage) -> None:
         """Fan a CASCADE received from the upstream master out to downstream clients."""
@@ -1081,13 +1125,9 @@ class HiveMindListenerProtocol:
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
 
-        inner = message.payload
-        if inner.msg_type == HiveMessageType.BUS:
-            response = self._try_local_agent_query(inner.payload, client, query_id)
-            if response is not None:
-                self._route_query_response(self._build_query_response(
-                    HiveMessageType.CASCADE, response, query_id,
-                    originator_peer, self.peer, route=message.route), client)
+        self._answer_query_locally(
+            message, client, query_id, originator_peer, HiveMessageType.CASCADE,
+            message.route, lambda hm: self._route_query_response(hm, client))
 
         cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
                                   metadata=metadata)

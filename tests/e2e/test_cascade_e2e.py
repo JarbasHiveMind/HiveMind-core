@@ -41,7 +41,12 @@ def test_cascade_local_agent_round_trip():
         sat = b.get_satellite("S0")
 
         def _responder(msg):
-            master.agent_protocol.bus.emit(msg.response(data={"answer": "sunny"}))
+            # stream an answer chunk + the end-of-utterance signal, tagged with
+            # the agent's internal query_id so natural_language_query collects it
+            qid = msg.context.get("query_id")
+            bus = master.agent_protocol.bus
+            bus.emit(Message("speak", {"utterance": "sunny"}, {"query_id": qid}))
+            bus.emit(Message("ovos.utterance.handled", {}, {"query_id": qid}))
         master.agent_protocol.bus.on("recognizer_loop:utterance", _responder)
 
         inner = HiveMessage(HiveMessageType.BUS,
