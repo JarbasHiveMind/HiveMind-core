@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.4.0a1) (2026-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.3.0a2...4.4.0a1)
+
+**Merged pull requests:**
+
+- feat: default to SQLite \(keep JSON for existing installs\) + migrate-db [\#95](https://github.com/JarbasHiveMind/HiveMind-core/pull/95) ([JarbasAl](https://github.com/JarbasAl))
+
+## [4.3.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.3.0a2) (2026-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.3.0a1...4.3.0a2)
+
 ## [4.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.3.0a1) (2026-06-05)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.2.0a3...4.3.0a1)
