@@ -234,6 +234,7 @@ class HiveMindListenerProtocol:
     broadcast_callback = None  # slave asked to broadcast payload
     agent_bus_callback = None  # slave asked to inject payload into mycroft bus
     shared_bus_callback = None  # passive sharing of slave device bus (info)
+    _upstream_hm = None  # HiveMessageBusClient to the upstream master when this node relays
 
     def __post_init__(self):
         self.clients = {}
@@ -769,18 +770,8 @@ class HiveMindListenerProtocol:
                 continue
             self.clients[peer].send(payload)
 
-        # send to other masters
-        message = Message(
-            "hive.send.upstream",
-            payload,
-            {
-                "destination": "hive",
-                "source": self.peer,
-                "session": client.sess.serialize(),
-            },
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        # forward upstream to the master this node relays to (no-op at top level)
+        self.propagate_to_master(payload)
 
     def handle_ping_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -832,6 +823,42 @@ class HiveMindListenerProtocol:
         for peer_id, conn in self.clients.items():
             conn.send(own_ping_outer)
 
+    def bind_upstream(self, slave) -> None:
+        """Bind a ``HiveMindSlaveProtocol`` as this node's upstream connection,
+        turning it into a relay: BROADCAST/PROPAGATE from the upstream master
+        are fanned out to downstream clients, and downstream PROPAGATE/ESCALATE
+        are forwarded upstream. ``slave`` must already be bound to a bus.
+        """
+        self._upstream_hm = slave.hm
+        slave.hm.on(HiveMessageType.BROADCAST, self.broadcast_from_master)
+        slave.hm.on(HiveMessageType.PROPAGATE, self.propagate_from_master)
+
+    def broadcast_from_master(self, message: HiveMessage) -> None:
+        """Fan a BROADCAST received from the upstream master out to all
+        downstream clients."""
+        for peer, conn in self.clients.items():
+            conn.send(message)
+
+    def propagate_from_master(self, message: HiveMessage) -> None:
+        """Fan a PROPAGATE received from the upstream master out to all
+        downstream clients."""
+        for peer, conn in self.clients.items():
+            conn.send(message)
+
+    def escalate_to_master(self, payload: HiveMessage) -> None:
+        """Forward an ESCALATE upstream. No-op when this node is the top-level
+        master (nothing bound via :meth:`bind_upstream`)."""
+        if self._upstream_hm is None:
+            return
+        self._upstream_hm.emit(HiveMessage(HiveMessageType.ESCALATE, payload=payload))
+
+    def propagate_to_master(self, payload: HiveMessage) -> None:
+        """Forward a PROPAGATE upstream. No-op when this node is the top-level
+        master (nothing bound via :meth:`bind_upstream`)."""
+        if self._upstream_hm is None:
+            return
+        self._upstream_hm.emit(HiveMessage(HiveMessageType.PROPAGATE, payload=payload))
+
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
@@ -865,6 +892,9 @@ class HiveMindListenerProtocol:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
+
+        # escalate up the chain to the master this node relays to (no-op at top level)
+        self.escalate_to_master(payload)
 
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
