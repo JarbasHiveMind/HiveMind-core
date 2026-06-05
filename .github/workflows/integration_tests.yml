@@ -1,0 +1,18 @@
+name: Integration Tests (live OVOS)
+
+# Heavy live-OVOS e2e (ovoscope/MiniCroft boots a real OVOS stack). Kept out of
+# the fast build_tests so normal PRs stay quick; runs here on PRs + on demand.
+on:
+  pull_request:
+    branches: [dev, master]
+  workflow_dispatch:
+
+jobs:
+  ovoscope:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
+    with:
+      python_versions: '["3.11"]'
+      apt_packages: 'python3-dev swig'
+      # the streaming stack + a real OVOS (ovos-core) + ovoscope + one test skill
+      pre_install_pip: '"ovoscope" "ovos-core" "ovos-skill-hello-world" "hivescope==0.5.0a1" "hivemind-plugin-manager==0.7.0a1" "hivemind-ovos-agent-plugin==0.3.0a1"'
+      test_path: 'tests/e2e/test_query_ovoscope_e2e.py'
