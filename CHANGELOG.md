@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.6.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.0a2) (2026-06-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.0a1...4.6.0a2)
+
+**Merged pull requests:**
+
+- ci: fix integration workflow startup\_failure \(system\_deps input\) [\#105](https://github.com/JarbasHiveMind/HiveMind-core/pull/105) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.6.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.0a1) (2026-06-05)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.5.0a1...4.6.0a1)
