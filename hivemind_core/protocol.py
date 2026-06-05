@@ -470,6 +470,8 @@ class HiveMindListenerProtocol:
             self.handle_broadcast_message(message, client)
         elif message.msg_type == HiveMessageType.ESCALATE:
             self.handle_escalate_message(message, client)
+        elif message.msg_type == HiveMessageType.QUERY:
+            self.handle_query_message(message, client)
         elif message.msg_type == HiveMessageType.INTERCOM:
             self.handle_intercom_message(message, client)
         elif message.msg_type == HiveMessageType.BINARY:
@@ -832,6 +834,7 @@ class HiveMindListenerProtocol:
         self._upstream_hm = slave.hm
         slave.hm.on(HiveMessageType.BROADCAST, self.broadcast_from_master)
         slave.hm.on(HiveMessageType.PROPAGATE, self.propagate_from_master)
+        slave.hm.on(HiveMessageType.QUERY, self.query_from_master)
 
     def broadcast_from_master(self, message: HiveMessage) -> None:
         """Fan a BROADCAST received from the upstream master out to all
@@ -858,6 +861,128 @@ class HiveMindListenerProtocol:
         if self._upstream_hm is None:
             return
         self._upstream_hm.emit(HiveMessage(HiveMessageType.PROPAGATE, payload=payload))
+
+    def query_from_master(self, message: HiveMessage) -> None:
+        """Fan a QUERY received from the upstream master out to downstream clients."""
+        for peer, conn in self.clients.items():
+            conn.send(message)
+
+    def query_to_master(self, payload: HiveMessage, metadata: Optional[dict] = None) -> None:
+        """Forward a QUERY upstream. No-op at the top-level master."""
+        if self._upstream_hm is None:
+            return
+        self._upstream_hm.emit(HiveMessage(HiveMessageType.QUERY, payload=payload,
+                                           metadata=metadata))
+
+    def _try_local_agent_query(self, bus_message: Message,
+                               client: HiveMindClientConnection,
+                               query_id: str) -> Optional[Message]:
+        """Inject *bus_message* into the local agent through the policy
+        admission chain and capture a synchronous response carrying the same
+        ``query_id``. Returns the response Message, or None if the agent did
+        not answer (or the policy denied it)."""
+        bus = self.get_bus(client)
+        holder: List[Message] = []
+        injected_type = bus_message.msg_type
+
+        def _on_response(msg: Union[Message, str]):
+            if isinstance(msg, str):
+                try:
+                    msg = Message.deserialize(msg)
+                except Exception:
+                    return
+            if msg.msg_type == injected_type:
+                return  # the injected request itself
+            if msg.context.get("query_id") == query_id:
+                holder.append(msg)
+
+        bus.on("message", _on_response)
+        try:
+            bus_message.context["query_id"] = query_id
+            # route through the policy admission chain (authorize + review + emit)
+            self.handle_inject_agent_msg(bus_message, client)
+            return holder[0] if holder else None
+        finally:
+            bus.remove("message", _on_response)
+
+    def _build_query_response(self, msg_type: HiveMessageType, response: Message,
+                              query_id: str, originator_peer: str,
+                              responder_peer: str,
+                              route: Optional[list] = None) -> HiveMessage:
+        """Wrap an OVOS *response* as a QUERY/CASCADE response HiveMessage
+        (``is_response=True``)."""
+        inner = HiveMessage(HiveMessageType.BUS, payload=response)
+        msg = HiveMessage(
+            msg_type, payload=inner,
+            metadata={
+                "query_id": query_id,
+                "originator_peer": originator_peer,
+                "responder_peer": responder_peer,
+                "is_response": True,
+            },
+        )
+        if route:
+            msg.replace_route(route)
+        return msg
+
+    def _route_query_response(self, message: HiveMessage,
+                              client: HiveMindClientConnection):
+        """Route a QUERY response downstream toward its originator (direct
+        client if connected here, else fan to downstream peers)."""
+        metadata = message.metadata or {}
+        originator_peer = metadata.get("originator_peer", "")
+        if originator_peer in self.clients:
+            self.clients[originator_peer].send(message)
+        else:
+            for peer in self.clients:
+                if peer == client.peer:
+                    continue
+                self.clients[peer].send(message)
+
+    def handle_query_message(self, message: HiveMessage,
+                             client: HiveMindClientConnection):
+        """QUERY — like ESCALATE but expects a response. Request: try the local
+        agent; if answered, reply downstream; else escalate upstream (or return
+        a no-answer error at the top). Response: route downstream to originator.
+        """
+        LOG.info(f"Received QUERY from: {client.peer}")
+        metadata = message.metadata or {}
+        if metadata.get("is_response", False):
+            self._route_query_response(message, client)
+            return
+
+        payload = self._unpack_message(message, client)
+        if not client.can_escalate:
+            LOG.warning("Received QUERY from client without escalate permission")
+            if self.illegal_callback:
+                self.illegal_callback(payload)
+            client.disconnect()
+            return
+
+        query_id = metadata.get("query_id", str(uuid.uuid4()))
+        originator_peer = metadata.get("originator_peer", client.peer)
+        bus = self.get_bus(client)
+        bus.emit(Message("hive.query.received",
+                         {"query_id": query_id, "originator_peer": originator_peer},
+                         {"source": client.peer}))
+
+        inner = message.payload
+        if inner.msg_type == HiveMessageType.BUS:
+            response = self._try_local_agent_query(inner.payload, client, query_id)
+            if response is not None:
+                client.send(self._build_query_response(
+                    HiveMessageType.QUERY, response, query_id,
+                    originator_peer, self.peer, route=message.route))
+                return
+
+        if self._upstream_hm is not None:
+            self.query_to_master(payload, metadata)
+        else:
+            error_bus = Message("hive.query.timeout",
+                                {"query_id": query_id, "error": "no_answer"})
+            client.send(self._build_query_response(
+                HiveMessageType.QUERY, error_bus, query_id,
+                originator_peer, self.peer, route=message.route))
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
