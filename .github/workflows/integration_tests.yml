@@ -14,5 +14,5 @@ jobs:
       python_versions: '["3.11"]'
       system_deps: 'python3-dev swig'
       # the streaming stack + a real OVOS (ovos-core) + ovoscope + one test skill
-      pre_install_pip: '"ovoscope" "ovos-core" "ovos-skill-hello-world" "hivescope==0.5.0a1" "hivemind-plugin-manager==0.7.0a1" "hivemind-ovos-agent-plugin==0.3.0a1"'
+      pre_install_pip: '"ovoscope" "ovos-core" "ovos-skill-hello-world" "hivescope==0.5.0a2" "hivemind-plugin-manager==0.7.0a1" "hivemind-ovos-agent-plugin==0.3.0a4"'
       test_path: 'tests/e2e/test_query_ovoscope_e2e.py'

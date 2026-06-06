@@ -13,4 +13,4 @@ jobs:
       coverage_source: 'hivemind_core'
       test_path: 'tests/e2e/'
       # Pinned to released PyPI prereleases; drop once these ship stable.
-      pre_install_pip: '"hivemind-bus-client==0.9.2a1" "hivescope==0.5.0a1" "hivemind-plugin-manager==0.7.0a1" "hivemind-ovos-agent-plugin==0.3.0a1" "hivemind-sqlite-database==0.4.0a1" "hivemind-json-db-plugin==0.0.3a1"'
+      pre_install_pip: '"hivemind-bus-client==0.9.2a1" "hivescope==0.5.0a2" "hivemind-plugin-manager==0.7.0a1" "hivemind-ovos-agent-plugin==0.3.0a4" "hivemind-sqlite-database==0.4.0a1" "hivemind-json-db-plugin==0.0.3a1"'
