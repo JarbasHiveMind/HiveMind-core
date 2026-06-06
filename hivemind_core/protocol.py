@@ -844,6 +844,16 @@ class HiveMindListenerProtocol:
         # Always feed mapper (register sender info)
         self.hive_mapper.on_ping(message, received_at=time.time())
 
+        # Surface every observed PING on the agent bus (discovery/telemetry).
+        # Fires for satellite-originated and flood-cycle pings alike, before the
+        # dedup gate below.
+        self.agent_protocol.bus.emit(Message("hive.ping.received", {
+            "flood_id": flood_id,
+            "peer": ping_payload.get("peer"),
+            "site_id": ping_payload.get("site_id"),
+            "timestamp": ping_payload.get("timestamp"),
+        }))
+
         # Flood-loop prevention: if we already responded to this flood_id, stop
         if not flood_id or flood_id in self._seen_flood_ids:
             return
