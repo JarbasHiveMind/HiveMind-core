@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.6.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.2a1) (2026-06-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.1a1...4.6.2a1)
+
+**Closed issues:**
+
+- feat: hivemind-a2a-agent-plugin — A2A agents as hive brains [\#110](https://github.com/JarbasHiveMind/HiveMind-core/issues/110)
+
+**Merged pull requests:**
+
+- fix\(deps\): require ovos-bus-client\>=2.0.0a3 \(drops bundled hivemind protocol\) [\#108](https://github.com/JarbasHiveMind/HiveMind-core/pull/108) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.6.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.1a1) (2026-06-06)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.0a2...4.6.1a1)
