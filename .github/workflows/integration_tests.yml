@@ -14,5 +14,7 @@ jobs:
       python_versions: '["3.11"]'
       system_deps: 'python3-dev swig'
       # the streaming stack + a real OVOS (ovos-core) + ovoscope + one test skill
-      pre_install_pip: '"ovoscope" "ovos-core" "ovos-skill-hello-world" "hivescope==0.5.0a2" "hivemind-plugin-manager==0.7.1a1" "hivemind-ovos-agent-plugin==0.3.1a1"'
+      # Bootstrap self-pin of core to this branch (see build_tests.yml) — no
+      # published core alpha carries the ovos-bus-client>=2.0.0a3 pin yet.
+      pre_install_pip: '"hivemind-core @ git+https://github.com/JarbasHiveMind/HiveMind-core.git@fix/pin-ovos-bus-client" "ovoscope" "ovos-core" "ovos-skill-hello-world" "hivescope==0.5.0a2" "hivemind-plugin-manager==0.7.1a1" "hivemind-ovos-agent-plugin==0.3.1a1"'
       test_path: 'tests/e2e/test_query_ovoscope_e2e.py'
