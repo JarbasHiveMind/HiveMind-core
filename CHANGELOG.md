@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.6.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.3a1) (2026-06-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.2a1...4.6.3a1)
+
+**Merged pull requests:**
+
+- fix: allow json-database 1.x [\#112](https://github.com/JarbasHiveMind/HiveMind-core/pull/112) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.6.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.2a1) (2026-06-20)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.1a1...4.6.2a1)
