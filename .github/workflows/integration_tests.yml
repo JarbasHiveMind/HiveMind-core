@@ -1,12 +1,8 @@
 name: Integration Tests (live OVOS)
 
-# Heavy live-OVOS e2e (ovoscope/MiniCroft boots a real OVOS stack).
-#
-# TEMPORARILY manual-only: no released ovos-core yet supports
-# ovos-bus-client>=2.0.0a3 (2.1.x pins bus-client<2.0.0), so the `integration`
-# extra is unresolvable under this PR's bus-client 2.x requirement. Re-enable
-# the pull_request trigger once ovos-core ships a 2.x-compatible release.
 on:
+  pull_request:
+    branches: [dev, master]
   workflow_dispatch:
 
 jobs:
