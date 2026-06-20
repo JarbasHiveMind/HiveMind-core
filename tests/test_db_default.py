@@ -53,24 +53,34 @@ def test_sqlite_wins_once_present():
     not _sqlite_supports_current_client_model(),
     reason="needs hivemind-sqlite-database>=0.3.0a1 (current Client model)")
 def test_migrate_db_copies_clients_json_to_sqlite():
+    from hivemind_plugin_manager import DatabaseFactory
+
     tmp_json = tempfile.mkdtemp()
     tmp_sqlite = tempfile.mkdtemp()
     cfgj = {"module": "hivemind-json-db-plugin",
             "hivemind-json-db-plugin": {"name": "clients", "subfolder": "hivemind-core"}}
-    # seed a JSON db with a client (commit the store explicitly)
-    with mock.patch("hivemind_json_database.xdg_data_home", return_value=tmp_json):
-        from hivemind_json_database import JsonDB
+    # The json plugin entry-point is currently provided by json-database's
+    # bundled `json_database.hpm:JsonDB`, NOT by the standalone
+    # `hivemind_json_database` package (both register the same
+    # `hivemind-json-db-plugin` name). migrate_db / ClientDatabase load
+    # whatever the factory resolves, so we must patch xdg on *that* module —
+    # otherwise the CLI reads the real ~/.local/share store and migrates 0
+    # clients. Resolve the live module dynamically so this keeps working
+    # whichever package wins the entry-point.
+    json_mod = DatabaseFactory.get_class("hivemind-json-db-plugin").__module__
+    sqlite_mod = DatabaseFactory.get_class("hivemind-sqlite-db-plugin").__module__
+
+    # seed a JSON db with a client via the supported add_client path
+    with mock.patch(f"{json_mod}.xdg_data_home", return_value=tmp_json):
         jdb = ClientDatabase(config=cfgj)
-        jdb.db = JsonDB(name="clients", subfolder="hivemind-core")
-        jdb.db._db.store()
         jdb.add_client(name="sat", key="K1", password="pw",
                        allowed_types=["recognizer_loop:utterance"],
                        metadata={"skill_blacklist": ["skill-weather"]})
         jdb.db._db.store()
 
     runner = CliRunner()
-    with mock.patch("hivemind_json_database.xdg_data_home", return_value=tmp_json), \
-         mock.patch("hivemind_sqlite_database.xdg_data_home", return_value=tmp_sqlite):
+    with mock.patch(f"{json_mod}.xdg_data_home", return_value=tmp_json), \
+         mock.patch(f"{sqlite_mod}.xdg_data_home", return_value=tmp_sqlite):
         result = runner.invoke(migrate_db, ["--from", "hivemind-json-db-plugin",
                                             "--to", "hivemind-sqlite-db-plugin"])
         assert result.exit_code == 0, result.output
