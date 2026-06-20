@@ -31,7 +31,7 @@ dependencies = [
     "pybase64",
     "hivemind-plugin-manager>=0.7.1a1,<1.0.0",
     "ovos-bus-client>=2.0.0a3",
-    "json-database>=0.10.2a1,<1.0.0",
+    "json-database>=0.10.2a1,<2.0.0",
     "hivemind-sqlite-database>=0.4.0a2",
     "hivemind-json-db-plugin>=0.0.3a2",
     "hivemind-websocket-protocol>=0.0.3,<1.0.0",
