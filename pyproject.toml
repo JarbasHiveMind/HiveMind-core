@@ -41,7 +41,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "hivescope>=0.5.0a2"]
-integration = ["hivescope>=0.5.0a2", "ovoscope", "ovos-core>=2.1.0", "ovos-skill-hello-world"]
+integration = ["hivescope>=0.5.0a2", "ovoscope", "ovos-core>=2.1.6a1", "ovos-skill-hello-world"]
 
 [project.urls]
 Homepage = "https://github.com/JarbasHiveMind/HiveMind-core"
