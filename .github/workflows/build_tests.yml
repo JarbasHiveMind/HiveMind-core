@@ -10,11 +10,7 @@ jobs:
     uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
     with:
       python_versions: '["3.10", "3.11", "3.12", "3.13"]'
-      # Pinned to released PyPI prereleases; drop once these ship stable.
-      # Bootstrap: no PUBLISHED hivemind-core alpha carries the new
-      # ovos-bus-client>=2.0.0a3 pin yet, so hivescope's `hivemind-core>=4.0`
-      # would otherwise drag stable 4.0.0 (ovos-bus-client<2.0.0) and conflict.
-      # Self-pin core to this branch until merge publishes an alpha; then
-      # replace with that version (e.g. "hivemind-core==4.6.1a2").
-      pre_install_pip: '"hivemind-core @ git+https://github.com/JarbasHiveMind/HiveMind-core.git@fix/pin-ovos-bus-client" "hivemind-bus-client==0.9.2a1" "hivescope==0.5.0a2" "hivemind-plugin-manager==0.7.1a1" "hivemind-ovos-agent-plugin==0.3.1a1" "hivemind-sqlite-database==0.4.0a2" "hivemind-json-db-plugin==0.0.3a2"'
+      # version policy lives in pyproject.toml; just install the test extra
+      # (pulls hivescope + the 2.x stack via the declared floors).
+      install_extras: 'test'
       test_path: 'tests/'

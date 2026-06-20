@@ -26,19 +26,18 @@ dependencies = [
     "rich",
     "pycryptodomex",
     "poorman-handshake>=1.0.1,<2.0.0",
-    "hivemind_bus_client>=0.7.0a2,<1.0.0",
+    # >=0.9.2a1: first release with QUERY-stream handling AND ovos-bus-client>=2.0.0a3
+    "hivemind_bus_client>=0.9.2a1,<1.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
-    # NOTE: floor stays at 0.5.0 while #27 is in CI as a branch install
-    # (gh-automations only bumps version.py on merge to dev). Tighten
-    # to >=0.6.0a1 once #27 is released.
-    "hivemind-plugin-manager>=0.7.0a1,<1.0.0",
+    "hivemind-plugin-manager>=0.7.1a1,<1.0.0",
     "ovos-bus-client>=2.0.0a3",
     "json-database>=0.10.2a1,<1.0.0",
     # client-database backends shipped by default: SQLite (the default for
-    # fresh installs) and JSON (kept for existing deployments / opt-in)
-    "hivemind-sqlite-database>=0.3.0a1",
-    "hivemind-json-db-plugin>=0.0.3a1",
+    # fresh installs) and JSON (kept for existing deployments / opt-in).
+    # >=…a2: the json->sqlite client-migration fix (test_db_default).
+    "hivemind-sqlite-database>=0.4.0a2",
+    "hivemind-json-db-plugin>=0.0.3a2",
     "hivemind-websocket-protocol>=0.0.3,<1.0.0",
     # default agent_protocol (see config.py): the OVOS bridge + OVOSAgentPolicy
     # that the admission logic moved into (#85) now live in this standalone
@@ -49,11 +48,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pytest-cov"]
+# hivescope (in-process e2e harness) is a TEST dependency, used by tests/e2e/.
+# Pinning the prerelease floor here lets pip resolve it (and the whole 2.x
+# stack) from the package metadata — CI installs `.[test]`, no pre_install pins.
+test = ["pytest", "pytest-cov", "hivescope>=0.5.0a2"]
 # Alias so gh-automations' `pip install -e ".[dev]"` first-attempt path
 # resolves; without it the workflow falls through to a buggy
 # `pip install test` literal branch.
-dev = ["pytest", "pytest-cov"]
+dev = ["pytest", "pytest-cov", "hivescope>=0.5.0a2"]
+# Live-OVOS integration extra (boots a real ovos-core via ovoscope). Only the
+# manual integration_tests job uses it; blocked until ovos-core ships
+# ovos-bus-client 2.x support.
+integration = ["hivescope>=0.5.0a2", "ovoscope", "ovos-core>=2.1.0", "ovos-skill-hello-world"]
 
 [project.urls]
 Homepage = "https://github.com/JarbasHiveMind/HiveMind-core"

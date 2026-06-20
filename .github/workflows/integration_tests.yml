@@ -2,11 +2,10 @@ name: Integration Tests (live OVOS)
 
 # Heavy live-OVOS e2e (ovoscope/MiniCroft boots a real OVOS stack).
 #
-# TEMPORARILY manual-only: this job pulls a real ovos-core, but NO released
-# ovos-core yet supports ovos-bus-client>=2.0.0a3 (2.1.x pins bus-client<2.0.0),
-# so it is unresolvable under this PR's bus-client 2.x requirement. Re-enable the
-# pull_request trigger once ovos-core ships a 2.x-compatible release, then drop
-# the bootstrap git self-pin below for a published core alpha.
+# TEMPORARILY manual-only: no released ovos-core yet supports
+# ovos-bus-client>=2.0.0a3 (2.1.x pins bus-client<2.0.0), so the `integration`
+# extra is unresolvable under this PR's bus-client 2.x requirement. Re-enable
+# the pull_request trigger once ovos-core ships a 2.x-compatible release.
 on:
   workflow_dispatch:
 
@@ -16,11 +15,5 @@ jobs:
     with:
       python_versions: '["3.11"]'
       system_deps: 'python3-dev swig'
-      # the streaming stack + a real OVOS (ovos-core) + ovoscope + one test skill
-      # Bootstrap self-pin of core to this branch (see build_tests.yml) — no
-      # published core alpha carries the ovos-bus-client>=2.0.0a3 pin yet.
-      # ovos-core floored to >=2.1.0: under ovos-bus-client>=2.0.0a3 an unpinned
-      # ovos-core makes pip backtrack to ancient 0.0.x whose legacy sdists fail
-      # to build (setuptools `_get_unpatched`). 2.1.x carries no bus-client pin.
-      pre_install_pip: '"hivemind-core @ git+https://github.com/JarbasHiveMind/HiveMind-core.git@fix/pin-ovos-bus-client" "ovoscope" "ovos-core>=2.1.0" "ovos-skill-hello-world" "hivescope==0.5.0a2" "hivemind-plugin-manager==0.7.1a1" "hivemind-ovos-agent-plugin==0.3.1a1"'
+      install_extras: 'integration'
       test_path: 'tests/e2e/test_query_ovoscope_e2e.py'
