@@ -706,6 +706,9 @@ class TestProtocolWiring(unittest.TestCase):
         bus = FakeBus()
         agent = MagicMock(spec=AgentProtocol)
         agent.bus = bus
+        # core routes the inject bus through agent.get_bus(client); mirror a
+        # real agent's default (return its own bus).
+        agent.get_bus.return_value = bus
         agent.hm_protocol = None
         agent.callbacks = MagicMock()
         agent.callbacks.on_connect = MagicMock()

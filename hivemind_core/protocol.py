@@ -322,8 +322,11 @@ class HiveMindListenerProtocol:
                 )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
-        # allow subclasses to use dedicated bus per client
-        return self.agent_protocol.bus
+        # The agent decides which bus a client's messages land on. Default
+        # agents return their single shared bus; a multiplexing agent (one
+        # isolated brain per access key) returns a per-client bus, so per-key
+        # routing on the inject path stays transparent here.
+        return self.agent_protocol.get_bus(client)
 
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
@@ -998,7 +1001,7 @@ class HiveMindListenerProtocol:
             return False
         answered = False
         try:
-            for chunk in self.agent_protocol.natural_language_query(utterance, lang):
+            for chunk in self.agent_protocol.answer_query(utterance, lang, client=client):
                 if chunk is None:
                     break
                 answered = True
