@@ -41,6 +41,9 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest", "pytest-cov", "hivescope>=0.5.0a2"]
+# Optional web admin UI, shipped as a standalone package. `hivemind-core --with-admin`
+# lazily imports it and injects live core objects for real-time introspection.
+admin = ["hivemind-admin-panel>=0.0.1a1"]
 integration = [
     "hivescope>=0.5.0a2",
     "ovoscope",
