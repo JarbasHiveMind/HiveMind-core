@@ -11,6 +11,9 @@ from hivemind_core.protocol import HiveMindClientConnection, HiveMindListenerPro
 def _make_protocol():
     agent = MagicMock()
     agent.bus = MagicMock()
+    # core obtains the inject bus via agent.get_bus(client); a real agent
+    # returns its own bus, so mirror that for the shared-bus case.
+    agent.get_bus.return_value = agent.bus
     agent.callbacks = MagicMock()
 
     db_user = MagicMock()
