@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.6.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.6a1) (2026-06-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.5a1...4.6.6a1)
+
+**Closed issues:**
+
+- BINARY\(FILE\) file\_name path-traversal: client-supplied file\_name not basename'd before handle\_receive\_file [\#119](https://github.com/JarbasHiveMind/HiveMind-core/issues/119)
+
+**Merged pull requests:**
+
+- fix: basename BINARY\(FILE\) file\_name to block path traversal \(\#119\) [\#120](https://github.com/JarbasHiveMind/HiveMind-core/pull/120) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.6.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.5a1) (2026-06-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.4a1...4.6.5a1)
