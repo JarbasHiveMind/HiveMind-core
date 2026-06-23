@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.6.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.5a1) (2026-06-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.4a1...4.6.5a1)
+
+**Closed issues:**
+
+- Illegal BROADCAST/ESCALATE/PROPAGATE don't disconnect the offending client \(inconsistent with QUERY/CASCADE\) [\#116](https://github.com/JarbasHiveMind/HiveMind-core/issues/116)
+
+**Merged pull requests:**
+
+- fix: disconnect clients sending illegal BROADCAST/PROPAGATE/ESCALATE \(\#116\) [\#122](https://github.com/JarbasHiveMind/HiveMind-core/pull/122) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.6.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.4a1) (2026-06-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.3a1...4.6.4a1)
