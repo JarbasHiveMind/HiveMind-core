@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -584,7 +585,14 @@ class HiveMindListenerProtocol:
             self.binary_data_protocol.handle_receive_tts(bin_data, utt, lang, file_name, client)
         elif message.bin_type == HiveMindBinaryPayloadType.FILE:
             file_name = message.metadata.get("file_name")
-            self.binary_data_protocol.handle_receive_file(bin_data, file_name, client)
+            # SECURITY: file_name is client-supplied. Strip any directory
+            # components so a malicious peer can not escape the intended
+            # download directory (eg. "../../etc/passwd" -> "passwd").
+            safe_name = os.path.basename(file_name) if file_name else ""
+            if not safe_name or safe_name in (".", ".."):
+                LOG.warning(f"Rejecting binary FILE with unsafe file_name: {file_name!r}")
+                return
+            self.binary_data_protocol.handle_receive_file(bin_data, safe_name, client)
         elif message.bin_type == HiveMindBinaryPayloadType.NUMPY_IMAGE:
             # TODO - convert to numpy array
             camera_id = message.metadata.get("camera_id")
