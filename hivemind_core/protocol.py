@@ -1212,31 +1212,39 @@ class HiveMindListenerProtocol:
                 private_key = load_RSA_key(self.identity.private_key)
 
                 decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
-                message._payload = HiveMessage.deserialize(decrypted)
+                inner = HiveMessage.deserialize(decrypted)
             except:
                 if k:
                     LOG.error("failed to decrypt message!")
                 else:
                     LOG.debug("failed to decrypt message, not for us")
                 return False
+        elif isinstance(pload, HiveMessage):
+            inner = pload
+        else:
+            # unencrypted intercom: the inner HiveMessage is carried as a
+            # plain dict. Deserialize it so it is dispatched on its OWN
+            # (inner) msg_type instead of the outer INTERCOM type, which
+            # matches no branch below and silently drops the message.
+            inner = HiveMessage.deserialize(pload)
 
-        if message.msg_type == HiveMessageType.BUS:
-            self.handle_bus_message(message, client)
+        if inner.msg_type == HiveMessageType.BUS:
+            self.handle_bus_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.PROPAGATE:
-            self.handle_propagate_message(message, client)
+        elif inner.msg_type == HiveMessageType.PROPAGATE:
+            self.handle_propagate_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.BROADCAST:
-            self.handle_broadcast_message(message, client)
+        elif inner.msg_type == HiveMessageType.BROADCAST:
+            self.handle_broadcast_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.ESCALATE:
-            self.handle_escalate_message(message, client)
+        elif inner.msg_type == HiveMessageType.ESCALATE:
+            self.handle_escalate_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.BINARY:
-            self.handle_binary_message(message, client)
+        elif inner.msg_type == HiveMessageType.BINARY:
+            self.handle_binary_message(inner, client)
             return True
-        elif message.msg_type == HiveMessageType.SHARED_BUS:
-            self.handle_client_shared_bus(message.payload, client)
+        elif inner.msg_type == HiveMessageType.SHARED_BUS:
+            self.handle_client_shared_bus(inner.payload, client)
             return True
 
         return False
