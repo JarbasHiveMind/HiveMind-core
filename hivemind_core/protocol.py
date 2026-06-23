@@ -401,6 +401,10 @@ class HiveMindListenerProtocol:
         """track timestamps of last client interaction"""
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
+            if user is None:
+                # key was revoked / never existed — nothing to update
+                LOG.debug(f"can not update last seen, no client for key: {client.key}")
+                return
             user.last_seen = time.time()
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
