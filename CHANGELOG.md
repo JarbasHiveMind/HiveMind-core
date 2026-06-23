@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.6.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.7a1) (2026-06-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.6a1...4.6.7a1)
+
+**Closed issues:**
+
+- Unencrypted INTERCOM inner BUS never delivered \(handle\_intercom\_message dispatches on outer INTERCOM type\) [\#117](https://github.com/JarbasHiveMind/HiveMind-core/issues/117)
+
+**Merged pull requests:**
+
+- fix: deliver unencrypted INTERCOM inner messages \(\#117\) [\#123](https://github.com/JarbasHiveMind/HiveMind-core/pull/123) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.6.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.6a1) (2026-06-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.5a1...4.6.6a1)
