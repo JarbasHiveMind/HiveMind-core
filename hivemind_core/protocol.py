@@ -743,7 +743,8 @@ class HiveMindListenerProtocol:
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # TODO kick client for misbehaviour so it stops doing that?
+            # kick client for misbehaviour so it stops doing that
+            client.disconnect()
             return
 
         if self.broadcast_callback:
@@ -791,7 +792,8 @@ class HiveMindListenerProtocol:
             LOG.warning("Received propagate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # TODO kick client for misbehaviour so it stops doing that?
+            # kick client for misbehaviour so it stops doing that
+            client.disconnect()
             return
 
         if self.propagate_callback:
@@ -1170,7 +1172,8 @@ class HiveMindListenerProtocol:
             LOG.warning("Received escalate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # TODO kick client for misbehaviour so it stops doing that?
+            # kick client for misbehaviour so it stops doing that
+            client.disconnect()
             return
 
         if self.escalate_callback:
