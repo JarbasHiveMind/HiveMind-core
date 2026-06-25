@@ -29,7 +29,7 @@ dependencies = [
     "hivemind_bus_client>=0.9.2a1,<1.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
-    "hivemind-plugin-manager>=0.7.1a1,<1.0.0",
+    "hivemind-plugin-manager>=0.8.0a1,<1.0.0",
     "ovos-bus-client>=2.0.0a3",
     "json-database>=0.10.2a1,<2.0.0",
     "hivemind-sqlite-database>=0.4.0a2",
