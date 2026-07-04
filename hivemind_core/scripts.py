@@ -103,6 +103,27 @@ def listen():
     service.run()
 
 
+@hmcore_cmds.command(
+    help="Derive the 32-byte v3 Noise PSK for provisioning a constrained client "
+         "(microcontroller) that cannot run argon2id on-device.",
+    name="derive-psk",
+)
+@click.option("--password", required=True, type=str, help="The shared site password.")
+@click.option("--node-id", required=True, type=str,
+              help="This server's node id (the PSK is salted with SHA-256(node_id), "
+                   "so the PSK is server-specific).")
+def derive_psk(password, node_id):
+    """Print the hex-encoded 32-byte Noise PSK to flash onto a constrained device.
+
+    Equals ``argon2id(password, SHA-256(node_id))`` — identical to what a capable
+    peer derives at connect time (HIVEMIND-CRYPTO-1 §3.4.4), so the two
+    interoperate with no server-side distinction.
+    """
+    from poorman_handshake.noise import derive_psk as _derive
+    psk = _derive(password, node_id=node_id)
+    print(psk.hex())
+
+
 @hmcore_cmds.command(help="Add credentials for a new client.", name="add-client")
 @click.option("--name", required=False, type=str)
 @click.option("--access-key", required=False, type=str)
