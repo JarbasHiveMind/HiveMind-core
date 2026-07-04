@@ -25,10 +25,7 @@ dependencies = [
     "click_default_group",
     "rich",
     "pycryptodomex",
-    # TODO: switch the git ref below to a PyPI prerelease floor pin
-    # (poorman-handshake>=<alpha shipping poorman_handshake.noise>,<2.0.0)
-    # once JarbasHiveMind/poorman_handshake#17 is released
-    "poorman-handshake @ git+https://github.com/JarbasHiveMind/poorman_handshake@feat/noise-handshake",
+    "poorman-handshake>=2.0.0a1,<3.0.0",
     # protocol v3 (Noise) additionally needs hivemind_bus_client.noise; the
     # server degrades gracefully to the legacy handshake when the installed
     # client lib predates it. TODO: raise the floor to the alpha shipping
