@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.0a1) (2026-07-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.9.0a1...4.10.0a1)
+
+**Merged pull requests:**
+
+- feat: enforce crypto\_required, verify+pin INTERCOM signatures [\#128](https://github.com/JarbasHiveMind/HiveMind-core/pull/128) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.9.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.9.0a1) (2026-07-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.8.0a1...4.9.0a1)
