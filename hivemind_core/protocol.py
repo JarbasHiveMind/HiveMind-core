@@ -426,16 +426,40 @@ class HiveMindListenerProtocol:
         bus = self.get_bus(client)
         bus.emit(message)
 
-        min_version = (
+        crypto_min = (
             ProtocolVersion.ONE
             if client.crypto_key is None and self.require_crypto
             else ProtocolVersion.ZERO
         )
+        # deployment-configured protocol floor (HIVEMIND-WIRE-1 §2); default 2
+        # refuses the oldest json-only / no-binary clients. The advertised
+        # minimum is the stricter of the configured floor and the crypto-derived
+        # minimum.
+        try:
+            cfg_min = ProtocolVersion(int(get_server_config().get("min_protocol_version", 2)))
+        except (ValueError, KeyError):
+            cfg_min = ProtocolVersion.TWO
+        min_version = ProtocolVersion(max(int(cfg_min), int(crypto_min)))
+
         # protocol v3 (Noise handshake) needs the noise primitive and a shared
-        # password for the PSK; otherwise the connection tops out at the
-        # legacy handshake (HIVEMIND-WIRE-1 §2 version ladder)
+        # password for the PSK; binary framing (v2) needs binarization enabled;
+        # otherwise the connection tops out at the legacy handshake (v1).
         v3_capable = NOISE_SUPPORTED and client.pswd_handshake is not None
-        max_version = ProtocolVersion.THREE if v3_capable else ProtocolVersion.ONE
+        if v3_capable:
+            max_version = ProtocolVersion.THREE
+        elif get_server_config().get("binarize", False):
+            max_version = ProtocolVersion.TWO
+        else:
+            max_version = ProtocolVersion.ONE
+
+        if min_version > max_version:
+            LOG.warning(
+                f"rejecting {client.peer}: server requires protocol version "
+                f">= {int(min_version)} but this connection can offer at most "
+                f"{int(max_version)}"
+            )
+            client.disconnect()
+            return
 
         hello_payload = {
             "pubkey": client.handshake.pubkey,

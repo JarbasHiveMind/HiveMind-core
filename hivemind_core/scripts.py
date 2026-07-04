@@ -110,7 +110,10 @@ def listen():
 @click.option("--crypto-key", required=False, type=str)
 @click.option("--admin", default=False, required=False, type=bool)
 @click.option("--metadata", required=False, type=str, help="Client metadata as a JSON object.")
-def add_client(name, access_key, password, crypto_key, admin, metadata):
+@click.option("--allow-weak-password", is_flag=True, default=False,
+              help="Skip the password-strength check (not recommended). By default a "
+                   "guessable/low-entropy --password is refused.")
+def add_client(name, access_key, password, crypto_key, admin, metadata, allow_weak_password):
     """
     Adds a new client to the database, generating credentials if not provided.
     
@@ -143,6 +146,20 @@ def add_client(name, access_key, password, crypto_key, admin, metadata):
             raise ValueError
     else:
         key = os.urandom(8).hex()
+
+    # Ban low-entropy, guessable passwords at ingestion time. Only a
+    # user-supplied password is checked — an auto-generated one is always
+    # high-entropy. The runtime handshake re-checks as a backstop (see
+    # protocol/config); this is the primary gate.
+    if password and not allow_weak_password:
+        from poorman_handshake import check_password_strength, WeakPasswordError
+        min_bits = get_server_config().get("min_password_bits", 40)
+        try:
+            check_password_strength(password, min_bits=min_bits)
+        except WeakPasswordError as e:
+            raise click.BadParameter(
+                f"{e}\nPass --allow-weak-password to override.", param_hint="--password"
+            )
 
     password = password or os.urandom(16).hex()
     access_key = access_key or os.urandom(16).hex()
