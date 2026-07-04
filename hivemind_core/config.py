@@ -19,6 +19,19 @@ _DEFAULT = {
                           "JSON-B32", "JSON-HEX"],
     "allowed_ciphers": ["CHACHA20-POLY1305", 'AES-GCM'],
 
+    # minimum HiveMind protocol version a client must negotiate to be admitted.
+    # 2 = require binary framing + handshake (rejects the oldest json-only /
+    # no-binary clients). The server advertises max(this, crypto-derived min).
+    "min_protocol_version": 2,
+
+    # password-strength policy (bans low-entropy, guessable passwords).
+    # `min_password_bits` is enforced at `add-client` (ingestion) and, unless
+    # `runtime_password_strength_check` is disabled, again at handshake time as
+    # a backstop against a manually edited database. The runtime check can also
+    # be disabled with the env var HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1.
+    "min_password_bits": 40,
+    "runtime_password_strength_check": True,
+
     # configure various plugins
     "agent_protocol": {"module": "hivemind-ovos-agent-plugin",
                        "hivemind-ovos-agent-plugin": {
@@ -112,3 +125,24 @@ def get_server_config() -> JsonStorageXDG:
         policy_cfg["chain"] = list(_DEFAULT["policy"]["chain"])
     db["policy"] = policy_cfg
     return db
+
+
+def runtime_password_min_bits() -> float:
+    """Minimum password bits the *runtime handshake* backstop enforces.
+
+    Returns 0.0 when the runtime check is disabled (so callers pass
+    ``min_bits=0`` to ``PasswordHandShake`` and skip re-validation). The
+    add-client (ingestion) gate is separate and always applies.
+
+    Disabled by the ``HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK`` env var
+    (``1``/``true``/``yes``) or ``runtime_password_strength_check: false`` in
+    the config; otherwise returns the configured ``min_password_bits``.
+    """
+    if os.environ.get("HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    ):
+        return 0.0
+    cfg = get_server_config()
+    if not cfg.get("runtime_password_strength_check", True):
+        return 0.0
+    return float(cfg.get("min_password_bits", 40))

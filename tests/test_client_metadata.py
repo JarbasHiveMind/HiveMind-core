@@ -168,7 +168,7 @@ def test_cli_add_client_with_metadata_flows_to_db():
             [
                 "--name", "satellite",
                 "--access-key", "access-key",
-                "--password", "pw",
+                "--password", "pw", "--allow-weak-password",
                 "--metadata", '{"account_id":"acct_123"}',
             ],
         )
@@ -184,7 +184,7 @@ def test_cli_add_client_rejects_invalid_metadata_json():
     runner = CliRunner()
     result = runner.invoke(
         add_client,
-        ["--name", "satellite", "--access-key", "k", "--password", "pw", "--metadata", "{"],
+        ["--name", "satellite", "--access-key", "k", "--password", "pw", "--allow-weak-password", "--metadata", "{"],
     )
     assert result.exit_code != 0
     assert "must be valid JSON" in result.output
@@ -194,7 +194,7 @@ def test_cli_add_client_rejects_metadata_top_level_array():
     runner = CliRunner()
     result = runner.invoke(
         add_client,
-        ["--name", "satellite", "--access-key", "k", "--password", "pw", "--metadata", "[]"],
+        ["--name", "satellite", "--access-key", "k", "--password", "pw", "--allow-weak-password", "--metadata", "[]"],
     )
     assert result.exit_code != 0
     assert "must be a JSON object" in result.output
@@ -207,11 +207,60 @@ def test_cli_add_client_without_metadata_omits_metadata_line():
     with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
         result = runner.invoke(
             add_client,
-            ["--name", "satellite", "--access-key", "k", "--password", "pw"],
+            ["--name", "satellite", "--access-key", "k", "--password", "pw", "--allow-weak-password"],
         )
 
     assert result.exit_code == 0, result.output
     assert "Metadata:" not in result.output
+
+
+# --- password-strength gate + derive-psk --------------------------------------
+
+
+def test_cli_add_client_refuses_weak_password_by_default():
+    runner = CliRunner()
+    fake_db = make_client_db()
+
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(
+            add_client,
+            ["--name", "satellite", "--access-key", "k", "--password", "pw"],
+        )
+
+    assert result.exit_code != 0
+    assert "--allow-weak-password" in result.output
+    assert fake_db.get_client_by_api_key("k") is None
+
+
+def test_cli_add_client_accepts_weak_password_with_override_flag():
+    runner = CliRunner()
+    fake_db = make_client_db()
+
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(
+            add_client,
+            ["--name", "satellite", "--access-key", "k",
+             "--password", "pw", "--allow-weak-password"],
+        )
+
+    assert result.exit_code == 0, result.output
+    client = fake_db.get_client_by_api_key("k")
+    assert client is not None
+    assert client.password == "pw"
+
+
+def test_cli_derive_psk_prints_hex_psk():
+    from hivemind_core.scripts import derive_psk
+
+    runner = CliRunner()
+    result = runner.invoke(
+        derive_psk,
+        ["--password", "any-site-password", "--node-id", "test-node"],
+    )
+    assert result.exit_code == 0, result.output
+    psk_hex = result.output.strip().splitlines()[-1]
+    assert len(psk_hex) == 64
+    assert set(psk_hex) <= set("0123456789abcdef")
 
 
 # --- set-metadata + OVOS-policy blacklist commands ---------------------------
