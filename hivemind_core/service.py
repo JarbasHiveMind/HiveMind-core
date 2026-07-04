@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
+import os
 from typing import Callable, Optional, Type
 
 from ovos_utils import create_daemon, wait_for_exit_signal
@@ -96,6 +97,59 @@ class HiveMindService:
                                                      ))
         self._status.set_alive()
 
+    def _ggwave_add_client(self, access_key: str, pswd: str) -> None:
+        """Callback for GGWave audio pairing: register a freshly-paired client.
+        Lives here (not in hivemind-presence) so the discovery package never
+        imports hivemind-core."""
+        key = os.urandom(16).hex()  # 32 hex chars = AES-256 crypto key
+        with ClientDatabase() as db:
+            name = f"HiveMind-Node-{db.total_clients()}"
+            db.add_client(name, access_key, crypto_key=key, password=pswd)
+            LOG.info(f"GGWave pairing: registered '{name}' key={access_key}")
+
+    def _start_presence(self) -> None:
+        """Optionally advertise this hub on the local network via
+        hivemind-presence (HiveBeacon UDP broadcast / mDNS). No-op when the
+        optional package is not installed or presence is disabled."""
+        try:
+            import inspect
+
+            from hivemind_presence import LocalPresence
+        except ImportError:
+            return
+        cfg = get_server_config()
+        presence_cfg = cfg.get("presence", {})
+        if not presence_cfg.get("enabled", True):
+            return
+        net = cfg.get("network_protocol", {})
+        first = next(iter(net.values()), {}) if net else {}
+        ggwave = presence_cfg.get("ggwave", False)
+        kwargs = {
+            "port": first.get("port", 5678),
+            "ssl": first.get("ssl", False),
+            "name": presence_cfg.get("name", "HiveMind-Node"),
+            "upnp": presence_cfg.get("upnp", False),
+            "zeroconf": presence_cfg.get("zeroconf", True),
+        }
+        # Only pass the transports this hivemind-presence build accepts —
+        # beacon (HiveBeacon UDP) and ggwave pairing are newer and absent in
+        # older builds, which expose only upnp/zeroconf.
+        supported = set(inspect.signature(LocalPresence.__init__).parameters)
+        if "beacon" in supported:
+            kwargs["beacon"] = presence_cfg.get("beacon", True)
+        if "ggwave" in supported:
+            kwargs["ggwave"] = ggwave
+            kwargs["ggwave_add_client_callback"] = (
+                self._ggwave_add_client if ggwave else None)
+        self._presence = LocalPresence(**kwargs)
+        create_daemon(self._presence.start)
+        LOG.info("LocalPresence started")
+
+    def _stop_presence(self) -> None:
+        presence = getattr(self, "_presence", None)
+        if presence is not None:
+            presence.stop()
+
     def run(self):
         self._status.set_started()
 
@@ -139,6 +193,8 @@ class HiveMindService:
 
         self._status.set_ready()
 
+        self._start_presence()
         wait_for_exit_signal()  # block until ctrl+c
 
+        self._stop_presence()
         self._status.set_stopping()
