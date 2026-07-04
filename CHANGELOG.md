@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.0a2) (2026-07-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.0a1...4.10.0a2)
+
+**Merged pull requests:**
+
+- chore: add comprehensive documentation [\#73](https://github.com/JarbasHiveMind/HiveMind-core/pull/73) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.0a1) (2026-07-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.9.0a1...4.10.0a1)
