@@ -26,11 +26,10 @@ dependencies = [
     "rich",
     "pycryptodomex",
     "poorman-handshake>=2.0.0a1,<3.0.0",
-    # protocol v3 (Noise) additionally needs hivemind_bus_client.noise; the
-    # server degrades gracefully to the legacy handshake when the installed
-    # client lib predates it. TODO: raise the floor to the alpha shipping
-    # hivemind_bus_client.noise once the protocol v3 client PR is released.
-    "hivemind_bus_client>=0.9.2a1,<1.0.0",
+    # protocol v3 (Noise) needs hivemind_bus_client.noise, shipped since
+    # 0.10.1a1; the server still degrades gracefully to the legacy handshake
+    # against older clients on the wire.
+    "hivemind_bus_client>=0.10.1a1,<1.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
     "hivemind-plugin-manager>=0.7.1a1,<1.0.0",
@@ -48,9 +47,8 @@ test = [
     "pytest",
     "pytest-cov",
     "hivescope>=0.5.0a2",
-    # the protocol v3 e2e matrix needs the client-side Noise support; TODO:
-    # replace with a prerelease floor pin once the client PR is released
-    "hivemind_bus_client @ git+https://github.com/JarbasHiveMind/hivemind-websocket-client@feat/protocol-v3-noise",
+    # client-side Noise (hivemind_bus_client>=0.10.1a1) comes from the runtime
+    # dependency above — no git ref, so the wheel stays PyPI-publishable.
 ]
 integration = [
     "hivescope>=0.5.0a2",
