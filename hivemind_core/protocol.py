@@ -65,7 +65,7 @@ from hivemind_plugin_manager.database import Client
 from hivemind_plugin_manager.policy import PolicyPlugin
 from hivemind_core.policy import PolicyChain
 from poorman_handshake import HandShake, PasswordHandShake
-from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key
+from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
 
 
 class ProtocolVersion(IntEnum):
@@ -98,6 +98,16 @@ class HiveMindNodeType(str, Enum):
 # response wrapping this control message — the end-of-stream is part of the
 # protocol content, not loose metadata.
 QUERY_STREAM_END = "hive.query.complete"
+
+
+class UnencryptedMessageError(ValueError):
+    """Raised when a cleartext frame arrives on a connection that requires crypto.
+
+    Only HELLO and HANDSHAKE messages may travel unencrypted (they precede
+    session-key establishment); any other cleartext frame on a
+    ``crypto_required`` server is rejected and the client disconnected
+    (HIVEMIND-CRYPTO-1 §4).
+    """
 
 
 @dataclass
@@ -237,7 +247,17 @@ class HiveMindClientConnection:
 
         self.send_msg(payload, is_bin)
 
+    @property
+    def crypto_required(self) -> bool:
+        """True when the listener this connection belongs to mandates encryption.
+
+        Mirrors the ``crypto_required`` flag advertised to clients in the
+        HANDSHAKE payload (``HiveMindListenerProtocol.require_crypto``).
+        """
+        return bool(self.hm_protocol and self.hm_protocol.require_crypto)
+
     def decode(self, payload: str) -> HiveMessage:
+        encrypted = False
         if self.noise_transport is not None:
             # protocol v3 session: only valid Noise transport messages are
             # accepted; tampering/replay/reordering fails AEAD and is fatal
@@ -253,26 +273,44 @@ class HiveMindClientConnection:
                           "disconnecting")
                 self.disconnect()
                 raise
+            # a decoded Noise transport frame is authenticated + encrypted
+            encrypted = True
         elif self.crypto_key:
             # handle binary encryption
             if isinstance(payload, bytes):
                 payload = decrypt_bin(key=self.crypto_key, ciphertext=payload,
                                       cipher=self.cipher)
+                encrypted = True
             # handle json encryption
             elif "ciphertext" in payload:
                 payload = decrypt_from_json(key=self.crypto_key, ciphertext_json=payload,
                                             encoding=self.encoding, cipher=self.cipher)
+                encrypted = True
             else:
                 LOG.warning("Message was unencrypted")
-                # TODO - some error if crypto is required
-        else:
-            pass  # TODO - reject anything except HELLO and HANDSHAKE
 
         if isinstance(payload, bytes):
-            return decode_bitstring(payload)
-        elif isinstance(payload, str):
-            payload = json.loads(payload)
-        return HiveMessage(**payload)
+            message = decode_bitstring(payload)
+        else:
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            message = HiveMessage(**payload)
+
+        # HIVEMIND-CRYPTO-1 §4 - when the server requires crypto, drop any
+        # cleartext frame that is not part of key establishment. HELLO and
+        # HANDSHAKE MUST remain accepted in the clear (they precede the
+        # session key); everything else is rejected and the client dropped.
+        if (not encrypted
+                and self.crypto_required
+                and message.msg_type not in (HiveMessageType.HELLO,
+                                             HiveMessageType.HANDSHAKE)):
+            LOG.error(f"Dropping unencrypted {message.msg_type} message from "
+                      f"{self.peer}: server requires crypto")
+            self.disconnect()
+            raise UnencryptedMessageError(
+                f"unencrypted {message.msg_type} message rejected: "
+                f"crypto is required")
+        return message
 
     def authorize(self, message: Message) -> bool:
         """Subclass override hook — return False to short-circuit bus
@@ -353,6 +391,13 @@ class HiveMindListenerProtocol:
 
     def __post_init__(self):
         self.clients = {}
+        # TOFU pinning store for INTERCOM origin authentication
+        # (HIVEMIND-CRYPTO-1 §5). Maps a client's access key to the PEM
+        # public key it presented; once pinned, INTERCOM signatures from that
+        # client MUST verify against the pinned key. In-memory for now — pins
+        # last for the lifetime of this listener (the Client DB model has no
+        # pubkey column yet).
+        self.trusted_pubkeys: dict = {}  # client.key -> PEM public key
         self._seen_flood_ids: set = set()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self.agent_protocol.hm_protocol = self
@@ -895,13 +940,19 @@ class HiveMindListenerProtocol:
 
             envelope = message.payload["envelope"]
             envelope_out = client.pswd_handshake.generate_handshake()
-            client.pswd_handshake.receive_handshake(envelope)
-
-            # if not client.pswd_handshake.receive_and_verify(envelope):
-            #     # TODO - different handles for invalid access key / invalid password
-            #     self.handle_invalid_key_connected(client)
-            #     client.disconnect()
-            #     return
+            # fail-fast: verify the client's envelope was built with the same
+            # password before deriving a key (HIVEMIND-CRYPTO-1 §3.2
+            # RECOMMENDED explicit reject). A wrong password previously only
+            # surfaced as a decrypt failure on the first encrypted frame.
+            try:
+                verified = client.pswd_handshake.receive_and_verify(envelope)
+            except Exception:
+                verified = False
+            if not verified:
+                LOG.warning("Client password handshake verification failed")
+                self.handle_invalid_key_connected(client)
+                client.disconnect()
+                return
 
             # key is derived safely from password in both sides
             # the handshake is validating both ends have the same password
@@ -938,6 +989,16 @@ class HiveMindListenerProtocol:
         if "pubkey" in payload:
             client.pub_key = payload["pubkey"]
             LOG.debug(f"client sent public key")
+            # TOFU pin: first pubkey seen for this access key becomes the
+            # trust anchor for INTERCOM signature verification. A later HELLO
+            # presenting a different key does NOT overwrite the pin.
+            pinned = self.trusted_pubkeys.get(client.key)
+            if pinned is None:
+                self.trusted_pubkeys[client.key] = client.pub_key
+                LOG.debug(f"pinned public key for {client.peer}")
+            elif pinned != client.pub_key:
+                LOG.warning(f"client {client.peer} presented a public key that "
+                            f"does not match its pinned key; keeping the pin")
         else:
             LOG.warning(f"client did NOT send public key")
 
@@ -1467,9 +1528,26 @@ class HiveMindListenerProtocol:
                 ciphertext = pybase64.b64decode(pload["ciphertext"])
                 signature = pybase64.b64decode(pload["signature"])
 
-                # TODO - allow verifying, we need to store trusted pubkeys before this can be done
-                # pub = ""
-                # verified = verify_RSA(pub, ciphertext, signature)
+                # HIVEMIND-CRYPTO-1 §5 - verify the origin signature against
+                # the TOFU-pinned public key (pinned from the client's HELLO).
+                # A signature that fails against a known key means a forged
+                # origin — reject. If no pubkey was ever presented we cannot
+                # authenticate the origin; keep permissive behavior but say so.
+                pub = self.trusted_pubkeys.get(client.key) or client.pub_key
+                if pub:
+                    try:
+                        verified = verify_RSA(pub, ciphertext, signature)
+                    except Exception:
+                        verified = False
+                    if not verified:
+                        LOG.error(f"INTERCOM signature verification failed for "
+                                  f"{client.peer}: rejecting forged/mismatched message")
+                        return False
+                    # first verified sighting pins the key for this listener's lifetime
+                    self.trusted_pubkeys.setdefault(client.key, pub)
+                else:
+                    LOG.warning(f"INTERCOM from {client.peer} has no pinned/known "
+                                f"public key: origin authenticity is unverified")
 
                 private_key = load_RSA_key(self.identity.private_key)
 
