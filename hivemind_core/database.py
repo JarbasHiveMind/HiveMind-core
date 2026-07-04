@@ -41,6 +41,12 @@ class ClientDatabase:
             return search[0]
         return None
 
+    def get_client_by_id(self, client_id: int) -> Optional[Client]:
+        return self.db.get_client_by_id(client_id)
+
+    def refresh(self, client_id: int) -> Optional[Client]:
+        return self.db.refresh(client_id)
+
     def add_client(self,
                    name: str,
                    key: str = "",

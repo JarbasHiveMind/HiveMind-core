@@ -44,6 +44,20 @@ def test_existing_json_deployment_is_kept():
         assert C._default_database()["module"] == "hivemind-json-db-plugin"
 
 
+def test_client_database_delegates_client_refresh():
+    backend = mock.Mock()
+    backend.get_client_by_id.return_value = "by-id"
+    backend.refresh.return_value = "fresh"
+
+    db = object.__new__(ClientDatabase)
+    db.db = backend
+
+    assert db.get_client_by_id(7) == "by-id"
+    assert db.refresh(7) == "fresh"
+    backend.get_client_by_id.assert_called_once_with(7)
+    backend.refresh.assert_called_once_with(7)
+
+
 def test_sqlite_wins_once_present():
     with mock.patch.object(C, "xdg_data_home", return_value=_make_existing(json=True, sqlite=True)):
         assert C._default_database()["module"] == "hivemind-sqlite-db-plugin"
