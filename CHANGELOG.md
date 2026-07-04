@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.8.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.8.0a1) (2026-07-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.7.0a1...4.8.0a1)
+
+**Merged pull requests:**
+
+- feat: optional presence advertise + GGWave pairing [\#97](https://github.com/JarbasHiveMind/HiveMind-core/pull/97) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.7.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.7.0a1) (2026-07-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.7a1...4.7.0a1)
