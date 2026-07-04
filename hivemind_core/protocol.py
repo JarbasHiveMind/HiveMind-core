@@ -24,6 +24,40 @@ from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers
                                             decrypt_from_json, encrypt_as_json,
                                             decrypt_bin, encrypt_bin,
                                             _norm_encoding, _norm_cipher)
+try:
+    from hivemind_bus_client.noise import (NOISE_SUPPORTED, NOISE_PATTERNS, NOISE_SUITES,
+                                           NOISE_PATTERN_KK, NoiseTransport,
+                                           NoiseHandshakeFailed, NoiseTransportFailed,
+                                           build_prologue, noise_protocol_name,
+                                           start_noise_handshake)
+except ImportError:
+    # hivemind_bus_client without the protocol v3 noise module: the server
+    # degrades gracefully to the legacy (v2 and below) handshake and never
+    # advertises protocol v3. The stubs below are only referenced on code
+    # paths gated behind NOISE_SUPPORTED / an established v3 session.
+    NOISE_SUPPORTED = False
+    NOISE_PATTERNS, NOISE_SUITES = [], []
+    NOISE_PATTERN_KK = "KKpsk0"
+
+    class NoiseHandshakeFailed(Exception):
+        """Stub: protocol v3 unavailable."""
+
+    class NoiseTransportFailed(Exception):
+        """Stub: protocol v3 unavailable."""
+
+    class NoiseTransport:  # pragma: no cover - never instantiated without noise
+        def __init__(self, *args, **kwargs):
+            raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable: "
+                                       "hivemind_bus_client.noise not importable")
+
+    def build_prologue(*args, **kwargs):  # pragma: no cover
+        raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
+
+    def noise_protocol_name(*args, **kwargs):  # pragma: no cover
+        raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
+
+    def start_noise_handshake(*args, **kwargs):  # pragma: no cover
+        raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
 from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
@@ -38,6 +72,7 @@ class ProtocolVersion(IntEnum):
     ZERO = 0  # json only, no handshake, no binary
     ONE = 1  # handshake https://github.com/JarbasHiveMind/HiveMind-core/pull/29
     TWO = 2  # binary https://github.com/JarbasHiveMind/hivemind_websocket_client/pull/4
+    THREE = 3  # Noise handshake, always-encrypted session (HIVEMIND-CRYPTO-1 §3.4)
 
 
 class HiveMindNodeType(str, Enum):
@@ -99,6 +134,16 @@ class HiveMindClientConnection:
     cipher: Literal[SupportedCiphers] = SupportedCiphers.AES_GCM
     encoding: Literal[SupportedEncodings] = SupportedEncodings.JSON_HEX
 
+    # protocol v3 (Noise handshake) state — HIVEMIND-CRYPTO-1 §3.4. On a v3
+    # connection ``noise_transport`` replaces ``crypto_key`` as the session
+    # layer; both stay None on v2-and-below connections (legacy path untouched)
+    noise_handshake: Optional[object] = field(default=None, repr=False)
+    noise_transport: Optional[NoiseTransport] = field(default=None, repr=False)
+    # exact payloads of the cleartext HELLO + parameter HANDSHAKE sent to this
+    # client, retained for Noise prologue binding (CRYPTO-1 §3.4.3)
+    _hello_payload: Optional[dict] = field(default=None, init=False, repr=False)
+    _handshake_payload: Optional[dict] = field(default=None, init=False, repr=False)
+
     # Connection-scoped resolved-user cache. Policies call ``resolve_user``
     # which hits the DB at most once per ``ttl`` window; ``invalidate_user``
     # forces the next call to refetch. Avoids per-policy DB sync() storms
@@ -153,6 +198,19 @@ class HiveMindClientConnection:
 
         LOG.debug(f"sending to {self.peer}: {message.msg_type}")
 
+        if self.noise_transport is not None:
+            # protocol v3: every message (HELLO/HANDSHAKE included) is a Noise
+            # transport message — there is no cleartext v3 session (§3.4.5)
+            if self.binarize or is_bin:
+                payload = get_bitstring(hive_type=message.msg_type,
+                                        payload=message.payload,
+                                        hivemeta=message.metadata,
+                                        binary_type=message.bin_type).bytes
+            else:
+                payload = message.serialize()
+            self.send_msg(self.noise_transport.encrypt_frame(payload), True)
+            return
+
         if self.crypto_key and message.msg_type not in [
             HiveMessageType.HANDSHAKE,
             HiveMessageType.HELLO,
@@ -180,7 +238,22 @@ class HiveMindClientConnection:
         self.send_msg(payload, is_bin)
 
     def decode(self, payload: str) -> HiveMessage:
-        if self.crypto_key:
+        if self.noise_transport is not None:
+            # protocol v3 session: only valid Noise transport messages are
+            # accepted; tampering/replay/reordering fails AEAD and is fatal
+            if not isinstance(payload, bytes):
+                self.disconnect()
+                raise NoiseTransportFailed(
+                    "non-Noise message received on a protocol v3 session")
+            try:
+                payload = self.noise_transport.decrypt_frame(payload)
+            except NoiseTransportFailed:
+                LOG.error(f"rejecting invalid Noise transport message from "
+                          f"{self.peer} (tampered, replayed or out-of-order), "
+                          "disconnecting")
+                self.disconnect()
+                raise
+        elif self.crypto_key:
             # handle binary encryption
             if isinstance(payload, bytes):
                 payload = decrypt_bin(key=self.crypto_key, ciphertext=payload,
@@ -358,17 +431,20 @@ class HiveMindListenerProtocol:
             if client.crypto_key is None and self.require_crypto
             else ProtocolVersion.ZERO
         )
-        max_version = ProtocolVersion.ONE
+        # protocol v3 (Noise handshake) needs the noise primitive and a shared
+        # password for the PSK; otherwise the connection tops out at the
+        # legacy handshake (HIVEMIND-WIRE-1 §2 version ladder)
+        v3_capable = NOISE_SUPPORTED and client.pswd_handshake is not None
+        max_version = ProtocolVersion.THREE if v3_capable else ProtocolVersion.ONE
 
-        msg = HiveMessage(
-            HiveMessageType.HELLO,
-            payload={
-                "pubkey": client.handshake.pubkey,
-                # allows any node to verify messages are signed with this
-                "peer": client.peer,  # this identifies the connected client in ovos message.context
-                "node_id": self.peer
-            },
-        )
+        hello_payload = {
+            "pubkey": client.handshake.pubkey,
+            # allows any node to verify messages are signed with this
+            "peer": client.peer,  # this identifies the connected client in ovos message.context
+            "node_id": self.peer
+        }
+        client._hello_payload = hello_payload  # bound into the Noise prologue
+        msg = HiveMessage(HiveMessageType.HELLO, payload=hello_payload)
         LOG.debug(f"saying HELLO to: {client.peer}")
         client.send(msg)
 
@@ -392,6 +468,15 @@ class HiveMindListenerProtocol:
             "encodings": allowed_encodings,
             "ciphers": allowed_ciphers
         }
+        if v3_capable:
+            # advertise supported Noise patterns/suites, preference ordered
+            # (CRYPTO-1 §3.4.1/§3.4.2). KKpsk0 only when this client's static
+            # key was pinned by a previous XXpsk2 handshake.
+            patterns = list(NOISE_PATTERNS)
+            if not self._get_pinned_client_noise_key(client):
+                patterns = [p for p in patterns if p != NOISE_PATTERN_KK]
+            payload["noise"] = {"patterns": patterns, "suites": list(NOISE_SUITES)}
+        client._handshake_payload = payload  # bound into the Noise prologue
         msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
         LOG.debug(f"starting {client.peer} HANDSHAKE: {payload}")
         client.send(msg)
@@ -604,9 +689,144 @@ class HiveMindListenerProtocol:
         else:
             LOG.warning(f"Ignoring received untyped binary data: {len(bin_data)} bytes")
 
+    # ------------------------------------------------- protocol v3 (Noise)
+    def _get_pinned_client_noise_key(self, client: HiveMindClientConnection) -> Optional[str]:
+        """Pinned Noise static public key for this client identity, if any.
+
+        Pins live in the client database row's metadata (TOFU-then-pin,
+        CRYPTO-1 §3.4.5). Failures are treated as 'not pinned'.
+        """
+        try:
+            with self.db:
+                user = self.db.get_client_by_api_key(client.key)
+            if user is not None:
+                return (user.metadata or {}).get("noise_pubkey")
+        except Exception:
+            LOG.exception("failed to look up pinned noise key")
+        return None
+
+    def _pin_client_noise_key(self, client: HiveMindClientConnection, pubkey: str) -> None:
+        """Persist a client's Noise static public key against its identity."""
+        try:
+            with self.db:
+                user = self.db.get_client_by_api_key(client.key)
+                if user is None:
+                    return
+                user.metadata = user.metadata or {}
+                user.metadata["noise_pubkey"] = pubkey
+                self.db.update_item(user)
+        except Exception:
+            LOG.exception("failed to pin client noise key")
+
+    def _abort_noise_handshake(self, client: HiveMindClientConnection, reason: str):
+        """Fatal Noise handshake failure — reject the connection (§3.4.3)."""
+        LOG.error(f"protocol v3 handshake with {client.peer} FAILED: {reason}")
+        client.noise_handshake = None
+        client.noise_transport = None
+        self.handle_invalid_key_connected(client)
+        client.disconnect()
+
+    def handle_noise_handshake_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Server side of the protocol v3 Noise handshake (CRYPTO-1 §3.4.3).
+
+        The node is the Noise initiator; this server is the responder. Noise
+        message 1 names the selected pattern/suite and starts the handshake;
+        for XXpsk2 a final message 3 authenticates the node's static key.
+        A wrong password (PSK), tampered negotiation (prologue mismatch) or
+        pinned-key contradiction aborts cryptographically, fail-fast.
+        """
+        noise_params = message.payload.get("noise") or {}
+        try:
+            noise_msg = bytes.fromhex(noise_params["msg"])
+        except (KeyError, TypeError, ValueError):
+            self._abort_noise_handshake(client, "malformed Noise envelope")
+            return
+
+        if client.noise_handshake is None:
+            # Noise message 1: fixes the Noise protocol name
+            offered = (client._handshake_payload or {}).get("noise") or {}
+            pattern = noise_params.get("pattern")
+            suite = noise_params.get("suite")
+            if pattern not in (offered.get("patterns") or []) or \
+                    suite not in (offered.get("suites") or []):
+                self._abort_noise_handshake(
+                    client, f"pattern/suite not offered: {pattern}/{suite}")
+                return
+            pinned = self._get_pinned_client_noise_key(client)
+            if pattern == NOISE_PATTERN_KK and not pinned:
+                self._abort_noise_handshake(client, "KKpsk0 without a pinned key")
+                return
+            name = noise_protocol_name(pattern, suite)
+            prologue = build_prologue(client._hello_payload or {},
+                                      client._handshake_payload or {}, name)
+            try:
+                client.noise_handshake = start_noise_handshake(
+                    initiator=False, pattern=pattern, suite=suite,
+                    password=client.pswd_handshake.password,
+                    node_id=self.peer, prologue=prologue,
+                    key_path=self.identity.noise_key,
+                    remote_pubkey=pinned if pattern == NOISE_PATTERN_KK else None)
+                node_payload = json.loads(
+                    client.noise_handshake.read_message(noise_msg) or b"{}")
+                # honour the node's binarize capability; encodings are framing
+                # negotiation only — a v3 session is encrypted by the Noise
+                # CipherStates regardless of encoding (WIRE-1 §3)
+                client.binarize = bool(node_payload.get("binarize", False))
+                encodings = [_norm_encoding(e) for e in
+                             node_payload.get("encodings") or []] or [SupportedEncodings.JSON_HEX]
+                client.encoding = encodings[0]
+                msg2 = client.noise_handshake.write_message(
+                    json.dumps({"encoding": client.encoding}).encode("utf-8"))
+            except Exception as e:
+                self._abort_noise_handshake(client, f"handshake failure: {e}")
+                return
+            client.send(HiveMessage(HiveMessageType.HANDSHAKE,
+                                    {"noise": {"msg": msg2.hex()}}))
+            if not client.noise_handshake.handshake_finished:
+                return  # XXpsk2: wait for Noise message 3
+        else:
+            # XXpsk2 message 3: node's (encrypted) static key + final DH mix
+            try:
+                client.noise_handshake.read_message(noise_msg)
+            except Exception as e:
+                self._abort_noise_handshake(client, f"handshake failure: {e}")
+                return
+
+        # handshake complete -> Split(); transport CipherStates take over
+        try:
+            transport = NoiseTransport(client.noise_handshake)
+        except NoiseHandshakeFailed as e:
+            self._abort_noise_handshake(client, str(e))
+            return
+
+        # TOFU-then-pin the node's static key (§3.4.5)
+        pinned = self._get_pinned_client_noise_key(client)
+        if pinned and transport.remote_static_key != pinned:
+            self._abort_noise_handshake(
+                client, "client Noise static key contradicts pinned key")
+            return
+        if not pinned and transport.remote_static_key:
+            self._pin_client_noise_key(client, transport.remote_static_key)
+
+        client.noise_transport = transport
+        client.noise_handshake = None
+        client.crypto_key = None  # v3 replaces the v2 session AEAD entirely
+        LOG.info(f"protocol v3 Noise session established with {client.peer}")
+
     def handle_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
+        if "noise" in message.payload:
+            # protocol v3 negotiated (HIVEMIND-WIRE-1 §2)
+            if not NOISE_SUPPORTED or client.pswd_handshake is None or \
+                    not (client._handshake_payload or {}).get("noise"):
+                self._abort_noise_handshake(client, "protocol v3 not offered")
+                return
+            self.handle_noise_handshake_message(message, client)
+            return
+
         LOG.debug("handshake received, generating session key")
         if "pubkey" in message.payload and client.handshake is not None:
             pub = message.payload.pop("pubkey")
@@ -1286,9 +1506,12 @@ class HiveMindListenerProtocol:
         """
         raw_session = message.context.get("session") or {}
         session = client.sess.serialize()
-        if not isinstance(raw_session, dict) or "pipeline" not in raw_session:
+        if not isinstance(raw_session, dict) or raw_session.get("pipeline") is None:
             # Each bus message owns its outbound pipeline; do not reattach
-            # one from an earlier message.
+            # one from an earlier message. Per SESSION-1 §2 an explicit
+            # null pipeline is malformed and treated as absent; strip it
+            # here explicitly (serializers may render a None pipeline as
+            # [], which the generic null-strip below would not catch).
             session.pop("pipeline", None)
         # SESSION-1 §2: strip null-valued fields — null is malformed, treat as absent.
         session = {k: v for k, v in session.items() if v is not None}
