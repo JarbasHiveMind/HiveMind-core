@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.7.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.7.0a1) (2026-07-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.7a1...4.7.0a1)
+
+**Fixed bugs:**
+
+- Add type to allowed\_types requires a client restart [\#45](https://github.com/JarbasHiveMind/HiveMind-core/issues/45)
+
+**Merged pull requests:**
+
+- feat: protocol v3 Noise handshake \(XXpsk2/KKpsk0\) with v2 fallback [\#130](https://github.com/JarbasHiveMind/HiveMind-core/pull/130) ([JarbasAl](https://github.com/JarbasAl))
+- Delegate client refresh in ClientDatabase [\#129](https://github.com/JarbasHiveMind/HiveMind-core/pull/129) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.6.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.7a1) (2026-06-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.6a1...4.6.7a1)
