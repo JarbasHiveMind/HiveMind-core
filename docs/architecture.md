@@ -132,9 +132,8 @@ originating and target peers, opaque to intermediate relay nodes.
 
 ## Discovery
 
-Satellites discover the hub via:
+Satellites discover the hivemind-core server via:
 
-- **HiveBeacon** (default) — zero-dependency UDP broadcast on the local network.
-- **mDNS** — optional, requires `hivemind-presence` with mDNS transport.
-- **GGWave** — optional audio pairing (physical proximity).
+- **mDNS / zeroconf** (default) — requires the optional `hivemind-presence` package.
+- **UPnP/SSDP** — optional, provided by `hivemind-presence` (`upnp: true`).
 - Manual — provide host/port directly in the satellite's configuration.
