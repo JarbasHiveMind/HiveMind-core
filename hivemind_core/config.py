@@ -39,14 +39,12 @@ _DEFAULT = {
                            "port": 8181
                        }},
     "binary_protocol": {"module": None},
-    # local-network discovery / pairing (optional hivemind-presence package)
+    # local-network discovery (optional hivemind-presence package)
     "presence": {
         "enabled": True,
         "name": "HiveMind-Node",
         "zeroconf": True,   # mDNS (optional zeroconf)
         "upnp": False,      # UPnP/SSDP (optional upnpclient)
-        "beacon": True,     # HiveBeacon UDP broadcast (optional hivebeacon)
-        "ggwave": False,    # GGWave audio pairing (optional hivemind-ggwave + binaries)
     },
     "network_protocol": {"hivemind-websocket-plugin": {
                              "host": "0.0.0.0",
