@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a1) (2026-07-05)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.0a2...4.10.1a1)
+
+**Merged pull requests:**
+
+- fix: drop dormant beacon/ggwave presence passthrough [\#136](https://github.com/JarbasHiveMind/HiveMind-core/pull/136) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.0a2) (2026-07-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.0a1...4.10.0a2)
