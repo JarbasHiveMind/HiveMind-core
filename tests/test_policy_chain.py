@@ -138,6 +138,46 @@ class TestPolicyChainBinary(unittest.TestCase):
         self.assertEqual(v.code, "policy_error")
 
 
+class TestPolicyChainAdmissionBudget(unittest.TestCase):
+    def test_message_review_returns_retryable_busy_when_budget_exceeded(self):
+        chain = PolicyChain(
+            policies=[_AllowPolicy()],
+            max_review_ms=50,
+            busy_retry_after_ms=250,
+        )
+
+        with patch("hivemind_core.policy.time.monotonic",
+                   side_effect=[0.0, 0.0, 0.1]):
+            verdict = chain.review(_msg(), client=None)
+
+        self.assertTrue(verdict.denied)
+        self.assertEqual(verdict.code, "policy_busy")
+        self.assertEqual(verdict.data["path"], "message")
+        self.assertEqual(verdict.data["policy"], "_AllowPolicy")
+        self.assertEqual(verdict.data["budget_ms"], 50)
+        self.assertEqual(verdict.data["retry_after_ms"], 250)
+
+    def test_binary_review_returns_retryable_busy_when_budget_exceeded(self):
+        chain = PolicyChain(policies=[_AllowPolicy()], max_review_ms=10)
+
+        with patch("hivemind_core.policy.time.monotonic",
+                   side_effect=[0.0, 0.0, 0.02]):
+            verdict = chain.review_binary(b"x", client=None)
+
+        self.assertTrue(verdict.denied)
+        self.assertEqual(verdict.code, "policy_busy")
+        self.assertEqual(verdict.data["path"], "binary")
+
+    def test_warn_only_does_not_block_admission(self):
+        chain = PolicyChain(policies=[_AllowPolicy()], warn_review_ms=10)
+
+        with patch("hivemind_core.policy.time.monotonic",
+                   side_effect=[0.0, 0.0, 0.02]):
+            verdict = chain.review(_msg(), client=None)
+
+        self.assertFalse(verdict.denied)
+
+
 class TestPolicyChainObserve(unittest.TestCase):
     def test_observe_runs_all_policies(self):
         p1, p2 = _AllowPolicy(), _AllowPolicy()
@@ -188,6 +228,20 @@ class TestPolicyChainFromConfig(unittest.TestCase):
             "policy": {"chain": [{"config": {}}]},
         })
         self.assertEqual(chain.policies, [])
+
+    def test_policy_timing_config_is_parsed(self):
+        chain = PolicyChain.from_config({
+            "policy": {
+                "warn_review_ms": "25",
+                "max_review_ms": "100",
+                "busy_retry_after_ms": "300",
+                "chain": [],
+            },
+        })
+
+        self.assertEqual(chain.warn_review_ms, 25)
+        self.assertEqual(chain.max_review_ms, 100)
+        self.assertEqual(chain.busy_retry_after_ms, 300)
 
 
 # ---------------------------------------------------------------------------

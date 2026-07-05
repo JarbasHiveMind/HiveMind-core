@@ -71,6 +71,12 @@ _DEFAULT = {
     # be disabled by configuration. This list is for *additional*
     # policies layered on top.
     "policy": {
+        # Optional admission guardrails. Leave max_review_ms unset for legacy
+        # behaviour; set it to return a retryable policy_busy denial instead
+        # of letting overloaded clients wait until their own timeout.
+        "warn_review_ms": None,
+        "max_review_ms": None,
+        "busy_retry_after_ms": 250,
         "chain": [
             # OVOSAgentPolicy ships with hivemind-ovos-agent-plugin
             # (the default agent_protocol) and injects skill/intent

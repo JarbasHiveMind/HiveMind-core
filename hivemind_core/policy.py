@@ -12,6 +12,7 @@ Spec: https://github.com/JarbasHiveMind/HiveMind-core/issues/85
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
@@ -22,6 +23,32 @@ from ovos_utils.log import LOG
 
 if TYPE_CHECKING:
     from hivemind_core.protocol import HiveMindClientConnection
+
+
+def _optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _optional_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _busy_verdict(reason: str, **data: Any) -> Verdict:
+    """Return a retryable admission-busy verdict.
+
+    Newer hivemind-plugin-manager releases provide ``Verdict.busy`` and
+    ``DenyCodes.POLICY_BUSY``. Keep a small fallback here so core can be
+    reviewed and tested before that dependency is released.
+    """
+    busy = getattr(Verdict, "busy", None)
+    if callable(busy):
+        return busy(reason, **data)
+    code = getattr(DenyCodes, "POLICY_BUSY", "policy_busy")
+    return Verdict.deny(code, reason, **data)
 
 
 @dataclass
@@ -47,6 +74,11 @@ class PolicyChain:
     # (default) ⇒ exception fails the chain closed with POLICY_ERROR.
     # The force-prepended MessageTypeACLPolicy is always mandatory.
     _optional: List[bool] = field(default_factory=list)
+    # Admission timing guardrails. Warns are observability only; max_review_ms
+    # turns an over-budget allow into a retryable "policy_busy" denial.
+    warn_review_ms: Optional[float] = None
+    max_review_ms: Optional[float] = None
+    busy_retry_after_ms: Optional[int] = None
 
     @classmethod
     def from_config(cls, config: Dict[str, Any],
@@ -93,7 +125,41 @@ class PolicyChain:
             except Exception as e:
                 LOG.error(f"failed to load policy plugin '{name}': {e}")
                 raise
-        return cls(policies=policies, _optional=optional_flags)
+        return cls(
+            policies=policies,
+            _optional=optional_flags,
+            warn_review_ms=_optional_float(policy_cfg.get("warn_review_ms")),
+            max_review_ms=_optional_float(policy_cfg.get("max_review_ms")),
+            busy_retry_after_ms=_optional_int(policy_cfg.get("busy_retry_after_ms")),
+        )
+
+    def _budget_verdict(self, started_at: float, policy_started_at: float,
+                        policy: PolicyPlugin, path: str) -> Optional[Verdict]:
+        now = time.monotonic()
+        elapsed_ms = (now - started_at) * 1000.0
+        policy_ms = (now - policy_started_at) * 1000.0
+        policy_name = type(policy).__name__
+
+        if self.warn_review_ms is not None and elapsed_ms > self.warn_review_ms:
+            LOG.warning(
+                "policy admission slow: path=%s policy=%s policy_ms=%.2f "
+                "elapsed_ms=%.2f warn_ms=%.2f",
+                path, policy_name, policy_ms, elapsed_ms, self.warn_review_ms,
+            )
+
+        if self.max_review_ms is None or elapsed_ms <= self.max_review_ms:
+            return None
+
+        data: Dict[str, Any] = {
+            "path": path,
+            "policy": policy_name,
+            "policy_ms": round(policy_ms, 2),
+            "elapsed_ms": round(elapsed_ms, 2),
+            "budget_ms": round(self.max_review_ms, 2),
+        }
+        if self.busy_retry_after_ms is not None:
+            data["retry_after_ms"] = self.busy_retry_after_ms
+        return _busy_verdict("policy admission exceeded time budget", **data)
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
@@ -105,9 +171,11 @@ class PolicyChain:
         skip any policy based on it. Policies that care about admin
         status branch on ``client.is_admin`` themselves.
         """
+        started_at = time.monotonic()
         accumulated: List = []
         for i, policy in enumerate(self.policies):
             is_optional = self._optional[i] if i < len(self._optional) else False
+            policy_started_at = time.monotonic()
             try:
                 verdict = policy.review(message, client)
             except Exception as e:
@@ -116,6 +184,12 @@ class PolicyChain:
                         f"optional policy {type(policy).__name__} raised; "
                         f"continuing chain: {e}"
                     )
+                    budget_verdict = self._budget_verdict(
+                        started_at, policy_started_at, policy, "message",
+                    )
+                    if budget_verdict is not None:
+                        self._fire_on_verdict(policy, budget_verdict)
+                        return budget_verdict
                     continue
                 LOG.exception(f"policy {type(policy).__name__} raised")
                 verdict = Verdict.deny(
@@ -141,6 +215,12 @@ class PolicyChain:
                         mutation=type(mutation).__name__,
                         error=str(e),
                     )
+            budget_verdict = self._budget_verdict(
+                started_at, policy_started_at, policy, "message",
+            )
+            if budget_verdict is not None:
+                self._fire_on_verdict(policy, budget_verdict)
+                return budget_verdict
         final = Verdict.allow(*accumulated)
         # Synthetic chain-complete trace: fire on_verdict with policy=None
         # so tracers can see the full accumulated mutation set.
@@ -166,8 +246,10 @@ class PolicyChain:
         ``Client.is_admin`` is informational only here too — no
         runner-level bypass; policies branch on it themselves.
         """
+        started_at = time.monotonic()
         for i, policy in enumerate(self.policies):
             is_optional = self._optional[i] if i < len(self._optional) else False
+            policy_started_at = time.monotonic()
             try:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
@@ -176,6 +258,11 @@ class PolicyChain:
                         f"optional policy {type(policy).__name__} "
                         f"review_binary raised; continuing chain: {e}"
                     )
+                    budget_verdict = self._budget_verdict(
+                        started_at, policy_started_at, policy, "binary",
+                    )
+                    if budget_verdict is not None:
+                        return budget_verdict
                     continue
                 LOG.exception(f"policy {type(policy).__name__} review_binary raised")
                 return Verdict.deny(
@@ -189,6 +276,11 @@ class PolicyChain:
                     f"policy {type(policy).__name__} returned mutations "
                     f"on a binary verdict — ignored (not supported)"
                 )
+            budget_verdict = self._budget_verdict(
+                started_at, policy_started_at, policy, "binary",
+            )
+            if budget_verdict is not None:
+                return budget_verdict
         return Verdict.allow()
 
     def observe(self, message: Message,
