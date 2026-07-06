@@ -410,8 +410,8 @@ class HiveMindListenerProtocol:
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self._last_seen_updates: dict = {}  # client.key -> last persisted timestamp
         self.last_seen_update_interval = _non_negative_float(
-            get_server_config().get("last_seen_update_interval", 30),
-            30.0,
+            get_server_config().get("last_seen_update_interval", 0),
+            0.0,
         )
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
@@ -571,11 +571,14 @@ class HiveMindListenerProtocol:
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
         now = time.time()
+        if not hasattr(self, "_last_seen_updates"):
+            self._last_seen_updates = {}
+        update_interval = getattr(self, "last_seen_update_interval", 0)
         last_update = self._last_seen_updates.get(client.key)
         if (
-                self.last_seen_update_interval > 0
+                update_interval > 0
                 and last_update is not None
-                and now - last_update < self.last_seen_update_interval
+                and now - last_update < update_interval
         ):
             return
         with self.db:

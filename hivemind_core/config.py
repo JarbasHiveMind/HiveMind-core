@@ -80,9 +80,11 @@ _DEFAULT = {
         ],
     },
 
-    # Avoid a synchronous client-db write on every single client message.
-    # Set to 0 to restore the old per-message last_seen update behavior.
-    "last_seen_update_interval": 30,
+    # Optional debounce for the synchronous client-db last_seen write.
+    # The default preserves the old per-message update behavior. Set to a
+    # positive number of seconds only when the downstream runtime can absorb
+    # the extra admission rate.
+    "last_seen_update_interval": 0,
 }
 
 
