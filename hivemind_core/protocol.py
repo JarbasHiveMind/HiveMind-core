@@ -447,6 +447,25 @@ class HiveMindListenerProtocol:
         # routing on the inject path stays transparent here.
         return self.agent_protocol.get_bus(client)
 
+    def _emit_agent_message(self, message: Message,
+                            client: HiveMindClientConnection) -> bool:
+        """Inject a client message using the agent protocol's best emitter."""
+        for hook_name in (
+                "emit_client_message",
+                "emit_agent_message",
+                "inject_agent_message"):
+            instance_attrs = getattr(self.agent_protocol, "__dict__", {})
+            if (not hasattr(type(self.agent_protocol), hook_name)
+                    and hook_name not in instance_attrs):
+                continue
+            hook = getattr(self.agent_protocol, hook_name, None)
+            if callable(hook):
+                return bool(hook(message, client))
+
+        bus = self.get_bus(client)
+        bus.emit(message)
+        return True
+
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_connect(client)
@@ -1657,8 +1676,15 @@ class HiveMindListenerProtocol:
         message.context["peer"] = message.context["source"] = client.peer
         message.context["source"] = client.peer
 
-        bus = self.get_bus(client)
-        bus.emit(message)
+        try:
+            self._emit_agent_message(message, client)
+        except Exception as exc:
+            LOG.exception(
+                f"failed to forward '{message.msg_type}' to agent bus "
+                f"from client: {client.peer}"
+            )
+            self._send_agent_bus_error(client, message, exc)
+            return
 
         self.policy_chain.observe(message, client)
 
@@ -1682,6 +1708,23 @@ class HiveMindListenerProtocol:
             client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
         except Exception:
             LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
+
+    def _send_agent_bus_error(self, client: HiveMindClientConnection,
+                              message: Message, exc: Exception) -> None:
+        """Inform a client that upstream injection failed after policy allow."""
+        payload = Message(
+            "hive.agent_bus.error",
+            {
+                "failed_type": getattr(message, "msg_type", None),
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+            {"source": "hivemind-core", "destination": client.peer},
+        )
+        try:
+            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
+        except Exception:
+            LOG.exception(f"failed to send hive.agent_bus.error to {client.peer}")
 
     def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
         # this message is going inside the client bus
