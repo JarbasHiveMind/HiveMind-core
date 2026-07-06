@@ -1672,7 +1672,7 @@ class HiveMindListenerProtocol:
             return
 
         # send client message to internal mycroft bus
-        LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
+        LOG.debug(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
         message.context["source"] = client.peer
 
