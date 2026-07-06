@@ -73,6 +73,30 @@ def test_preshared_crypto_client_does_not_build_rsa_on_connect():
     assert handshake.payload["preshared_key"] is True
 
 
+def test_password_handshake_client_does_not_build_rsa_on_connect():
+    proto = _protocol()
+    password_handshake = MagicMock()
+    password_handshake.password = "shared-password"
+    client = _client(proto, pswd_handshake=password_handshake)
+
+    with patch("hivemind_core.protocol.HandShake", FakeHandshake):
+        with patch("hivemind_core.protocol.NOISE_SUPPORTED", False):
+            with patch("hivemind_core.protocol.get_server_config",
+                       return_value=_allow_legacy_config()):
+                FakeHandshake.created = 0
+                proto.handle_new_client(client)
+
+    assert FakeHandshake.created == 0
+    hello = _sent_message(client, 0)
+    handshake = _sent_message(client, 1)
+    assert hello.msg_type == HiveMessageType.HELLO
+    assert hello.payload["pubkey"] is None
+    assert handshake.msg_type == HiveMessageType.HANDSHAKE
+    assert handshake.payload["handshake"] is True
+    assert handshake.payload["password"] is True
+    assert handshake.payload["preshared_key"] is False
+
+
 def test_rsa_fallback_builds_handshake_only_when_needed():
     proto = _protocol()
     client = _client(proto)
