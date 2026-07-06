@@ -145,6 +145,38 @@ Until those pieces exist, scale by sharding at the hub level: run multiple indep
 hubs, keep websocket stickiness for each hub, and use relay/nested topology for larger
 fleets.
 
+### Load-test signal
+
+A July 2026 production-style WSS benchmark on Thalovant public hubs showed the current
+limit clearly:
+
+| Hub | Shape | Result | Bottleneck signal |
+|---|---|---|---|
+| Daily Desk | 400 held clients, 50 asks in flight | 400/400 replies, p95 about 37s | listener near 1.2 CPU, OVOS workers below 0.2 CPU |
+| Daily Desk | 200 connected clients, 200 asks in flight | 200/200 replies, p95 about 99s | listener dispatch saturated before OVOS |
+| Daily Desk | 200 simultaneous opens and asks | 140/200 replies; most failures were WSS open timeouts | websocket open/admission path saturated |
+| Learning Lounge | 100 held clients, 50 asks in flight | 100/100 replies, p95 about 32s | listener near 1.1 CPU, busiest OVOS worker about 0.3 CPU |
+
+That pattern means adding OVOS replicas alone does not solve one-hub concurrency. The
+first pressure point is the websocket/listener process: handshake admission, message
+decode/logging, policy review, and agent-bus injection all pass through one process-local
+router. OVOS bus pooling and runtime replicas help once messages leave the listener, but
+the listener must first drain inbound clients quickly enough.
+
+Near-term mitigations:
+
+- keep per-message and per-disconnect logs at debug level on hot paths;
+- use direct database lookup for API-key admission instead of full database sync on every
+  websocket open;
+- apply bounded admission/backpressure so clients fail fast instead of waiting for long
+  socket or query timeouts;
+- shard load across more logical hubs when interactive latency matters.
+
+Active-active listener scale needs a larger change: a shared connection/session registry,
+cross-listener message delivery, and deterministic ownership for query/cascade collectors.
+Without that, multiple listener pods behind one service can only safely work as sticky
+websocket replicas, not as a true shared hub.
+
 ---
 
 ## Identity and Encryption
