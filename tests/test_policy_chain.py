@@ -850,11 +850,45 @@ class TestProtocolWiring(unittest.TestCase):
         self.assertEqual(denied_msg.msg_type, "hive.agent_bus.error")
         self.assertEqual(denied_msg.data["failed_type"], "speak")
         self.assertEqual(denied_msg.data["error_type"], "RuntimeError")
+        self.assertNotIn("error", denied_msg.data)
+
+    def test_agent_emit_false_notifies_client(self):
+        """A hook that returns false must stop success-side callbacks."""
+        from hivemind_core.policy import PolicyChain
+        from hivemind_plugin_manager import PolicyPlugin
+
+        observe_calls: list = []
+
+        class _ObserveSpy(PolicyPlugin):
+            def observe(self, msg, client):
+                observe_calls.append(msg.msg_type)
+
+        proto, bus = self._make_protocol()
+        proto.policy_chain = PolicyChain(policies=[_ObserveSpy()])
+        proto.agent_protocol.emit_client_message = MagicMock(return_value=False)
+        proto.agent_bus_callback = MagicMock()
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"}, {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        self.assertEqual(emitted, [])
+        self.assertEqual(observe_calls, [])
+        proto.agent_bus_callback.assert_not_called()
+        sent_hm = client.send.call_args[0][0]
+        denied_msg = sent_hm.payload
+        self.assertEqual(denied_msg.msg_type, "hive.agent_bus.error")
+        self.assertEqual(denied_msg.data["failed_type"], "speak")
+        self.assertEqual(denied_msg.data["error_type"], "RuntimeError")
+        self.assertNotIn("error", denied_msg.data)
 
     def test_observe_called_after_emit(self):
         """observe() fires after bus.emit, and exceptions are swallowed."""
         from hivemind_core.policy import PolicyChain
-        from hivemind_plugin_manager import PolicyPlugin, Verdict
+        from hivemind_plugin_manager import PolicyPlugin
 
         observe_calls: list = []
 

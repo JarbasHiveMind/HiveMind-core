@@ -454,10 +454,6 @@ class HiveMindListenerProtocol:
                 "emit_client_message",
                 "emit_agent_message",
                 "inject_agent_message"):
-            instance_attrs = getattr(self.agent_protocol, "__dict__", {})
-            if (not hasattr(type(self.agent_protocol), hook_name)
-                    and hook_name not in instance_attrs):
-                continue
             hook = getattr(self.agent_protocol, hook_name, None)
             if callable(hook):
                 return bool(hook(message, client))
@@ -1677,13 +1673,22 @@ class HiveMindListenerProtocol:
         message.context["source"] = client.peer
 
         try:
-            self._emit_agent_message(message, client)
+            emitted = self._emit_agent_message(message, client)
         except Exception as exc:
             LOG.exception(
                 f"failed to forward '{message.msg_type}' to agent bus "
                 f"from client: {client.peer}"
             )
             self._send_agent_bus_error(client, message, exc)
+            return
+        if not emitted:
+            LOG.error(
+                f"agent bus rejected '{message.msg_type}' "
+                f"from client: {client.peer}"
+            )
+            self._send_agent_bus_error(
+                client, message, RuntimeError("agent bus rejected message")
+            )
             return
 
         self.policy_chain.observe(message, client)
@@ -1717,7 +1722,6 @@ class HiveMindListenerProtocol:
             {
                 "failed_type": getattr(message, "msg_type", None),
                 "error_type": type(exc).__name__,
-                "error": str(exc),
             },
             {"source": "hivemind-core", "destination": client.peer},
         )
