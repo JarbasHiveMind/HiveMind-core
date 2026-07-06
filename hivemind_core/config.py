@@ -79,6 +79,10 @@ _DEFAULT = {
             {"module": "hivemind-ovos-agent-policy"},
         ],
     },
+
+    # Avoid a synchronous client-db write on every single client message.
+    # Set to 0 to restore the old per-message last_seen update behavior.
+    "last_seen_update_interval": 30,
 }
 
 

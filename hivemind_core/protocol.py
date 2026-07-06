@@ -100,6 +100,14 @@ class HiveMindNodeType(str, Enum):
 QUERY_STREAM_END = "hive.query.complete"
 
 
+def _non_negative_float(value, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed >= 0 else default
+
+
 class UnencryptedMessageError(ValueError):
     """Raised when a cleartext frame arrives on a connection that requires crypto.
 
@@ -400,6 +408,11 @@ class HiveMindListenerProtocol:
         self.trusted_pubkeys: dict = {}  # client.key -> PEM public key
         self._seen_flood_ids: set = set()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
+        self._last_seen_updates: dict = {}  # client.key -> last persisted timestamp
+        self.last_seen_update_interval = _non_negative_float(
+            get_server_config().get("last_seen_update_interval", 30),
+            30.0,
+        )
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -557,15 +570,25 @@ class HiveMindListenerProtocol:
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
+        now = time.time()
+        last_update = self._last_seen_updates.get(client.key)
+        if (
+                self.last_seen_update_interval > 0
+                and last_update is not None
+                and now - last_update < self.last_seen_update_interval
+        ):
+            return
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
             if user is None:
                 # key was revoked / never existed — nothing to update
                 LOG.debug(f"can not update last seen, no client for key: {client.key}")
+                self._last_seen_updates.pop(client.key, None)
                 return
-            user.last_seen = time.time()
+            user.last_seen = now
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
+            self._last_seen_updates[client.key] = now
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
@@ -585,6 +608,7 @@ class HiveMindListenerProtocol:
 
         if client.peer in self.clients:
             self.clients.pop(client.peer)
+        self._last_seen_updates.pop(client.key, None)
         client.disconnect()
         message = Message(
             "hive.client.disconnect",
