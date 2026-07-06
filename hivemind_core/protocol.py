@@ -189,8 +189,17 @@ class HiveMindClientConnection:
         self._resolved_user = None
         self._resolved_user_ts = 0.0
 
-    def __post_init__(self):
-        self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
+    def ensure_handshake(self) -> HandShake:
+        """Create the legacy RSA handshake only when it is actually needed.
+
+        Constructing ``HandShake`` generates RSA material and is expensive on
+        the websocket admission path. Clients that already have a pre-shared
+        crypto key, password handshake, or Noise transport do not need this
+        legacy fallback during connection open.
+        """
+        if self.handshake is None:
+            self.handshake = HandShake(self.hm_protocol.identity.private_key)
+        return self.handshake
 
     @property
     def peer(self) -> str:
@@ -509,8 +518,16 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
+        legacy_rsa = (
+            client.handshake
+            or (
+                client.crypto_key is None
+                and client.pswd_handshake is None
+                and client.noise_transport is None
+            )
+        )
         hello_payload = {
-            "pubkey": client.handshake.pubkey,
+            "pubkey": client.ensure_handshake().pubkey if legacy_rsa else None,
             # allows any node to verify messages are signed with this
             "peer": client.peer,  # this identifies the connected client in ovos message.context
             "node_id": self.peer
@@ -900,10 +917,11 @@ class HiveMindListenerProtocol:
             return
 
         LOG.debug("handshake received, generating session key")
-        if "pubkey" in message.payload and client.handshake is not None:
+        if "pubkey" in message.payload:
             pub = message.payload.pop("pubkey")
-            envelope_out = client.handshake.generate_handshake(pub)
-            client.crypto_key = client.handshake.secret  # start using new key
+            handshake = client.ensure_handshake()
+            envelope_out = handshake.generate_handshake(pub)
+            client.crypto_key = handshake.secret  # start using new key
 
             # client side
             # LOG.info("Received encryption key")
