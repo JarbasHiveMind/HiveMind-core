@@ -287,7 +287,7 @@ class HiveMindClientConnection:
                                             encoding=self.encoding, cipher=self.cipher)
                 encrypted = True
             else:
-                LOG.warning("Message was unencrypted")
+                LOG.debug("Message was unencrypted")
 
         if isinstance(payload, bytes):
             message = decode_bitstring(payload)
