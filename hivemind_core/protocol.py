@@ -243,7 +243,7 @@ class HiveMindClientConnection:
             LOG.debug(f"encrypted payload size: {len(payload)} bytes")
         else:
             payload = message.serialize()
-            LOG.debug(f"sent unencrypted!")
+            LOG.debug("sent unencrypted!")
 
         self.send_msg(payload, is_bin)
 
@@ -1007,7 +1007,7 @@ class HiveMindListenerProtocol:
             client.sess.site_id = client.site_id = payload["site_id"]
         if "pubkey" in payload:
             client.pub_key = payload["pubkey"]
-            LOG.debug(f"client sent public key")
+            LOG.debug("client sent public key")
             # TOFU pin: first pubkey seen for this access key becomes the
             # trust anchor for INTERCOM signature verification. A later HELLO
             # presenting a different key does NOT overwrite the pin.
@@ -1019,7 +1019,7 @@ class HiveMindListenerProtocol:
                 LOG.warning(f"client {client.peer} presented a public key that "
                             f"does not match its pinned key; keeping the pin")
         else:
-            LOG.warning(f"client did NOT send public key")
+            LOG.warning("client did NOT send public key")
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
         LOG.debug(f"client session_id: {client.sess.session_id}")
