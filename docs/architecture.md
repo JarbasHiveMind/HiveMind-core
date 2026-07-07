@@ -148,20 +148,30 @@ fleets.
 ### Load-test signal
 
 A July 2026 production-style WSS benchmark on Thalovant public hubs showed the current
-limit clearly:
+limit clearly. The corrected run used direct WSS through the Node SDK with disposable
+HiveMind client identities, so each connection authenticated as a real client instead of
+sharing one preview credential.
 
 | Hub | Shape | Result | Bottleneck signal |
 |---|---|---|---|
-| Daily Desk | 400 held clients, 50 asks in flight | 400/400 replies, p95 about 37s | listener near 1.2 CPU, OVOS workers below 0.2 CPU |
-| Daily Desk | 200 connected clients, 200 asks in flight | 200/200 replies, p95 about 99s | listener dispatch saturated before OVOS |
-| Daily Desk | 200 simultaneous opens and asks | 140/200 replies; most failures were WSS open timeouts | websocket open/admission path saturated |
-| Learning Lounge | 100 held clients, 50 asks in flight | 100/100 replies, p95 about 32s | listener near 1.1 CPU, busiest OVOS worker about 0.3 CPU |
+| Daily Desk | 100 held clients, 25 asks in flight | 100/100 replies, p95 about 13s | clean run; listener not saturated |
+| Daily Desk | 200 held clients, 50 asks in flight | 200/200 replies, p95 about 25s | listener doing most of the work; OVOS still low |
+| Daily Desk | 400 held clients, 100 asks in flight | 400/400 replies, p95 about 52s, p99 about 72s | listener around 1.17 CPU; busiest OVOS worker around 0.44 CPU |
+| Learning Lounge | 200 held clients, 50 asks in flight | 200/200 replies, p95 about 29s | listener around 1.15 CPU; OVOS lower than listener |
+
+An earlier 200-socket burst reused the same preview-bridge credential for every
+connection and produced WSS open timeouts. That is useful as a transport/admission
+stress case, but it is not a clean model of many independent clients.
 
 That pattern means adding OVOS replicas alone does not solve one-hub concurrency. The
 first pressure point is the websocket/listener process: handshake admission, message
 decode/logging, policy review, and agent-bus injection all pass through one process-local
 router. OVOS bus pooling and runtime replicas help once messages leave the listener, but
 the listener must first drain inbound clients quickly enough.
+
+The control plane has its own burst cost: provisioning hundreds of disposable clients and
+credential secrets took minutes. Large launches should pre-provision client identities or
+batch onboarding separately from runtime WSS capacity tests.
 
 Near-term mitigations:
 
@@ -170,6 +180,7 @@ Near-term mitigations:
   websocket open;
 - apply bounded admission/backpressure so clients fail fast instead of waiting for long
   socket or query timeouts;
+- benchmark with independent client identities when measuring user concurrency;
 - shard load across more logical hubs when interactive latency matters.
 
 Active-active listener scale needs a larger change: a shared connection/session registry,
