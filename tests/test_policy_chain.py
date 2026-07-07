@@ -139,6 +139,24 @@ class TestPolicyChainBinary(unittest.TestCase):
 
 
 class TestPolicyChainAdmissionBudget(unittest.TestCase):
+    def test_message_review_skips_timers_without_budget(self):
+        chain = PolicyChain(policies=[_AllowPolicy()])
+
+        with patch("hivemind_core.policy.time.monotonic") as monotonic:
+            verdict = chain.review(_msg(), client=None)
+
+        self.assertFalse(verdict.denied)
+        monotonic.assert_not_called()
+
+    def test_binary_review_skips_timers_without_budget(self):
+        chain = PolicyChain(policies=[_AllowPolicy()])
+
+        with patch("hivemind_core.policy.time.monotonic") as monotonic:
+            verdict = chain.review_binary(b"x", client=None)
+
+        self.assertFalse(verdict.denied)
+        monotonic.assert_not_called()
+
     def test_message_review_returns_retryable_busy_when_budget_exceeded(self):
         chain = PolicyChain(
             policies=[_AllowPolicy()],

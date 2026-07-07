@@ -171,11 +171,14 @@ class PolicyChain:
         skip any policy based on it. Policies that care about admin
         status branch on ``client.is_admin`` themselves.
         """
-        started_at = time.monotonic()
+        budget_enabled = bool(self.policies) and (
+            self.warn_review_ms is not None or self.max_review_ms is not None
+        )
+        started_at = time.monotonic() if budget_enabled else 0.0
         accumulated: List = []
         for i, policy in enumerate(self.policies):
             is_optional = self._optional[i] if i < len(self._optional) else False
-            policy_started_at = time.monotonic()
+            policy_started_at = time.monotonic() if budget_enabled else 0.0
             try:
                 verdict = policy.review(message, client)
             except Exception as e:
@@ -184,12 +187,13 @@ class PolicyChain:
                         f"optional policy {type(policy).__name__} raised; "
                         f"continuing chain: {e}"
                     )
-                    budget_verdict = self._budget_verdict(
-                        started_at, policy_started_at, policy, "message",
-                    )
-                    if budget_verdict is not None:
-                        self._fire_on_verdict(policy, budget_verdict)
-                        return budget_verdict
+                    if budget_enabled:
+                        budget_verdict = self._budget_verdict(
+                            started_at, policy_started_at, policy, "message",
+                        )
+                        if budget_verdict is not None:
+                            self._fire_on_verdict(policy, budget_verdict)
+                            return budget_verdict
                     continue
                 LOG.exception(f"policy {type(policy).__name__} raised")
                 verdict = Verdict.deny(
@@ -215,12 +219,13 @@ class PolicyChain:
                         mutation=type(mutation).__name__,
                         error=str(e),
                     )
-            budget_verdict = self._budget_verdict(
-                started_at, policy_started_at, policy, "message",
-            )
-            if budget_verdict is not None:
-                self._fire_on_verdict(policy, budget_verdict)
-                return budget_verdict
+            if budget_enabled:
+                budget_verdict = self._budget_verdict(
+                    started_at, policy_started_at, policy, "message",
+                )
+                if budget_verdict is not None:
+                    self._fire_on_verdict(policy, budget_verdict)
+                    return budget_verdict
         final = Verdict.allow(*accumulated)
         # Synthetic chain-complete trace: fire on_verdict with policy=None
         # so tracers can see the full accumulated mutation set.
@@ -246,10 +251,13 @@ class PolicyChain:
         ``Client.is_admin`` is informational only here too — no
         runner-level bypass; policies branch on it themselves.
         """
-        started_at = time.monotonic()
+        budget_enabled = bool(self.policies) and (
+            self.warn_review_ms is not None or self.max_review_ms is not None
+        )
+        started_at = time.monotonic() if budget_enabled else 0.0
         for i, policy in enumerate(self.policies):
             is_optional = self._optional[i] if i < len(self._optional) else False
-            policy_started_at = time.monotonic()
+            policy_started_at = time.monotonic() if budget_enabled else 0.0
             try:
                 verdict = policy.review_binary(payload, client)
             except Exception as e:
@@ -258,11 +266,12 @@ class PolicyChain:
                         f"optional policy {type(policy).__name__} "
                         f"review_binary raised; continuing chain: {e}"
                     )
-                    budget_verdict = self._budget_verdict(
-                        started_at, policy_started_at, policy, "binary",
-                    )
-                    if budget_verdict is not None:
-                        return budget_verdict
+                    if budget_enabled:
+                        budget_verdict = self._budget_verdict(
+                            started_at, policy_started_at, policy, "binary",
+                        )
+                        if budget_verdict is not None:
+                            return budget_verdict
                     continue
                 LOG.exception(f"policy {type(policy).__name__} review_binary raised")
                 return Verdict.deny(
@@ -276,11 +285,12 @@ class PolicyChain:
                     f"policy {type(policy).__name__} returned mutations "
                     f"on a binary verdict — ignored (not supported)"
                 )
-            budget_verdict = self._budget_verdict(
-                started_at, policy_started_at, policy, "binary",
-            )
-            if budget_verdict is not None:
-                return budget_verdict
+            if budget_enabled:
+                budget_verdict = self._budget_verdict(
+                    started_at, policy_started_at, policy, "binary",
+                )
+                if budget_verdict is not None:
+                    return budget_verdict
         return Verdict.allow()
 
     def observe(self, message: Message,
