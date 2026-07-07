@@ -611,7 +611,8 @@ class HiveMindListenerProtocol:
 
         if client.peer in self.clients:
             self.clients.pop(client.peer)
-        self._last_seen_updates.pop(client.key, None)
+        if not any(conn.key == client.key for conn in self.clients.values()):
+            self._last_seen_updates.pop(client.key, None)
         client.disconnect()
         message = Message(
             "hive.client.disconnect",

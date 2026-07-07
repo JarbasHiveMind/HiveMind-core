@@ -41,8 +41,13 @@ def _protocol(db):
     )
 
 
-def _client():
-    return SimpleNamespace(key="access-key", peer="peer")
+def _client(peer="peer", key="access-key"):
+    return SimpleNamespace(
+        disconnect=MagicMock(),
+        key=key,
+        peer=peer,
+        sess=SimpleNamespace(serialize=MagicMock(return_value={})),
+    )
 
 
 def test_last_seen_updates_are_debounced_per_client_key():
@@ -74,3 +79,38 @@ def test_zero_last_seen_interval_preserves_per_message_updates():
     assert db.lookups == 2
     assert db.updates == 2
     assert user.last_seen == 101.0
+
+
+def test_disconnect_keeps_debounce_cache_for_shared_key_sibling():
+    proto = _protocol(FakeClientDatabase(SimpleNamespace(last_seen=0)))
+    disconnected = _client(peer="peer-1")
+    sibling = _client(peer="peer-2")
+    proto.clients = {
+        disconnected.peer: disconnected,
+        sibling.peer: sibling,
+    }
+    proto._last_seen_updates["access-key"] = 100.0
+
+    proto.handle_client_disconnected(disconnected)
+
+    assert disconnected.peer not in proto.clients
+    assert sibling.peer in proto.clients
+    assert proto._last_seen_updates["access-key"] == 100.0
+    disconnected.disconnect.assert_called_once_with()
+
+
+def test_disconnect_clears_debounce_cache_after_last_key_peer_leaves():
+    proto = _protocol(FakeClientDatabase(SimpleNamespace(last_seen=0)))
+    disconnected = _client(peer="peer-1")
+    other_key = _client(peer="peer-2", key="other-key")
+    proto.clients = {
+        disconnected.peer: disconnected,
+        other_key.peer: other_key,
+    }
+    proto._last_seen_updates["access-key"] = 100.0
+    proto._last_seen_updates["other-key"] = 101.0
+
+    proto.handle_client_disconnected(disconnected)
+
+    assert "access-key" not in proto._last_seen_updates
+    assert proto._last_seen_updates["other-key"] == 101.0
