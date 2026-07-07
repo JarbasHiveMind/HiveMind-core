@@ -462,6 +462,10 @@ class HiveMindListenerProtocol:
         bus.emit(message)
         return True
 
+    @staticmethod
+    def _agent_bus_rejection_error() -> RuntimeError:
+        return RuntimeError("agent bus rejected message")
+
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_connect(client)
@@ -1681,12 +1685,13 @@ class HiveMindListenerProtocol:
             self._send_agent_bus_error(client, message, exc)
             return
         if not emitted:
-            rejection_error = RuntimeError("agent bus rejected message")
             LOG.error(
                 f"agent bus rejected '{message.msg_type}' "
                 f"from client: {client.peer}"
             )
-            self._send_agent_bus_error(client, message, rejection_error)
+            self._send_agent_bus_error(
+                client, message, self._agent_bus_rejection_error()
+            )
             return
 
         self.policy_chain.observe(message, client)
