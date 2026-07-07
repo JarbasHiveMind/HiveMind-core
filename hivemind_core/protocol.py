@@ -4,6 +4,8 @@
 import dataclasses
 import json
 import os
+import queue
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -388,6 +390,8 @@ class HiveMindListenerProtocol:
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
     query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
     default_lang = "en-US"
+    _event_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
+    _event_workers_started: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self):
         self.clients = {}
@@ -401,6 +405,7 @@ class HiveMindListenerProtocol:
         self._seen_flood_ids: set = set()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self.agent_protocol.hm_protocol = self
+        self._start_event_workers()
         if not self.binary_data_protocol:
             # just logs received messages
             self.binary_data_protocol = BinaryDataHandlerProtocol(hm_protocol=self,
@@ -439,6 +444,65 @@ class HiveMindListenerProtocol:
                     policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
                     _optional=[False, *configured_optional],
                 )
+
+    @staticmethod
+    def _event_queue_size() -> int:
+        try:
+            value = int(get_server_config().get("lifecycle_event_queue_size", 256))
+        except (TypeError, ValueError):
+            value = 256
+        return max(1, value)
+
+    @staticmethod
+    def _event_worker_count() -> int:
+        try:
+            value = int(get_server_config().get("lifecycle_event_workers", 1))
+        except (TypeError, ValueError):
+            value = 1
+        return max(1, value)
+
+    def _start_event_workers(self) -> None:
+        """Start the best-effort agent-event queue used for telemetry only."""
+        if self._event_workers_started:
+            return
+        self._event_queue = queue.Queue(maxsize=self._event_queue_size())
+        self._event_workers_started = True
+        for index in range(self._event_worker_count()):
+            thread = threading.Thread(
+                target=self._event_worker,
+                name=f"hivemind-agent-events-{index + 1}",
+                daemon=True,
+            )
+            thread.start()
+
+    def _event_worker(self) -> None:
+        while True:
+            item = self._event_queue.get()
+            try:
+                client, message = item
+                bus = self.get_bus(client)
+                bus.emit(message)
+            except Exception as exc:
+                LOG.warning(
+                    "Failed to emit HiveMind agent event "
+                    f"{getattr(message, 'msg_type', 'unknown')}: "
+                    f"{type(exc).__name__}: {exc!r}"
+                )
+            finally:
+                self._event_queue.task_done()
+
+    def _emit_agent_event(self, message: Message,
+                          client: HiveMindClientConnection) -> None:
+        """Queue non-critical agent telemetry without blocking the hot path."""
+        if self._event_queue is None:
+            self._start_event_workers()
+        try:
+            self._event_queue.put_nowait((client, message))
+        except queue.Full:
+            LOG.warning(
+                "Dropping HiveMind agent event because the lifecycle queue is full: "
+                f"{message.msg_type}"
+            )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # The agent decides which bus a client's messages land on. Default
@@ -490,8 +554,7 @@ class HiveMindListenerProtocol:
             {"source": client.peer},
         )
 
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_agent_event(message, client)
 
         crypto_min = (
             ProtocolVersion.ONE
@@ -610,8 +673,7 @@ class HiveMindListenerProtocol:
             {"key": client.key},
             {"source": client.peer, "session": client.sess.serialize()},
         )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_agent_event(message, client)
 
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
         try:
@@ -635,8 +697,7 @@ class HiveMindListenerProtocol:
             {"error": "invalid access key", "peer": client.peer},
             {"source": client.peer},
         )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_agent_event(message, client)
 
     def handle_invalid_protocol_version(self, client: HiveMindClientConnection):
         try:
@@ -1423,10 +1484,12 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
-        bus = self.get_bus(client)
-        bus.emit(Message("hive.query.received",
-                         {"query_id": query_id, "originator_peer": originator_peer},
-                         {"source": client.peer}))
+        self._emit_agent_event(
+            Message("hive.query.received",
+                    {"query_id": query_id, "originator_peer": originator_peer},
+                    {"source": client.peer}),
+            client,
+        )
 
         if self._answer_query_locally(message, client, query_id, originator_peer,
                                       HiveMessageType.QUERY, message.route,
@@ -1476,10 +1539,12 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
-        bus = self.get_bus(client)
-        bus.emit(Message("hive.cascade.received",
-                         {"query_id": query_id, "originator_peer": originator_peer},
-                         {"source": client.peer}))
+        self._emit_agent_event(
+            Message("hive.cascade.received",
+                    {"query_id": query_id, "originator_peer": originator_peer},
+                    {"source": client.peer}),
+            client,
+        )
 
         self._answer_query_locally(
             message, client, query_id, originator_peer, HiveMessageType.CASCADE,
