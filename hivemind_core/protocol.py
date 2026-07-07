@@ -1670,7 +1670,6 @@ class HiveMindListenerProtocol:
         # send client message to internal mycroft bus
         LOG.debug(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
-        message.context["source"] = client.peer
 
         try:
             emitted = self._emit_agent_message(message, client)
@@ -1682,13 +1681,12 @@ class HiveMindListenerProtocol:
             self._send_agent_bus_error(client, message, exc)
             return
         if not emitted:
+            rejection_error = RuntimeError("agent bus rejected message")
             LOG.error(
                 f"agent bus rejected '{message.msg_type}' "
                 f"from client: {client.peer}"
             )
-            self._send_agent_bus_error(
-                client, message, RuntimeError("agent bus rejected message")
-            )
+            self._send_agent_bus_error(client, message, rejection_error)
             return
 
         self.policy_chain.observe(message, client)
