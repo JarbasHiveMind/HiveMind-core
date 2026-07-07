@@ -56,14 +56,17 @@ def test_last_seen_updates_are_debounced_per_client_key():
     proto = _protocol(db)
     proto.last_seen_update_interval = 30
 
-    with patch("hivemind_core.protocol.time.time", side_effect=[100.0, 105.0, 131.0]):
+    with (
+        patch("hivemind_core.protocol.time.monotonic", side_effect=[100.0, 105.0, 131.0]),
+        patch("hivemind_core.protocol.time.time", side_effect=[1000.0, 1031.0]),
+    ):
         proto.update_last_seen(_client())
         proto.update_last_seen(_client())
         proto.update_last_seen(_client())
 
     assert db.lookups == 2
     assert db.updates == 2
-    assert user.last_seen == 131.0
+    assert user.last_seen == 1031.0
 
 
 def test_zero_last_seen_interval_preserves_per_message_updates():
@@ -72,13 +75,17 @@ def test_zero_last_seen_interval_preserves_per_message_updates():
     proto = _protocol(db)
     proto.last_seen_update_interval = 0
 
-    with patch("hivemind_core.protocol.time.time", side_effect=[100.0, 101.0]):
+    with (
+        patch("hivemind_core.protocol.time.monotonic") as monotonic,
+        patch("hivemind_core.protocol.time.time", side_effect=[100.0, 101.0]),
+    ):
         proto.update_last_seen(_client())
         proto.update_last_seen(_client())
 
     assert db.lookups == 2
     assert db.updates == 2
     assert user.last_seen == 101.0
+    monotonic.assert_not_called()
 
 
 def test_disconnect_keeps_debounce_cache_for_shared_key_sibling():

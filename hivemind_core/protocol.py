@@ -570,17 +570,15 @@ class HiveMindListenerProtocol:
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
-        now = time.time()
         if not hasattr(self, "_last_seen_updates"):
             self._last_seen_updates = {}
         update_interval = getattr(self, "last_seen_update_interval", 0)
-        last_update = self._last_seen_updates.get(client.key)
-        if (
-                update_interval > 0
-                and last_update is not None
-                and now - last_update < update_interval
-        ):
-            return
+        mono_now = None
+        if update_interval > 0:
+            mono_now = time.monotonic()
+            last_update = self._last_seen_updates.get(client.key)
+            if last_update is not None and mono_now - last_update < update_interval:
+                return
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
             if user is None:
@@ -588,10 +586,11 @@ class HiveMindListenerProtocol:
                 LOG.debug(f"can not update last seen, no client for key: {client.key}")
                 self._last_seen_updates.pop(client.key, None)
                 return
-            user.last_seen = now
+            user.last_seen = time.time()
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
-            self._last_seen_updates[client.key] = now
+            if mono_now is not None:
+                self._last_seen_updates[client.key] = mono_now
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
