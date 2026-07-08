@@ -54,6 +54,9 @@ The file is created with defaults on first run if absent.
   },
 
   "policy": {
+    "warn_review_ms": null,
+    "max_review_ms": null,
+    "busy_retry_after_ms": 250,
     "chain": [
       {"module": "hivemind-ovos-agent-policy"}
     ]
@@ -189,6 +192,9 @@ cannot be removed. See [policy.md](policy.md) for the full policy chain specific
 
 ```json
 "policy": {
+  "warn_review_ms": 100,
+  "max_review_ms": 250,
+  "busy_retry_after_ms": 500,
   "chain": [
     {"module": "hivemind-ovos-agent-policy"},
     {"module": "my-quota-policy", "config": {"limit": 500}},
@@ -199,11 +205,21 @@ cannot be removed. See [policy.md](policy.md) for the full policy chain specific
 
 | Field | Type | Purpose |
 |---|---|---|
+| `warn_review_ms` | number/null | Optional warning threshold for total policy review time. Logs slow admission but does not deny. Default `null`. |
+| `max_review_ms` | number/null | Optional maximum total policy review budget. When exceeded after a policy hook returns, the chain returns retryable `policy_busy` instead of continuing to admit the message. Default `null`. |
+| `busy_retry_after_ms` | int/null | Optional retry hint included in `policy_busy.data.retry_after_ms`. Default `250`; only used when `max_review_ms` is set. |
 | `module` | str | Entry-point name of the policy plugin |
 | `config` | dict | Plugin-specific configuration passed to its constructor |
 | `optional` | bool | If `true`, exceptions in `review` log a warning and continue (allow). Default `false` (fail-closed). |
 
 Drop `hivemind-ovos-agent-policy` only if you are running a non-OVOS agent backend.
+
+The timing fields are admission guardrails, not hard kill switches. Policy
+hooks are synchronous; HiveMind checks elapsed time after each policy returns.
+Use `warn_review_ms` first to learn normal review latency, then set
+`max_review_ms` if overloaded clients should receive a retryable
+`policy_busy` denial instead of waiting until their own timeout. See
+[policy.md](policy.md#admission-timing-budget) for the exact wire format.
 
 ---
 
