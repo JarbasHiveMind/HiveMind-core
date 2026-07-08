@@ -821,6 +821,9 @@ class HiveMindListenerProtocol:
 
         if client.peer in self.clients:
             self.clients.pop(client.peer)
+        with self._last_seen_lock:
+            self._last_seen_next_flush.pop(client.key, None)
+        self.trusted_pubkeys.pop(client.key, None)
         client.disconnect()
         message = Message(
             "hive.client.disconnect",

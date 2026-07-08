@@ -141,6 +141,21 @@ def test_query_response_does_not_wait_for_agent_event_bus(monkeypatch):
     assert proto.agent_protocol.get_bus_called.wait(1)
 
 
+def test_disconnect_prunes_connection_scoped_state(monkeypatch):
+    proto = _protocol(monkeypatch)
+    client = _Client()
+    proto.clients[client.peer] = client
+    proto._last_seen_next_flush[client.key] = 123.0
+    proto.trusted_pubkeys[client.key] = "pinned-key"
+
+    proto.handle_client_disconnected(client)
+
+    assert client.disconnected
+    assert client.peer not in proto.clients
+    assert client.key not in proto._last_seen_next_flush
+    assert client.key not in proto.trusted_pubkeys
+
+
 def test_query_requests_run_concurrently(monkeypatch):
     proto = _protocol(monkeypatch)
     proto.agent_protocol = _SlowAgent(delay=0.2)
@@ -162,13 +177,14 @@ def test_query_requests_run_concurrently(monkeypatch):
             metadata={"query_id": query_id},
         )
 
-    started = time.monotonic()
     proto.handle_query_message(_request("q1", "one"), client1)
     proto.handle_query_message(_request("q2", "two"), client2)
 
     assert len(_wait_for_messages(client1, 2, timeout=1.0)) == 2
     assert len(_wait_for_messages(client2, 2, timeout=1.0)) == 2
-    assert time.monotonic() - started < 0.35
+    assert len(proto.agent_protocol.started) == 2
+    start_times = [started_at for _, started_at in proto.agent_protocol.started]
+    assert max(start_times) - min(start_times) < proto.agent_protocol.delay
 
 
 def test_query_workers_can_be_tuned_from_env(monkeypatch):

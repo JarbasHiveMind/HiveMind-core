@@ -73,6 +73,7 @@ def test_last_seen_touch_is_coalesced(monkeypatch):
     assert queued_client is client
     assert seen_at == 100.0
     db.get_client_by_api_key.assert_not_called()
+    db.update_item.assert_not_called()
 
 
 def test_last_seen_touch_requeues_after_interval(monkeypatch):
@@ -90,3 +91,9 @@ def test_last_seen_touch_requeues_after_interval(monkeypatch):
     proto.touch_last_seen(client)
 
     assert len(queued) == 2
+    first_client, first_seen_at = queued[0]
+    second_client, second_seen_at = queued[1]
+    assert first_client is client
+    assert first_seen_at == 100.0
+    assert second_client is client
+    assert second_seen_at == 106.0
