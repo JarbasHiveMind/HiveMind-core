@@ -8,6 +8,7 @@ import queue
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable, Literal
@@ -392,6 +393,13 @@ class HiveMindListenerProtocol:
     default_lang = "en-US"
     _event_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
     _event_workers_started: bool = field(default=False, init=False, repr=False)
+    _query_executor: Optional[ThreadPoolExecutor] = field(default=None, init=False, repr=False)
+    _query_slots: Optional[threading.BoundedSemaphore] = field(default=None, init=False, repr=False)
+    _query_workers_started: bool = field(default=False, init=False, repr=False)
+    _last_seen_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
+    _last_seen_workers_started: bool = field(default=False, init=False, repr=False)
+    _last_seen_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _last_seen_next_flush: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         self.clients = {}
@@ -406,6 +414,8 @@ class HiveMindListenerProtocol:
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self.agent_protocol.hm_protocol = self
         self._start_event_workers()
+        self._start_query_workers()
+        self._start_last_seen_workers()
         if not self.binary_data_protocol:
             # just logs received messages
             self.binary_data_protocol = BinaryDataHandlerProtocol(hm_protocol=self,
@@ -446,20 +456,78 @@ class HiveMindListenerProtocol:
                 )
 
     @staticmethod
-    def _event_queue_size() -> int:
+    def _server_int_setting(key: str, env_key: str, default: int, minimum: int) -> int:
+        cfg = get_server_config()
+        raw = cfg.get(key) if key in cfg else os.environ.get(env_key, default)
         try:
-            value = int(get_server_config().get("lifecycle_event_queue_size", 256))
+            value = int(raw)
         except (TypeError, ValueError):
-            value = 256
-        return max(1, value)
+            value = default
+        return max(minimum, value)
+
+    @staticmethod
+    def _server_float_setting(key: str, env_key: str, default: float, minimum: float) -> float:
+        cfg = get_server_config()
+        raw = cfg.get(key) if key in cfg else os.environ.get(env_key, default)
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            value = default
+        return max(minimum, value)
+
+    @staticmethod
+    def _event_queue_size() -> int:
+        return HiveMindListenerProtocol._server_int_setting(
+            "lifecycle_event_queue_size",
+            "HIVEMIND_LIFECYCLE_EVENT_QUEUE_SIZE",
+            256,
+            1,
+        )
 
     @staticmethod
     def _event_worker_count() -> int:
-        try:
-            value = int(get_server_config().get("lifecycle_event_workers", 1))
-        except (TypeError, ValueError):
-            value = 1
-        return max(1, value)
+        return HiveMindListenerProtocol._server_int_setting(
+            "lifecycle_event_workers",
+            "HIVEMIND_LIFECYCLE_EVENT_WORKERS",
+            1,
+            1,
+        )
+
+    @staticmethod
+    def _query_worker_count() -> int:
+        return HiveMindListenerProtocol._server_int_setting(
+            "query_workers",
+            "HIVEMIND_QUERY_WORKERS",
+            16,
+            1,
+        )
+
+    @staticmethod
+    def _query_queue_size() -> int:
+        return HiveMindListenerProtocol._server_int_setting(
+            "query_queue_size",
+            "HIVEMIND_QUERY_QUEUE_SIZE",
+            256,
+            0,
+        )
+
+    @staticmethod
+    def _last_seen_queue_size() -> int:
+        return HiveMindListenerProtocol._server_int_setting(
+            "last_seen_queue_size",
+            "HIVEMIND_LAST_SEEN_QUEUE_SIZE",
+            1024,
+            1,
+        )
+
+    @staticmethod
+    def _last_seen_flush_interval() -> float:
+        return HiveMindListenerProtocol._server_float_setting(
+            "last_seen_flush_interval",
+            "HIVEMIND_LAST_SEEN_FLUSH_INTERVAL",
+            30.0,
+            0.0,
+        )
 
     def _start_event_workers(self) -> None:
         """Start the best-effort agent-event queue used for telemetry only."""
@@ -503,6 +571,92 @@ class HiveMindListenerProtocol:
                 "Dropping HiveMind agent event because the lifecycle queue is full: "
                 f"{message.msg_type}"
             )
+
+    def _start_query_workers(self) -> None:
+        """Start the bounded pool used for local QUERY/CASCADE answering."""
+        if self._query_workers_started:
+            return
+        workers = self._query_worker_count()
+        self._query_executor = ThreadPoolExecutor(
+            max_workers=workers,
+            thread_name_prefix="hivemind-query",
+        )
+        self._query_slots = threading.BoundedSemaphore(
+            workers + self._query_queue_size()
+        )
+        self._query_workers_started = True
+
+    def _submit_query_worker(self, fn, *args) -> bool:
+        if self._query_executor is None or self._query_slots is None:
+            self._start_query_workers()
+        assert self._query_executor is not None
+        assert self._query_slots is not None
+        if not self._query_slots.acquire(blocking=False):
+            return False
+
+        def _run():
+            try:
+                fn(*args)
+            except Exception:
+                LOG.exception("Unhandled HiveMind query worker error")
+            finally:
+                self._query_slots.release()
+
+        self._query_executor.submit(_run)
+        return True
+
+    def _start_last_seen_workers(self) -> None:
+        """Start the best-effort writer for client activity timestamps."""
+        if getattr(self, "_last_seen_workers_started", False):
+            return
+        self._last_seen_queue = queue.Queue(maxsize=self._last_seen_queue_size())
+        self._last_seen_workers_started = True
+        if not hasattr(self, "_last_seen_lock"):
+            self._last_seen_lock = threading.Lock()
+        if not hasattr(self, "_last_seen_next_flush"):
+            self._last_seen_next_flush = {}
+        thread = threading.Thread(
+            target=self._last_seen_worker,
+            name="hivemind-last-seen",
+            daemon=True,
+        )
+        thread.start()
+
+    def _last_seen_worker(self) -> None:
+        while True:
+            item = self._last_seen_queue.get()
+            try:
+                client, seen_at = item
+                self.update_last_seen(client, seen_at=seen_at)
+            except Exception as exc:
+                LOG.warning(
+                    "Failed to flush HiveMind last_seen update: "
+                    f"{type(exc).__name__}: {exc!r}"
+                )
+            finally:
+                self._last_seen_queue.task_done()
+
+    def touch_last_seen(self, client: HiveMindClientConnection) -> None:
+        """Record activity without blocking message handling on Redis writes."""
+        now = time.time()
+        client.last_seen = now
+        interval = self._last_seen_flush_interval()
+        if not hasattr(self, "_last_seen_lock"):
+            self._last_seen_lock = threading.Lock()
+        if not hasattr(self, "_last_seen_next_flush"):
+            self._last_seen_next_flush = {}
+        with self._last_seen_lock:
+            next_flush = self._last_seen_next_flush.get(client.key, 0.0)
+            if now < next_flush:
+                return
+            self._last_seen_next_flush[client.key] = now + interval
+
+        if self._last_seen_queue is None:
+            self._start_last_seen_workers()
+        try:
+            self._last_seen_queue.put_nowait((client, now))
+        except queue.Full:
+            LOG.warning("Dropping last_seen update because the queue is full")
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # The agent decides which bus a client's messages land on. Default
@@ -637,7 +791,7 @@ class HiveMindListenerProtocol:
         # if client is in protocol V1 -> self.handle_handshake_message
         # clients can rotate their pubkey or session_key by sending a new handshake
 
-    def update_last_seen(self, client: HiveMindClientConnection):
+    def update_last_seen(self, client: HiveMindClientConnection, seen_at: Optional[float] = None):
         """track timestamps of last client interaction"""
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
@@ -645,7 +799,7 @@ class HiveMindListenerProtocol:
                 # key was revoked / never existed — nothing to update
                 LOG.debug(f"can not update last seen, no client for key: {client.key}")
                 return
-            user.last_seen = time.time()
+            user.last_seen = seen_at if seen_at is not None else time.time()
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
 
@@ -721,8 +875,7 @@ class HiveMindListenerProtocol:
             {"error": "protocol error", "peer": client.peer},
             {"source": client.peer},
         )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_agent_event(message, client)
 
     def handle_message(self, message: HiveMessage, client: HiveMindClientConnection):
         """
@@ -765,7 +918,7 @@ class HiveMindListenerProtocol:
         else:
             self.handle_unknown_message(message, client)
 
-        self.update_last_seen(client)
+        self.touch_last_seen(client)
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(
@@ -1474,6 +1627,22 @@ class HiveMindListenerProtocol:
             self._route_query_response(message, client)
             return
 
+        if not self._submit_query_worker(
+                self._handle_query_request, message, client, metadata):
+            LOG.warning("HiveMind query worker queue is full")
+            query_id = metadata.get("query_id", str(uuid.uuid4()))
+            originator_peer = metadata.get("originator_peer", client.peer)
+            error_bus = Message("hive.query.timeout",
+                                {"query_id": query_id, "error": "busy"})
+            client.send(self._build_query_response(
+                HiveMessageType.QUERY, error_bus, query_id,
+                originator_peer, self.peer, route=message.route))
+        return
+
+    def _handle_query_request(self, message: HiveMessage,
+                              client: HiveMindClientConnection,
+                              metadata: dict):
+        """Answer or escalate one QUERY request off the websocket hot path."""
         payload = self._unpack_message(message, client)
         if not client.can_escalate:
             LOG.warning("Received QUERY from client without escalate permission")
