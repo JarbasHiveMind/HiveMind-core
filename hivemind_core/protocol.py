@@ -136,6 +136,9 @@ class HiveMindClientConnection:
     site_id: str = "unknown"
     can_escalate: bool = True
     can_propagate: bool = True
+    # BROADCAST additionally requires is_admin; this narrows an admin that
+    # should not be able to broadcast. Default True preserves prior behaviour.
+    can_broadcast: bool = True
     is_admin: bool = False
     last_seen: float = -1
 
@@ -1059,7 +1062,7 @@ class HiveMindListenerProtocol:
         """
         payload = self._unpack_message(message, client)
 
-        if not client.is_admin:
+        if not client.is_admin or not client.can_broadcast:
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
