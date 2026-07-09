@@ -4,10 +4,8 @@
 import dataclasses
 import json
 import os
-import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Optional, Callable, Literal
@@ -61,6 +59,7 @@ except ImportError:
     def start_noise_handshake(*args, **kwargs):  # pragma: no cover
         raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
 from hivemind_core.database import ClientDatabase
+from hivemind_core.workers import BoundedWorkerPool
 from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from hivemind_plugin_manager.database import Client
@@ -116,6 +115,12 @@ class UnencryptedMessageError(ValueError):
 class HiveMindClientConnection:
     """represents a connection to the hivemind listener"""
     key: str
+    # Supplied by the transport. Must be safe to call from any thread:
+    # QUERY answers are produced on a worker pool (hivemind_core.workers),
+    # not on the thread that owns the socket. Transports whose socket is
+    # thread-affine hand the write back to their own loop — the websocket
+    # protocol wraps write_message in IOLoop.add_callback; paho's publish()
+    # locks internally.
     send_msg: Callable[[str, bool], None]
     disconnect: Callable[[], None]
 
@@ -390,11 +395,9 @@ class HiveMindListenerProtocol:
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
     query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
     default_lang = "en-US"
-    query_workers = 16
-    query_queue_size = 256
-    _query_executor: Optional[ThreadPoolExecutor] = field(default=None, init=False, repr=False)
-    _query_slots: Optional[threading.BoundedSemaphore] = field(default=None, init=False, repr=False)
-    _query_workers_started: bool = field(default=False, init=False, repr=False)
+    query_workers = 16  # threads answering QUERY off the transport thread
+    query_queue_size = 256  # queued queries before new ones are refused
+    _query_pool: Optional[BoundedWorkerPool] = field(default=None, init=False, repr=False)
 
     def __post_init__(self):
         self.clients = {}
@@ -447,41 +450,15 @@ class HiveMindListenerProtocol:
                     _optional=[False, *configured_optional],
                 )
 
-    def _start_query_workers(self) -> None:
-        """Start the bounded pool used for local QUERY answering."""
-        if self._query_workers_started:
-            return
-        self._query_executor = ThreadPoolExecutor(
-            max_workers=self.query_workers,
-            thread_name_prefix="hivemind-query",
-        )
-        self._query_slots = threading.BoundedSemaphore(
-            self.query_workers + self.query_queue_size
-        )
-        self._query_workers_started = True
-
     def _submit_query_worker(self, fn, *args) -> bool:
-        if self._query_executor is None or self._query_slots is None:
-            self._start_query_workers()
-        assert self._query_executor is not None
-        assert self._query_slots is not None
-        if not self._query_slots.acquire(blocking=False):
-            return False
-
-        def _run() -> None:
-            try:
-                fn(*args)
-            except Exception:
-                LOG.exception("Unhandled HiveMind query worker error")
-            finally:
-                self._query_slots.release()
-
-        try:
-            self._query_executor.submit(_run)
-        except Exception:
-            self._query_slots.release()
-            raise
-        return True
+        """Answer one QUERY off the transport thread. False when saturated."""
+        if self._query_pool is None:
+            self._query_pool = BoundedWorkerPool(
+                max_workers=self.query_workers,
+                queue_size=self.query_queue_size,
+                thread_name_prefix="hivemind-query",
+            )
+        return self._query_pool.submit(fn, *args)
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # The agent decides which bus a client's messages land on. Default
