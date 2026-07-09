@@ -147,27 +147,16 @@ fleets.
 
 ### Load-test signal
 
-A July 2026 production-style WSS benchmark on Thalovant public hubs showed the current
-limit clearly. The corrected run used direct WSS through the Node SDK with disposable
-HiveMind client identities, so each connection authenticated as a real client instead of
-sharing one preview credential.
-
-| Hub | Shape | Result | Bottleneck signal |
-|---|---|---|---|
-| Daily Desk | 100 held clients, 25 asks in flight | 100/100 replies, p95 about 13s | clean run; listener not saturated |
-| Daily Desk | 200 held clients, 50 asks in flight | 200/200 replies, p95 about 25s | listener doing most of the work; OVOS still low |
-| Daily Desk | 400 held clients, 100 asks in flight | 400/400 replies, p95 about 52s, p99 about 72s | listener around 1.17 CPU; busiest OVOS worker around 0.44 CPU |
-| Learning Lounge | 200 held clients, 50 asks in flight | 200/200 replies, p95 about 29s | listener around 1.15 CPU; OVOS lower than listener |
-
-An earlier 200-socket burst reused the same preview-bridge credential for every
-connection and produced WSS open timeouts. That is useful as a transport/admission
-stress case, but it is not a clean model of many independent clients.
+Recent production-style WSS benchmarks with many independent client identities showed a
+consistent pattern: one logical hub can complete concurrent direct WSS requests, but high
+fan-in increases tail latency inside the listener before OVOS runtime CPU becomes the only
+pressure point.
 
 That pattern means adding OVOS replicas alone does not solve one-hub concurrency. The
 first pressure point is the websocket/listener process: handshake admission, message
 decode/logging, policy review, and agent-bus injection all pass through one process-local
-router. OVOS bus pooling and runtime replicas help once messages leave the listener, but
-the listener must first drain inbound clients quickly enough.
+router. Runtime replicas help once messages leave the listener, but the listener must
+first drain inbound clients quickly enough.
 
 The control plane has its own burst cost: provisioning hundreds of disposable clients and
 credential secrets took minutes. Large launches should pre-provision client identities or
@@ -178,8 +167,6 @@ Near-term mitigations:
 - keep per-message and per-disconnect logs at debug level on hot paths;
 - use direct database lookup for API-key admission instead of full database sync on every
   websocket open;
-- apply bounded admission/backpressure so clients fail fast instead of waiting for long
-  socket or query timeouts;
 - benchmark with independent client identities when measuring user concurrency;
 - shard load across more logical hubs when interactive latency matters.
 
