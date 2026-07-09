@@ -25,7 +25,7 @@ Store client credentials anywhere: SQLite, PostgreSQL, a REST API, an in-memory 
 
 ```python
 from dataclasses import dataclass
-from typing import List, Iterable, Optional, Union
+from typing import List, Iterable, Union
 from hivemind_plugin_manager.database import AbstractDB, Client
 
 @dataclass
@@ -35,12 +35,6 @@ class MyDB(AbstractDB):
     def __len__(self) -> int: ...
     def __iter__(self) -> Iterable[Client]: ...
 ```
-
-**Recommended fast path:** high-traffic deployments should also implement
-`get_client_by_api_key(api_key: str) -> Optional[Client]`. HiveMind Core calls
-that method directly when present and falls back to `search_by_value("api_key",
-api_key)` for older backends. This keeps authentication and policy admission
-from scanning the whole client set on every connection or dry-run lookup.
 
 **Schema migrations:** Override `migrate(from_version: int)` to handle data migrations
 when `SCHEMA_VERSION` bumps. Implementations must be idempotent. The base class

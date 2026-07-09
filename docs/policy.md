@@ -104,48 +104,6 @@ revoke with `blacklist-msg`. Empty whitelist ⇒ deny everything.
 There is no `policy.fail_open` knob. The chain is fail-closed by
 design: a misbehaving policy denies rather than admits.
 
-### Admission timing budget
-
-Policy plugins run on the admission path, before a message or binary
-payload reaches the agent backend. A slow policy can therefore make
-clients wait even when the server would rather shed load and let the
-client retry. The optional timing budget is a guardrail for that case.
-
-```yaml
-policy:
-  warn_review_ms: 100
-  max_review_ms: 250
-  busy_retry_after_ms: 500
-  chain:
-    - module: hivemind-ovos-agent-policy
-    - module: my-quota-policy
-```
-
-The fields are intentionally chain-level, not per-plugin:
-
-- `warn_review_ms` logs `policy admission slow` when total chain review
-  time crosses the warning threshold. This is observability only; the
-  message is still admitted or denied by the normal policy result.
-- `max_review_ms` turns an otherwise continuing/allowing review into a
-  retryable `policy_busy` denial once total chain review time crosses
-  the maximum budget.
-- `busy_retry_after_ms` is copied into the `policy_busy` payload so a
-  client or gateway can back off before retrying.
-
-If both `warn_review_ms` and `max_review_ms` are unset, HiveMind keeps
-the legacy hot path: no timing calls are made around policy review.
-
-Important limitation: this is not a hard preemptive timeout. Policy
-hooks are synchronous, so HiveMind checks the budget after each policy
-hook returns or after an optional policy raises. A plugin that blocks
-inside its own `review()` still needs to be fixed or moved off the hot
-path. The budget prevents a slow-but-returning admission chain from
-letting already-overloaded clients sit until their own request timeout.
-
-`policy_busy` is retryable. It should not be treated like an ACL deny or
-authentication failure. Clients that understand the code should retry
-after `data.retry_after_ms` when present, ideally with jitter.
-
 ## Deny-Code Reference
 
 Codes returned by built-in policies and the chain runner:
@@ -153,7 +111,6 @@ Codes returned by built-in policies and the chain runner:
 | Code | Source | Meaning |
 | --- | --- | --- |
 | `acl_disallowed_type` | `MessageTypeACLPolicy` | `msg_type` not in `allowed_types` |
-| `policy_busy` | `PolicyChain` | Policy admission exceeded `policy.max_review_ms`; retry later |
 | `policy_error` | `PolicyChain` | A policy or mutation raised; data carries `policy`, `error`, and optionally `mutation` |
 | `policy_chain_unavailable` | `DenyAllPolicy` | Chain construction failed at startup |
 | `session_id_default_forbidden` | `OVOSAgentPolicy` | Client tried to use the reserved `default` session id |
@@ -191,25 +148,3 @@ payload:
   (`msg_type`, `allowed`, `policy`, `error`, etc. depending on code).
 
 Clients SHOULD branch on `code`; `reason` is informational only.
-
-For `policy_busy`, `data` includes timing details:
-
-```json
-{
-  "denied_type": "recognizer_loop:utterance",
-  "code": "policy_busy",
-  "reason": "policy admission exceeded time budget",
-  "data": {
-    "path": "message",
-    "policy": "MyQuotaPolicy",
-    "policy_ms": 180.4,
-    "elapsed_ms": 276.2,
-    "budget_ms": 250.0,
-    "retry_after_ms": 500
-  }
-}
-```
-
-The `path` field is `message` for normal bus messages and `binary` for
-binary payloads. `policy_ms` is the last policy hook duration; `elapsed_ms`
-is the total chain review time at the point the budget was checked.

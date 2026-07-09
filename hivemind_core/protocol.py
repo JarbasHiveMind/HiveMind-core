@@ -438,10 +438,6 @@ class HiveMindListenerProtocol:
                 self.policy_chain = PolicyChain(
                     policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
                     _optional=[False, *configured_optional],
-                    on_verdict=chain.on_verdict,
-                    warn_review_ms=chain.warn_review_ms,
-                    max_review_ms=chain.max_review_ms,
-                    busy_retry_after_ms=chain.busy_retry_after_ms,
                 )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
