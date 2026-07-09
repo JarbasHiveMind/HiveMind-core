@@ -570,8 +570,6 @@ class HiveMindListenerProtocol:
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
-        if not hasattr(self, "_last_seen_updates"):
-            self._last_seen_updates = {}
         update_interval = getattr(self, "last_seen_update_interval", 0)
         mono_now = None
         if update_interval > 0:
