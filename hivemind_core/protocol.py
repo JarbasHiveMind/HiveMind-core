@@ -120,7 +120,6 @@ class HiveMindClientConnection:
     sess: Session = dataclasses.field(default_factory=Session)  # unique session per client
     name: str = "AnonClient"
     node_type: HiveMindNodeType = HiveMindNodeType.CANDIDATE_NODE
-    handshake: Optional[HandShake] = None
     pswd_handshake: Optional[PasswordHandShake] = None
 
     crypto_key: Optional[str] = None
@@ -153,6 +152,12 @@ class HiveMindClientConnection:
     # client, retained for Noise prologue binding (CRYPTO-1 §3.4.3)
     _hello_payload: Optional[dict] = field(default=None, init=False, repr=False)
     _handshake_payload: Optional[dict] = field(default=None, init=False, repr=False)
+
+    # The RSA key is the node identity: one immutable file, shared by every
+    # connection. Parsing it costs ~25ms, so it is deferred until a handshake
+    # actually begins — a connection rejected for a bad api_key never gets
+    # here. See the ``handshake`` property.
+    _handshake: Optional[HandShake] = field(default=None, init=False, repr=False)
 
     # Connection-scoped resolved-user cache. Policies call ``resolve_user``
     # which hits the DB at most once per ``ttl`` window; ``invalidate_user``
@@ -189,8 +194,22 @@ class HiveMindClientConnection:
         self._resolved_user = None
         self._resolved_user_ts = 0.0
 
-    def __post_init__(self):
-        self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
+    @property
+    def handshake(self) -> HandShake:
+        """The legacy RSA handshake, built on first use.
+
+        Transports construct the connection before they can look the api_key
+        up — ``handle_invalid_key_connected`` needs something to hand to the
+        callbacks — so building this eagerly made every rejected connection
+        parse the node's private key first.
+        """
+        if self._handshake is None:
+            self._handshake = HandShake(self.hm_protocol.identity.private_key)
+        return self._handshake
+
+    @handshake.setter
+    def handshake(self, value: Optional[HandShake]) -> None:
+        self._handshake = value
 
     @property
     def peer(self) -> str:

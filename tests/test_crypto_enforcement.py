@@ -113,8 +113,8 @@ class TestCryptoRequiredOnReceive(unittest.TestCase):
     def test_cleartext_bus_accepted_without_listener_protocol(self):
         # connection not attached to a listener: keep permissive behavior
         client = HiveMindClientConnection(key="k", send_msg=MagicMock(),
-                                          disconnect=MagicMock(),
-                                          handshake=MagicMock())
+                                          disconnect=MagicMock())
+        client.handshake = MagicMock()
         msg = client.decode(_cleartext_bus_frame())
         assert msg.msg_type == HiveMessageType.BUS
 
