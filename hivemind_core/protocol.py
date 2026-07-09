@@ -4,7 +4,6 @@
 import dataclasses
 import json
 import os
-import queue
 import threading
 import time
 import uuid
@@ -246,7 +245,7 @@ class HiveMindClientConnection:
             LOG.debug(f"encrypted payload size: {len(payload)} bytes")
         else:
             payload = message.serialize()
-            LOG.debug("sent unencrypted!")
+            LOG.debug(f"sent unencrypted!")
 
         self.send_msg(payload, is_bin)
 
@@ -290,7 +289,7 @@ class HiveMindClientConnection:
                                             encoding=self.encoding, cipher=self.cipher)
                 encrypted = True
             else:
-                LOG.debug("Message was unencrypted")
+                LOG.warning("Message was unencrypted")
 
         if isinstance(payload, bytes):
             message = decode_bitstring(payload)
@@ -391,15 +390,11 @@ class HiveMindListenerProtocol:
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
     query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
     default_lang = "en-US"
-    _event_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
-    _event_workers_started: bool = field(default=False, init=False, repr=False)
+    query_workers = 16
+    query_queue_size = 256
     _query_executor: Optional[ThreadPoolExecutor] = field(default=None, init=False, repr=False)
     _query_slots: Optional[threading.BoundedSemaphore] = field(default=None, init=False, repr=False)
     _query_workers_started: bool = field(default=False, init=False, repr=False)
-    _last_seen_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
-    _last_seen_workers_started: bool = field(default=False, init=False, repr=False)
-    _last_seen_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
-    _last_seen_next_flush: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         self.clients = {}
@@ -413,9 +408,6 @@ class HiveMindListenerProtocol:
         self._seen_flood_ids: set = set()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self.agent_protocol.hm_protocol = self
-        self._start_event_workers()
-        self._start_query_workers()
-        self._start_last_seen_workers()
         if not self.binary_data_protocol:
             # just logs received messages
             self.binary_data_protocol = BinaryDataHandlerProtocol(hm_protocol=self,
@@ -455,134 +447,16 @@ class HiveMindListenerProtocol:
                     _optional=[False, *configured_optional],
                 )
 
-    @staticmethod
-    def _server_int_setting(key: str, env_key: str, default: int, minimum: int) -> int:
-        cfg = get_server_config()
-        raw = cfg.get(key) if key in cfg else os.environ.get(env_key, default)
-        try:
-            value = int(raw)
-        except (TypeError, ValueError):
-            value = default
-        return max(minimum, value)
-
-    @staticmethod
-    def _server_float_setting(key: str, env_key: str, default: float, minimum: float) -> float:
-        cfg = get_server_config()
-        raw = cfg.get(key) if key in cfg else os.environ.get(env_key, default)
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            value = default
-        return max(minimum, value)
-
-    @staticmethod
-    def _event_queue_size() -> int:
-        return HiveMindListenerProtocol._server_int_setting(
-            "lifecycle_event_queue_size",
-            "HIVEMIND_LIFECYCLE_EVENT_QUEUE_SIZE",
-            256,
-            1,
-        )
-
-    @staticmethod
-    def _event_worker_count() -> int:
-        return HiveMindListenerProtocol._server_int_setting(
-            "lifecycle_event_workers",
-            "HIVEMIND_LIFECYCLE_EVENT_WORKERS",
-            1,
-            1,
-        )
-
-    @staticmethod
-    def _query_worker_count() -> int:
-        return HiveMindListenerProtocol._server_int_setting(
-            "query_workers",
-            "HIVEMIND_QUERY_WORKERS",
-            16,
-            1,
-        )
-
-    @staticmethod
-    def _query_queue_size() -> int:
-        return HiveMindListenerProtocol._server_int_setting(
-            "query_queue_size",
-            "HIVEMIND_QUERY_QUEUE_SIZE",
-            256,
-            0,
-        )
-
-    @staticmethod
-    def _last_seen_queue_size() -> int:
-        return HiveMindListenerProtocol._server_int_setting(
-            "last_seen_queue_size",
-            "HIVEMIND_LAST_SEEN_QUEUE_SIZE",
-            1024,
-            1,
-        )
-
-    @staticmethod
-    def _last_seen_flush_interval() -> float:
-        return HiveMindListenerProtocol._server_float_setting(
-            "last_seen_flush_interval",
-            "HIVEMIND_LAST_SEEN_FLUSH_INTERVAL",
-            30.0,
-            0.0,
-        )
-
-    def _start_event_workers(self) -> None:
-        """Start the best-effort agent-event queue used for telemetry only."""
-        if self._event_workers_started:
-            return
-        self._event_queue = queue.Queue(maxsize=self._event_queue_size())
-        self._event_workers_started = True
-        for index in range(self._event_worker_count()):
-            thread = threading.Thread(
-                target=self._event_worker,
-                name=f"hivemind-agent-events-{index + 1}",
-                daemon=True,
-            )
-            thread.start()
-
-    def _event_worker(self) -> None:
-        while True:
-            item = self._event_queue.get()
-            try:
-                client, message = item
-                bus = self.get_bus(client)
-                bus.emit(message)
-            except Exception as exc:
-                LOG.warning(
-                    "Failed to emit HiveMind agent event "
-                    f"{getattr(message, 'msg_type', 'unknown')}: "
-                    f"{type(exc).__name__}: {exc!r}"
-                )
-            finally:
-                self._event_queue.task_done()
-
-    def _emit_agent_event(self, message: Message,
-                          client: HiveMindClientConnection) -> None:
-        """Queue non-critical agent telemetry without blocking the hot path."""
-        if self._event_queue is None:
-            self._start_event_workers()
-        try:
-            self._event_queue.put_nowait((client, message))
-        except queue.Full:
-            LOG.warning(
-                "Dropping HiveMind agent event because the lifecycle queue is full: "
-                f"{message.msg_type}"
-            )
-
     def _start_query_workers(self) -> None:
-        """Start the bounded pool used for local QUERY/CASCADE answering."""
+        """Start the bounded pool used for local QUERY answering."""
         if self._query_workers_started:
             return
-        workers = self._query_worker_count()
         self._query_executor = ThreadPoolExecutor(
-            max_workers=workers,
+            max_workers=self.query_workers,
             thread_name_prefix="hivemind-query",
         )
         self._query_slots = threading.BoundedSemaphore(
-            workers + self._query_queue_size()
+            self.query_workers + self.query_queue_size
         )
         self._query_workers_started = True
 
@@ -594,7 +468,7 @@ class HiveMindListenerProtocol:
         if not self._query_slots.acquire(blocking=False):
             return False
 
-        def _run():
+        def _run() -> None:
             try:
                 fn(*args)
             except Exception:
@@ -602,61 +476,12 @@ class HiveMindListenerProtocol:
             finally:
                 self._query_slots.release()
 
-        self._query_executor.submit(_run)
-        return True
-
-    def _start_last_seen_workers(self) -> None:
-        """Start the best-effort writer for client activity timestamps."""
-        if getattr(self, "_last_seen_workers_started", False):
-            return
-        self._last_seen_queue = queue.Queue(maxsize=self._last_seen_queue_size())
-        self._last_seen_workers_started = True
-        if not hasattr(self, "_last_seen_lock"):
-            self._last_seen_lock = threading.Lock()
-        if not hasattr(self, "_last_seen_next_flush"):
-            self._last_seen_next_flush = {}
-        thread = threading.Thread(
-            target=self._last_seen_worker,
-            name="hivemind-last-seen",
-            daemon=True,
-        )
-        thread.start()
-
-    def _last_seen_worker(self) -> None:
-        while True:
-            item = self._last_seen_queue.get()
-            try:
-                client, seen_at = item
-                self.update_last_seen(client, seen_at=seen_at)
-            except Exception as exc:
-                LOG.warning(
-                    "Failed to flush HiveMind last_seen update: "
-                    f"{type(exc).__name__}: {exc!r}"
-                )
-            finally:
-                self._last_seen_queue.task_done()
-
-    def touch_last_seen(self, client: HiveMindClientConnection) -> None:
-        """Record activity without blocking message handling on Redis writes."""
-        now = time.time()
-        client.last_seen = now
-        interval = self._last_seen_flush_interval()
-        if not hasattr(self, "_last_seen_lock"):
-            self._last_seen_lock = threading.Lock()
-        if not hasattr(self, "_last_seen_next_flush"):
-            self._last_seen_next_flush = {}
-        with self._last_seen_lock:
-            next_flush = self._last_seen_next_flush.get(client.key, 0.0)
-            if now < next_flush:
-                return
-            self._last_seen_next_flush[client.key] = now + interval
-
-        if self._last_seen_queue is None:
-            self._start_last_seen_workers()
         try:
-            self._last_seen_queue.put_nowait((client, now))
-        except queue.Full:
-            LOG.warning("Dropping last_seen update because the queue is full")
+            self._query_executor.submit(_run)
+        except Exception:
+            self._query_slots.release()
+            raise
+        return True
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # The agent decides which bus a client's messages land on. Default
@@ -664,25 +489,6 @@ class HiveMindListenerProtocol:
         # isolated brain per access key) returns a per-client bus, so per-key
         # routing on the inject path stays transparent here.
         return self.agent_protocol.get_bus(client)
-
-    def _emit_agent_message(self, message: Message,
-                            client: HiveMindClientConnection) -> bool:
-        """Inject a client message using the agent protocol's best emitter."""
-        for hook_name in (
-                "emit_client_message",
-                "emit_agent_message",
-                "inject_agent_message"):
-            hook = getattr(self.agent_protocol, hook_name, None)
-            if callable(hook):
-                return bool(hook(message, client))
-
-        bus = self.get_bus(client)
-        bus.emit(message)
-        return True
-
-    @staticmethod
-    def _agent_bus_rejection_error() -> RuntimeError:
-        return RuntimeError("agent bus rejected message")
 
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
@@ -708,7 +514,8 @@ class HiveMindListenerProtocol:
             {"source": client.peer},
         )
 
-        self._emit_agent_event(message, client)
+        bus = self.get_bus(client)
+        bus.emit(message)
 
         crypto_min = (
             ProtocolVersion.ONE
@@ -791,7 +598,7 @@ class HiveMindListenerProtocol:
         # if client is in protocol V1 -> self.handle_handshake_message
         # clients can rotate their pubkey or session_key by sending a new handshake
 
-    def update_last_seen(self, client: HiveMindClientConnection, seen_at: Optional[float] = None):
+    def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
@@ -799,7 +606,7 @@ class HiveMindListenerProtocol:
                 # key was revoked / never existed — nothing to update
                 LOG.debug(f"can not update last seen, no client for key: {client.key}")
                 return
-            user.last_seen = seen_at if seen_at is not None else time.time()
+            user.last_seen = time.time()
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
 
@@ -821,16 +628,14 @@ class HiveMindListenerProtocol:
 
         if client.peer in self.clients:
             self.clients.pop(client.peer)
-        with self._last_seen_lock:
-            self._last_seen_next_flush.pop(client.key, None)
-        self.trusted_pubkeys.pop(client.key, None)
         client.disconnect()
         message = Message(
             "hive.client.disconnect",
             {"key": client.key},
             {"source": client.peer, "session": client.sess.serialize()},
         )
-        self._emit_agent_event(message, client)
+        bus = self.get_bus(client)
+        bus.emit(message)
 
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
         try:
@@ -854,7 +659,8 @@ class HiveMindListenerProtocol:
             {"error": "invalid access key", "peer": client.peer},
             {"source": client.peer},
         )
-        self._emit_agent_event(message, client)
+        bus = self.get_bus(client)
+        bus.emit(message)
 
     def handle_invalid_protocol_version(self, client: HiveMindClientConnection):
         try:
@@ -878,7 +684,8 @@ class HiveMindListenerProtocol:
             {"error": "protocol error", "peer": client.peer},
             {"source": client.peer},
         )
-        self._emit_agent_event(message, client)
+        bus = self.get_bus(client)
+        bus.emit(message)
 
     def handle_message(self, message: HiveMessage, client: HiveMindClientConnection):
         """
@@ -921,7 +728,7 @@ class HiveMindListenerProtocol:
         else:
             self.handle_unknown_message(message, client)
 
-        self.touch_last_seen(client)
+        self.update_last_seen(client)
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(
@@ -1224,7 +1031,7 @@ class HiveMindListenerProtocol:
             client.sess.site_id = client.site_id = payload["site_id"]
         if "pubkey" in payload:
             client.pub_key = payload["pubkey"]
-            LOG.debug("client sent public key")
+            LOG.debug(f"client sent public key")
             # TOFU pin: first pubkey seen for this access key becomes the
             # trust anchor for INTERCOM signature verification. A later HELLO
             # presenting a different key does NOT overwrite the pin.
@@ -1236,7 +1043,7 @@ class HiveMindListenerProtocol:
                 LOG.warning(f"client {client.peer} presented a public key that "
                             f"does not match its pinned key; keeping the pin")
         else:
-            LOG.warning("client did NOT send public key")
+            LOG.warning(f"client did NOT send public key")
 
         LOG.debug(f"client site_id: {client.sess.site_id}")
         LOG.debug(f"client session_id: {client.sess.session_id}")
@@ -1656,12 +1463,10 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
-        self._emit_agent_event(
-            Message("hive.query.received",
-                    {"query_id": query_id, "originator_peer": originator_peer},
-                    {"source": client.peer}),
-            client,
-        )
+        bus = self.get_bus(client)
+        bus.emit(Message("hive.query.received",
+                         {"query_id": query_id, "originator_peer": originator_peer},
+                         {"source": client.peer}))
 
         if self._answer_query_locally(message, client, query_id, originator_peer,
                                       HiveMessageType.QUERY, message.route,
@@ -1711,12 +1516,10 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
-        self._emit_agent_event(
-            Message("hive.cascade.received",
-                    {"query_id": query_id, "originator_peer": originator_peer},
-                    {"source": client.peer}),
-            client,
-        )
+        bus = self.get_bus(client)
+        bus.emit(Message("hive.cascade.received",
+                         {"query_id": query_id, "originator_peer": originator_peer},
+                         {"source": client.peer}))
 
         self._answer_query_locally(
             message, client, query_id, originator_peer, HiveMessageType.CASCADE,
@@ -1909,27 +1712,12 @@ class HiveMindListenerProtocol:
             return
 
         # send client message to internal mycroft bus
-        LOG.debug(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
+        LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
+        message.context["source"] = client.peer
 
-        try:
-            emitted = self._emit_agent_message(message, client)
-        except Exception as exc:
-            LOG.exception(
-                f"failed to forward '{message.msg_type}' to agent bus "
-                f"from client: {client.peer}"
-            )
-            self._send_agent_bus_error(client, message, exc)
-            return
-        if not emitted:
-            LOG.error(
-                f"agent bus rejected '{message.msg_type}' "
-                f"from client: {client.peer}"
-            )
-            self._send_agent_bus_error(
-                client, message, self._agent_bus_rejection_error()
-            )
-            return
+        bus = self.get_bus(client)
+        bus.emit(message)
 
         self.policy_chain.observe(message, client)
 
@@ -1953,22 +1741,6 @@ class HiveMindListenerProtocol:
             client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
         except Exception:
             LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
-
-    def _send_agent_bus_error(self, client: HiveMindClientConnection,
-                              message: Message, exc: Exception) -> None:
-        """Inform a client that upstream injection failed after policy allow."""
-        payload = Message(
-            "hive.agent_bus.error",
-            {
-                "failed_type": getattr(message, "msg_type", None),
-                "error_type": type(exc).__name__,
-            },
-            {"source": "hivemind-core", "destination": client.peer},
-        )
-        try:
-            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
-        except Exception:
-            LOG.exception(f"failed to send hive.agent_bus.error to {client.peer}")
 
     def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
         # this message is going inside the client bus

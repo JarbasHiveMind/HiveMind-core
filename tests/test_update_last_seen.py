@@ -14,9 +14,6 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 def _make_protocol(db):
     proto = object.__new__(HiveMindListenerProtocol)
     proto.db = db
-    proto._last_seen_queue = None
-    proto._last_seen_workers_started = False
-    proto._last_seen_next_flush = {}
     return proto
 
 
@@ -51,49 +48,3 @@ def test_present_key_updates_last_seen():
 
     assert user.last_seen > 0
     db.update_item.assert_called_once_with(user)
-
-
-def test_last_seen_touch_is_coalesced(monkeypatch):
-    db = _mock_db(MagicMock(last_seen=-1))
-    proto = _make_protocol(db)
-    queued = []
-    monkeypatch.setattr(proto, "_last_seen_flush_interval", lambda: 30.0)
-    proto._last_seen_queue = MagicMock()
-    proto._last_seen_queue.put_nowait.side_effect = queued.append
-    client = MagicMock(key="good-key", last_seen=-1)
-
-    monkeypatch.setattr("hivemind_core.protocol.time.time", lambda: 100.0)
-    proto.touch_last_seen(client)
-    monkeypatch.setattr("hivemind_core.protocol.time.time", lambda: 101.0)
-    proto.touch_last_seen(client)
-
-    assert client.last_seen == 101.0
-    assert len(queued) == 1
-    queued_client, seen_at = queued[0]
-    assert queued_client is client
-    assert seen_at == 100.0
-    db.get_client_by_api_key.assert_not_called()
-    db.update_item.assert_not_called()
-
-
-def test_last_seen_touch_requeues_after_interval(monkeypatch):
-    db = _mock_db(MagicMock(last_seen=-1))
-    proto = _make_protocol(db)
-    queued = []
-    monkeypatch.setattr(proto, "_last_seen_flush_interval", lambda: 5.0)
-    proto._last_seen_queue = MagicMock()
-    proto._last_seen_queue.put_nowait.side_effect = queued.append
-    client = MagicMock(key="good-key", last_seen=-1)
-
-    monkeypatch.setattr("hivemind_core.protocol.time.time", lambda: 100.0)
-    proto.touch_last_seen(client)
-    monkeypatch.setattr("hivemind_core.protocol.time.time", lambda: 106.0)
-    proto.touch_last_seen(client)
-
-    assert len(queued) == 2
-    first_client, first_seen_at = queued[0]
-    second_client, second_seen_at = queued[1]
-    assert first_client is client
-    assert first_seen_at == 100.0
-    assert second_client is client
-    assert second_seen_at == 106.0

@@ -14,9 +14,6 @@ def _make_protocol():
     # core obtains the inject bus via agent.get_bus(client); a real agent
     # returns its own bus, so mirror that for the shared-bus case.
     agent.get_bus.return_value = agent.bus
-    agent.emit_client_message = None
-    agent.emit_agent_message = None
-    agent.inject_agent_message = None
     agent.callbacks = MagicMock()
 
     db_user = MagicMock()
