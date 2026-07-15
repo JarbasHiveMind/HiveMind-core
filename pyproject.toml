@@ -67,7 +67,7 @@ integration = [
     # pin pre-release floors so the resolver picks the 2.x-compatible alphas
     # instead of the latest stables (which still cap ovos-bus-client<2.0.0).
     "ovos-bus-client>=2.0.0a3",
-    "ovos-plugin-manager>=2.4.0a1",
+    "ovos-plugin-manager>=2.10.0a1",
     "ovos-workshop>=8.0.0a1",
     "ovos-utils>=0.11.1a1",
 ]

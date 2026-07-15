@@ -15,6 +15,9 @@ import pybase64
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
+from ovos_plugin_manager.transformer_services import (DialogTransformersService,
+                                                      MetadataTransformersService,
+                                                      UtteranceTransformersService)
 from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
 from hivemind_core.config import get_server_config
@@ -457,6 +460,14 @@ class HiveMindListenerProtocol:
     _last_ping_flood: float = field(default=0.0, init=False, repr=False)
     ping_flood_interval: float = field(default=30.0, init=False)
 
+    # OVOS transformer pipelines for the text/bus path (OVOS-TRANSFORM).
+    # Config-gated and opt-in via the utterance_transformers /
+    # metadata_transformers / dialog_transformers blocks in server.json;
+    # empty chains are no-ops.
+    utterance_transformers: Optional[UtteranceTransformersService] = None
+    metadata_transformers: Optional[MetadataTransformersService] = None
+    dialog_transformers: Optional[DialogTransformersService] = None
+
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
@@ -516,6 +527,16 @@ class HiveMindListenerProtocol:
                                                                   agent_protocol=self.agent_protocol)
         else:
             self.binary_data_protocol.hm_protocol = self
+        transformer_cfg = get_server_config()
+        if self.utterance_transformers is None:
+            self.utterance_transformers = UtteranceTransformersService(
+                config=transformer_cfg.get("utterance_transformers") or {})
+        if self.metadata_transformers is None:
+            self.metadata_transformers = MetadataTransformersService(
+                config=transformer_cfg.get("metadata_transformers") or {})
+        if self.dialog_transformers is None:
+            self.dialog_transformers = DialogTransformersService(
+                config=transformer_cfg.get("dialog_transformers") or {})
         if self.policy_chain is None:
             from hivemind_core.policy import DenyAllPolicy
             cfg = get_server_config()
@@ -1849,9 +1870,16 @@ class HiveMindListenerProtocol:
         if admitted is None:
             return False
         utts = admitted.data.get("utterances") or []
-        utterance = utts[0] if utts else ""
         lang = (admitted.data.get("lang") or admitted.context.get("lang")
                 or self.default_lang)
+        if self.utterance_transformers.plugins and utts:
+            utts, context = self.utterance_transformers.transform(
+                utts, dict(admitted.context))
+            if context.get("canceled"):
+                LOG.info(f"QUERY utterance from {client.peer} canceled by "
+                         f"{context.get('cancel_by')}: {context.get('cancel_reason')}")
+                return False
+        utterance = utts[0] if utts else ""
         if not utterance:
             return False
         answered = False
@@ -1860,6 +1888,9 @@ class HiveMindListenerProtocol:
                 if chunk is None:
                     break
                 answered = True
+                if self.dialog_transformers.plugins:
+                    chunk, _ = self.dialog_transformers.transform(
+                        chunk, {"lang": lang})
                 resp = Message("speak", {"utterance": chunk, "lang": lang},
                                {"query_id": query_id})
                 send_fn(self._build_query_response(
@@ -2283,6 +2314,14 @@ class HiveMindListenerProtocol:
             self._send_policy_denied(client, message, verdict)
             return
 
+        # OVOS transformer pipelines: rewrite utterances / context before
+        # they reach the agent bus. A §8.1 cancellation terminates the
+        # lifecycle here (§8.2), the message never reaches the agent.
+        if message.msg_type == "recognizer_loop:utterance":
+            message = self._apply_utterance_transformers(message, client)
+            if message is None:
+                return
+
         # send client message to internal mycroft bus
         LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
@@ -2302,6 +2341,45 @@ class HiveMindListenerProtocol:
 
         if self.agent_bus_callback:
             self.agent_bus_callback(message)
+
+    def _apply_utterance_transformers(self, message: Message,
+                                      client: HiveMindClientConnection
+                                      ) -> Optional[Message]:
+        """Run the utterance + metadata transformer chains on an inbound
+        ``recognizer_loop:utterance`` message.
+
+        Returns the (possibly rewritten) message, or ``None`` when a
+        transformer canceled the utterance — in that case the OVOS-TRANSFORM
+        §8.2 terminal events are sent back to the client and the message is
+        not injected into the agent bus.
+        """
+        if not (self.utterance_transformers.plugins
+                or self.metadata_transformers.plugins):
+            return message
+        utterances = message.data.get("utterances") or []
+        context = dict(message.context)
+        if self.utterance_transformers.plugins:
+            utterances, context = self.utterance_transformers.transform(
+                utterances, context)
+        if not context.get("canceled") and self.metadata_transformers.plugins:
+            context = self.metadata_transformers.transform(context)
+        message.data["utterances"] = utterances
+        message.context = context
+        if context.get("canceled"):
+            LOG.info(f"utterance from {client.peer} canceled by "
+                     f"{context.get('cancel_by')}: {context.get('cancel_reason')}")
+            # OVOS-TRANSFORM §8.2 terminal path: cancelled -> handled
+            for msg_type in ("ovos.utterance.cancelled", "ovos.utterance.handled"):
+                try:
+                    client.send(HiveMessage(
+                        HiveMessageType.BUS,
+                        payload=message.forward(msg_type,
+                                                {"cancel_reason": context.get("cancel_reason"),
+                                                 "cancel_by": context.get("cancel_by")})))
+                except Exception:
+                    LOG.exception(f"failed to send {msg_type} to {client.peer}")
+            return None
+        return message
 
     def _send_policy_denied(self, client: HiveMindClientConnection,
                              message: Message, verdict) -> None:
