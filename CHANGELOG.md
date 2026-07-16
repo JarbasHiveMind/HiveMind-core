@@ -1,5 +1,16 @@
 # Changelog
 
+## [4.10.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a2) (2026-07-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a1...4.10.1a2)
+
+**Merged pull requests:**
+
+- perf: move last\_seen persistence off the message loop [\#150](https://github.com/JarbasHiveMind/HiveMind-core/pull/150) ([goldyfruit](https://github.com/goldyfruit))
+- Debounce last\_seen database updates [\#143](https://github.com/JarbasHiveMind/HiveMind-core/pull/143) ([goldyfruit](https://github.com/goldyfruit))
+- Document horizontal scaling limits [\#139](https://github.com/JarbasHiveMind/HiveMind-core/pull/139) ([goldyfruit](https://github.com/goldyfruit))
+- Use direct API-key lookup when available [\#138](https://github.com/JarbasHiveMind/HiveMind-core/pull/138) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.10.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a1) (2026-07-05)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.0a2...4.10.1a1)
