@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.10.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a3) (2026-07-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a2...4.10.1a3)
+
+**Merged pull requests:**
+
+- ci: release merged fork pull requests with trusted token [\#153](https://github.com/JarbasHiveMind/HiveMind-core/pull/153) ([goldyfruit](https://github.com/goldyfruit))
+- ci: make release outcomes deterministic [\#152](https://github.com/JarbasHiveMind/HiveMind-core/pull/152) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.10.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a2) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a1...4.10.1a2)
@@ -55,10 +64,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.7a1...4.7.0a1)
 
-**Fixed bugs:**
-
-- Add type to allowed\_types requires a client restart [\#45](https://github.com/JarbasHiveMind/HiveMind-core/issues/45)
-
 **Merged pull requests:**
 
 - feat: protocol v3 Noise handshake \(XXpsk2/KKpsk0\) with v2 fallback [\#130](https://github.com/JarbasHiveMind/HiveMind-core/pull/130) ([JarbasAl](https://github.com/JarbasAl))
@@ -68,10 +73,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.6a1...4.6.7a1)
 
-**Closed issues:**
-
-- Unencrypted INTERCOM inner BUS never delivered \(handle\_intercom\_message dispatches on outer INTERCOM type\) [\#117](https://github.com/JarbasHiveMind/HiveMind-core/issues/117)
-
 **Merged pull requests:**
 
 - fix: deliver unencrypted INTERCOM inner messages \(\#117\) [\#123](https://github.com/JarbasHiveMind/HiveMind-core/pull/123) ([JarbasAl](https://github.com/JarbasAl))
@@ -79,10 +80,6 @@
 ## [4.6.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.6a1) (2026-06-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.5a1...4.6.6a1)
-
-**Closed issues:**
-
-- BINARY\(FILE\) file\_name path-traversal: client-supplied file\_name not basename'd before handle\_receive\_file [\#119](https://github.com/JarbasHiveMind/HiveMind-core/issues/119)
 
 **Merged pull requests:**
 
@@ -92,10 +89,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.4a1...4.6.5a1)
 
-**Closed issues:**
-
-- Illegal BROADCAST/ESCALATE/PROPAGATE don't disconnect the offending client \(inconsistent with QUERY/CASCADE\) [\#116](https://github.com/JarbasHiveMind/HiveMind-core/issues/116)
-
 **Merged pull requests:**
 
 - fix: disconnect clients sending illegal BROADCAST/PROPAGATE/ESCALATE \(\#116\) [\#122](https://github.com/JarbasHiveMind/HiveMind-core/pull/122) ([JarbasAl](https://github.com/JarbasAl))
@@ -103,10 +96,6 @@
 ## [4.6.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.4a1) (2026-06-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.3a1...4.6.4a1)
-
-**Closed issues:**
-
-- update\_last\_seen crashes \(AttributeError on None\) when client API key is revoked/missing [\#118](https://github.com/JarbasHiveMind/HiveMind-core/issues/118)
 
 **Merged pull requests:**
 
@@ -123,10 +112,6 @@
 ## [4.6.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.2a1) (2026-06-20)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.1a1...4.6.2a1)
-
-**Closed issues:**
-
-- feat: hivemind-a2a-agent-plugin — A2A agents as hive brains [\#110](https://github.com/JarbasHiveMind/HiveMind-core/issues/110)
 
 **Merged pull requests:**
 
@@ -167,10 +152,6 @@
 ## [4.4.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.4.0a2) (2026-06-05)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.4.0a1...4.4.0a2)
-
-**Implemented enhancements:**
-
-- Dynamic ACL policy plugin hook [\#85](https://github.com/JarbasHiveMind/HiveMind-core/issues/85)
 
 **Merged pull requests:**
 
