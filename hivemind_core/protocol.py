@@ -268,6 +268,7 @@ class HiveMindClientConnection:
 
     def decode(self, payload: str) -> HiveMessage:
         encrypted = False
+        cleartext_with_crypto = False
         if self.noise_transport is not None:
             # protocol v3 session: only valid Noise transport messages are
             # accepted; tampering/replay/reordering fails AEAD and is fatal
@@ -297,7 +298,7 @@ class HiveMindClientConnection:
                                             encoding=self.encoding, cipher=self.cipher)
                 encrypted = True
             else:
-                LOG.warning("Message was unencrypted")
+                cleartext_with_crypto = True
 
         if isinstance(payload, bytes):
             message = decode_bitstring(payload)
@@ -305,6 +306,14 @@ class HiveMindClientConnection:
             if isinstance(payload, str):
                 payload = json.loads(payload)
             message = HiveMessage(**payload)
+
+        if (cleartext_with_crypto
+                and message.msg_type in (HiveMessageType.HELLO,
+                                         HiveMessageType.HANDSHAKE)):
+            LOG.debug("Accepted cleartext key-establishment message %s",
+                      message.msg_type)
+        elif cleartext_with_crypto and not self.crypto_required:
+            LOG.warning("Message was unencrypted: %s", message.msg_type)
 
         # HIVEMIND-CRYPTO-1 §4 - when the server requires crypto, drop any
         # cleartext frame that is not part of key establishment. HELLO and
