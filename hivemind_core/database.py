@@ -1,7 +1,6 @@
 # hivemind-core
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
-import threading
 from typing import Any, Dict, List, Optional, Iterable
 
 from ovos_utils.log import LOG
@@ -22,7 +21,6 @@ class ClientDatabase:
         db_class = DatabaseFactory.get_class(name)
         LOG.info(f"Database: {db_class.__name__}")
         self.db = db_class(**config.get(name, {}))
-        self._last_seen_lock = threading.Lock()
 
     def sync(self):
         """update db from disk if needed"""
@@ -111,27 +109,6 @@ class ClientDatabase:
 
     def update_item(self, client: Client):
         self.db.update_item(client)
-
-    def update_last_seen(self, api_key: str, seen_at: float) -> bool:
-        """Advance a client's activity timestamp without moving it backward.
-
-        Current bundled backends expose an atomic implementation. The locked
-        fallback preserves compatibility with third-party database plugins and
-        older bundled releases used during rolling upgrades.
-        """
-        backend_update = getattr(self.db, "update_last_seen", None)
-        if callable(backend_update):
-            return bool(backend_update(api_key, seen_at))
-
-        with self._last_seen_lock:
-            user = self.get_client_by_api_key(api_key)
-            if user is None:
-                return False
-            current = getattr(user, "last_seen", -1)
-            if current is None or seen_at > current:
-                user.last_seen = seen_at
-                return bool(self.db.update_item(user))
-            return True
 
     def total_clients(self) -> int:
         return len(self.db)
