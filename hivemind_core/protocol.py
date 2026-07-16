@@ -400,8 +400,16 @@ class HiveMindListenerProtocol:
     default_lang = "en-US"
     _last_seen_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
     _last_seen_worker_started: bool = field(default=False, init=False, repr=False)
+    _last_seen_thread: Optional[threading.Thread] = field(default=None, init=False, repr=False)
+    _last_seen_stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
+    _last_seen_start_lock: threading.Lock = field(
+        default_factory=threading.Lock,
+        init=False,
+        repr=False,
+    )
     _last_seen_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _last_seen_next_flush: dict = field(default_factory=dict, init=False, repr=False)
+    _last_seen_queue_warning_after: float = field(default=0.0, init=False, repr=False)
 
     def __post_init__(self):
         self.clients = {}
@@ -418,7 +426,6 @@ class HiveMindListenerProtocol:
             get_server_config().get("last_seen_update_interval", 0),
             0.0,
         )
-        self._start_last_seen_worker()
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -458,6 +465,8 @@ class HiveMindListenerProtocol:
                     policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
                     _optional=[False, *configured_optional],
                 )
+        # The activity writer starts lazily on the first message, after all
+        # listener initialization has completed successfully.
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # The agent decides which bus a client's messages land on. Default
@@ -584,20 +593,51 @@ class HiveMindListenerProtocol:
 
     def _start_last_seen_worker(self) -> None:
         """Start the best-effort writer for client activity timestamps."""
-        if self._last_seen_worker_started:
-            return
-        self._last_seen_queue = queue.Queue(maxsize=self._last_seen_queue_size())
-        self._last_seen_worker_started = True
-        thread = threading.Thread(
-            target=self._last_seen_worker,
-            name="hivemind-last-seen",
-            daemon=True,
-        )
-        thread.start()
+        with self._last_seen_start_lock:
+            if self._last_seen_worker_started:
+                return
+            pending = queue.Queue(maxsize=self._last_seen_queue_size())
+            self._last_seen_stop.clear()
+            thread = threading.Thread(
+                target=self._last_seen_worker,
+                args=(pending,),
+                name="hivemind-last-seen",
+                daemon=True,
+            )
+            self._last_seen_queue = pending
+            self._last_seen_thread = thread
+            self._last_seen_worker_started = True
+            try:
+                thread.start()
+            except Exception:
+                self._last_seen_queue = None
+                self._last_seen_thread = None
+                self._last_seen_worker_started = False
+                raise
 
-    def _last_seen_worker(self) -> None:
-        while True:
-            client, seen_at = self._last_seen_queue.get()
+    def _stop_last_seen_worker(self, timeout: float = 5.0) -> None:
+        """Drain and stop the activity writer, releasing listener references."""
+        self._last_seen_stop.set()
+        thread = self._last_seen_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=timeout)
+            if thread.is_alive():
+                LOG.warning("Timed out stopping the HiveMind last_seen worker")
+                return
+        self._last_seen_queue = None
+        self._last_seen_thread = None
+        self._last_seen_worker_started = False
+
+    def shutdown(self) -> None:
+        """Release background resources owned by this listener protocol."""
+        self._stop_last_seen_worker()
+
+    def _last_seen_worker(self, pending: queue.Queue) -> None:
+        while not self._last_seen_stop.is_set() or not pending.empty():
+            try:
+                client, seen_at = pending.get(timeout=0.1)
+            except queue.Empty:
+                continue
             try:
                 self.update_last_seen(client, seen_at=seen_at)
             except Exception as exc:
@@ -606,7 +646,7 @@ class HiveMindListenerProtocol:
                     f"{type(exc).__name__}: {exc!r}"
                 )
             finally:
-                self._last_seen_queue.task_done()
+                pending.task_done()
 
     def touch_last_seen(self, client: HiveMindClientConnection) -> None:
         """Record activity without blocking message handling on database I/O."""
@@ -627,23 +667,26 @@ class HiveMindListenerProtocol:
         try:
             self._last_seen_queue.put_nowait((client, seen_at))
         except queue.Full:
+            retry_interval = max(interval, 1.0)
             with self._last_seen_lock:
                 if self._last_seen_next_flush.get(client.key) == next_flush:
-                    self._last_seen_next_flush.pop(client.key, None)
-            LOG.warning("Dropping last_seen update because the queue is full")
+                    self._last_seen_next_flush[client.key] = mono_now + retry_interval
+                should_warn = mono_now >= self._last_seen_queue_warning_after
+                if should_warn:
+                    self._last_seen_queue_warning_after = mono_now + retry_interval
+            if should_warn:
+                LOG.warning("Dropping last_seen update because the queue is full")
 
     def update_last_seen(self, client: HiveMindClientConnection,
                          seen_at: Optional[float] = None):
         """track timestamps of last client interaction"""
+        timestamp = seen_at if seen_at is not None else time.time()
         with self.db:
-            user = self.db.get_client_by_api_key(client.key)
-            if user is None:
+            if not self.db.update_last_seen(client.key, timestamp):
                 # key was revoked / never existed — nothing to update
                 LOG.debug(f"can not update last seen, no client for key: {client.key}")
                 return
-            user.last_seen = seen_at if seen_at is not None else time.time()
-            LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
-            self.db.update_item(user)
+            LOG.debug(f"updated last seen timestamp: {client.key} - {timestamp}")
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:

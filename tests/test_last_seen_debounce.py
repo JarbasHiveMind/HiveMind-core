@@ -27,19 +27,29 @@ class FakeClientDatabase:
         self.updates += 1
         self.user = user
 
+    def update_last_seen(self, key, seen_at):
+        self.lookups += 1
+        if key != "access-key":
+            return False
+        self.user.last_seen = max(self.user.last_seen, seen_at)
+        self.updates += 1
+        return True
+
 
 def _protocol(db):
     agent = MagicMock()
     agent.bus = MagicMock()
     agent.callbacks = MagicMock()
     agent.get_bus.return_value = agent.bus
-    return HiveMindListenerProtocol(
+    proto = HiveMindListenerProtocol(
         agent_protocol=agent,
         db=db,
         require_crypto=False,
         handshake_enabled=True,
         policy_chain=MagicMock(),
     )
+    proto.shutdown()
+    return proto
 
 
 def _client(peer="peer", key="access-key"):
@@ -99,7 +109,7 @@ def test_zero_last_seen_interval_queues_every_message_without_database_io():
     assert db.updates == 0
 
 
-def test_full_queue_reopens_coalescing_gate_for_retry():
+def test_full_queue_defers_retry_and_rate_limits_warnings():
     proto = _protocol(FakeClientDatabase(SimpleNamespace(last_seen=0)))
     proto.last_seen_update_interval = 30
     proto._last_seen_queue = MagicMock()
@@ -109,10 +119,27 @@ def test_full_queue_reopens_coalescing_gate_for_retry():
     with (
         patch("hivemind_core.protocol.time.time", return_value=100.0),
         patch("hivemind_core.protocol.time.monotonic", return_value=10.0),
+        patch("hivemind_core.protocol.LOG.warning") as warning,
     ):
         proto.touch_last_seen(client)
+        proto.touch_last_seen(client)
 
-    assert client.key not in proto._last_seen_next_flush
+    assert proto._last_seen_next_flush[client.key] == 40.0
+    warning.assert_called_once_with("Dropping last_seen update because the queue is full")
+
+
+def test_last_seen_worker_stops_after_draining_queue():
+    user = SimpleNamespace(last_seen=0)
+    db = FakeClientDatabase(user)
+    proto = _protocol(db)
+    proto._start_last_seen_worker()
+    proto._last_seen_queue.put((_client(), 123.5))
+
+    proto.shutdown()
+
+    assert user.last_seen == 123.5
+    assert proto._last_seen_thread is None
+    assert not proto._last_seen_worker_started
 
 
 def test_disconnect_keeps_debounce_cache_for_shared_key_sibling():
