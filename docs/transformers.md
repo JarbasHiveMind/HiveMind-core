@@ -25,7 +25,7 @@ are no-ops.
 {
   "utterance_transformers": {
     "ovos-utterance-corrections-plugin": {},
-    "ovos-utterance-plugin-cancel": {}
+    "ovos-utterance-cancel-plugin": {}
   },
   "metadata_transformers": {},
   "dialog_transformers": {}
@@ -47,7 +47,7 @@ a QUERY client may receive answer text the agent never literally said
 
 Deliberate uses:
 
-- **Mesh-wide policy stop-words**: `ovos-utterance-plugin-cancel` here
+- **Mesh-wide policy stop-words**: `ovos-utterance-cancel-plugin` here
   cancels utterances for every client, uniformly.
 - **Shared corrections/normalization**: fix domain vocabulary once for all
   text clients.
