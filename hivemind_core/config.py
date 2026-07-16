@@ -80,11 +80,11 @@ _DEFAULT = {
         ],
     },
 
-    # Optional debounce for best-effort client-db last_seen persistence.
-    # The default preserves the old per-message persistence frequency while
-    # the protocol keeps database I/O off the message-handling thread.
+    # Optional debounce for the synchronous client-db last_seen write.
+    # The default preserves the old per-message update behavior. Set to a
+    # positive number of seconds only when the downstream runtime can absorb
+    # the extra admission rate.
     "last_seen_update_interval": 0,
-    "last_seen_queue_size": 1024,
 }
 
 

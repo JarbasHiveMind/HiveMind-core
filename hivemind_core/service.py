@@ -148,29 +148,28 @@ class HiveMindService:
                                        binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
 
-        try:
-            # start network protocols that will carry HiveMessages
-            protos = []
-            for plug_name, plug_conf in get_server_config()["network_protocol"].items():
-                try:
-                    network_class = NetworkProtocolFactory.get_class(plug_name)
-                    LOG.info(f"Network protocol: {network_class.__name__}")
-                    protos.append(network_class(hm_protocol=hm_protocol, config=plug_conf))
-                except Exception:
-                    LOG.exception(f"Failed to load plugin '{plug_name}'")
+        # start network protocols that will carry HiveMessages
+        protos = []
+        for plug_name, plug_conf in get_server_config()["network_protocol"].items():
+            try:
+                network_class = NetworkProtocolFactory.get_class(plug_name)
+                LOG.info(f"Network protocol: {network_class.__name__}")
+                protos.append(network_class(hm_protocol=hm_protocol, config=plug_conf))
+            except:
+                LOG.exception(f"Failed to load plugin '{plug_name}'")
 
-            if not protos:
-                LOG.error("No network protocols were loaded. Exiting service.")
-                return
-
-            for network_protocol in protos:
-                create_daemon(network_protocol.run)
-
-            self._status.set_ready()
-
-            self._start_presence()
-            wait_for_exit_signal()  # block until ctrl+c
-        finally:
-            self._stop_presence()
-            hm_protocol.shutdown()
+        if not protos:
+            LOG.error("No network protocols were loaded. Exiting service.")
             self._status.set_stopping()
+            return
+
+        for network_protocol in protos:
+            create_daemon(network_protocol.run)
+
+        self._status.set_ready()
+
+        self._start_presence()
+        wait_for_exit_signal()  # block until ctrl+c
+
+        self._stop_presence()
+        self._status.set_stopping()

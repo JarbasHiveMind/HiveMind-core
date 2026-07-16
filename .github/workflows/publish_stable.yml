@@ -5,9 +5,6 @@ on:
   push:
     branches: [master]
 
-permissions:
-  contents: write
-
 jobs:
   publish_stable:
     uses: OpenVoiceOS/gh-automations/.github/workflows/publish-stable.yml@dev
@@ -17,4 +14,4 @@ jobs:
     with:
       version_file: 'hivemind_core/version.py'
       publish_pypi: true
-      notify_matrix: false
+      notify_matrix: true
