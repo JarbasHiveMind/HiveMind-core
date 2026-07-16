@@ -6,10 +6,6 @@ on:
     types: [closed]
     branches: [dev]
 
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
   publish_alpha:
     if: github.event.pull_request.merged == true || github.event_name == 'workflow_dispatch'
@@ -25,4 +21,4 @@ jobs:
       propose_release: true
       changelog_max_issues: 100
       publish_pypi: true
-      notify_matrix: false
+      notify_matrix: true
