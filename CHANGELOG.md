@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a1) (2026-07-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a3...4.10.2a1)
+
+**Merged pull requests:**
+
+- fix: avoid warning on expected cleartext handshake [\#154](https://github.com/JarbasHiveMind/HiveMind-core/pull/154) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.10.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a3) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a2...4.10.1a3)
