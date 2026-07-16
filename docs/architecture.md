@@ -118,6 +118,65 @@ Central Hub
 
 ---
 
+## Horizontal Scaling Status
+
+A single `HiveMindListenerProtocol` instance is currently the authoritative runtime for
+one hub process. The listener keeps live connection state in memory (`clients`,
+`hive_mapper`, pending cascade collectors, trusted public keys, query callbacks, and the
+agent bus binding). Running two pods behind the same load balancer is therefore safe only
+with sticky websocket routing and an external database; it is not yet active-active
+sharding.
+
+Before HiveMind can scale one logical hub across several listener pods, these pieces need
+to move out of process-local memory:
+
+- **Client/session registry**: live peers, session ids, node type, capabilities, and
+  disconnect events need a shared registry or a transport backplane.
+- **Routing map**: `HiveMapper` routes must be shared so any pod can find the pod that
+  owns a target peer.
+- **QUERY/CASCADE collectors**: pending query ids and streamed answer chunks need a
+  shared collector or deterministic ownership.
+- **Inter-pod delivery**: messages for a client connected to another pod need a pub/sub
+  backplane instead of direct in-process method calls.
+- **Admission metrics**: policy timing, quota timing, bus emit timing, and agent response
+  timing should be recorded separately so operators can see which stage is saturated.
+
+Until those pieces exist, scale by sharding at the hub level: run multiple independent
+hubs, keep websocket stickiness for each hub, and use relay/nested topology for larger
+fleets.
+
+### Load-test signal
+
+Recent production-style WSS benchmarks with many independent client identities showed a
+consistent pattern: one logical hub can complete concurrent direct WSS requests, but high
+fan-in increases tail latency inside the listener before OVOS runtime CPU becomes the only
+pressure point.
+
+That pattern means adding OVOS replicas alone does not solve one-hub concurrency. The
+first pressure point is the websocket/listener process: handshake admission, message
+decode/logging, policy review, and agent-bus injection all pass through one process-local
+router. Runtime replicas help once messages leave the listener, but the listener must
+first drain inbound clients quickly enough.
+
+The control plane has its own burst cost: provisioning hundreds of disposable clients and
+credential secrets took minutes. Large launches should pre-provision client identities or
+batch onboarding separately from runtime WSS capacity tests.
+
+Near-term mitigations:
+
+- keep per-message and per-disconnect logs at debug level on hot paths;
+- use direct database lookup for API-key admission instead of full database sync on every
+  websocket open;
+- benchmark with independent client identities when measuring user concurrency;
+- shard load across more logical hubs when interactive latency matters.
+
+Active-active listener scale needs a larger change: a shared connection/session registry,
+cross-listener message delivery, and deterministic ownership for query/cascade collectors.
+Without that, multiple listener pods behind one service can only safely work as sticky
+websocket replicas, not as a true shared hub.
+
+---
+
 ## Identity and Encryption
 
 Each hub has a `NodeIdentity` (stored by `hivemind-bus-client`). Satellites and hubs
