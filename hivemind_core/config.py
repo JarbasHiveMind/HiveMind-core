@@ -79,6 +79,12 @@ _DEFAULT = {
             {"module": "hivemind-ovos-agent-policy"},
         ],
     },
+
+    # Optional debounce for the synchronous client-db last_seen write.
+    # The default preserves the old per-message update behavior. Set to a
+    # positive number of seconds only when the downstream runtime can absorb
+    # the extra admission rate.
+    "last_seen_update_interval": 0,
 }
 
 

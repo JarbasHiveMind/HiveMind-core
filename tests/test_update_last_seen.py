@@ -14,6 +14,7 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 def _make_protocol(db):
     proto = object.__new__(HiveMindListenerProtocol)
     proto.db = db
+    proto._last_seen_updates = {}
     return proto
 
 
