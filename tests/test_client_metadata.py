@@ -22,6 +22,10 @@ class MemoryDB:
     def search_by_value(self, key, value):
         return [c for c in self.clients if getattr(c, key, None) == value]
 
+    def get_client_by_api_key(self, api_key):
+        matches = self.search_by_value("api_key", api_key)
+        return matches[0] if matches else None
+
     def add_item(self, client):
         self.clients.append(client)
         return True

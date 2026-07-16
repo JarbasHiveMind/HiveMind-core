@@ -68,6 +68,7 @@ class HiveMindService:
         _status (Optional[ProcessStatus]): The current status of the service.
     """
     hm_protocol: Type[HiveMindListenerProtocol] = HiveMindListenerProtocol
+    _presence = None  # LocalPresence, when hivemind-presence is installed and enabled
 
     identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
@@ -121,9 +122,8 @@ class HiveMindService:
         LOG.info("LocalPresence started")
 
     def _stop_presence(self) -> None:
-        presence = getattr(self, "_presence", None)
-        if presence is not None:
-            presence.stop()
+        if self._presence is not None:
+            self._presence.stop()
 
     def run(self):
         self._status.set_started()

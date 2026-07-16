@@ -252,18 +252,18 @@ class MessageTypeACLPolicy(PolicyPlugin):
 
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
-        allowed = list(getattr(client, "allowed_types", []) or [])
-        db = getattr(self.hm_protocol, "db", None)
+        allowed = list(client.allowed_types or [])
+        db = self.hm_protocol.db if self.hm_protocol else None
         if db is not None:
             try:
                 user = client.resolve_user(db)
                 if user is not None:
-                    allowed = list(getattr(user, "allowed_types", allowed) or [])
+                    allowed = list(user.allowed_types or [])
             except Exception:
                 LOG.warning("MessageTypeACLPolicy: DB refresh failed; using cached value",
                             exc_info=True)
 
-        msg_type = getattr(message, "msg_type", None)
+        msg_type = message.msg_type
         if msg_type not in allowed:
             return Verdict.deny(
                 DenyCodes.ACL_DISALLOWED_TYPE,

@@ -182,7 +182,7 @@ class HiveMindClientConnection:
                 and self._resolved_user is not None
                 and time.time() - self._resolved_user_ts <= ttl):
             return self._resolved_user
-        client_id = getattr(self._resolved_user, "client_id", None)
+        client_id = self._resolved_user.client_id if self._resolved_user else None
         if client_id is not None:
             user = db.refresh(client_id)
         else:
@@ -570,7 +570,7 @@ class HiveMindListenerProtocol:
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
-        update_interval = getattr(self, "last_seen_update_interval", 0)
+        update_interval = self.last_seen_update_interval
         mono_now = None
         if update_interval > 0:
             mono_now = time.monotonic()
