@@ -36,6 +36,9 @@ class ClientDatabase:
         return self.db.search_by_value("name", name)
 
     def get_client_by_api_key(self, api_key: str) -> Optional[Client]:
+        direct_lookup = getattr(self.db, "get_client_by_api_key", None)
+        if callable(direct_lookup):
+            return direct_lookup(api_key)
         search: List[Client] = self.db.search_by_value("api_key", api_key)
         if len(search):
             return search[0]
