@@ -4,6 +4,8 @@
 import dataclasses
 import json
 import os
+import queue
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -396,6 +398,10 @@ class HiveMindListenerProtocol:
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
     query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
     default_lang = "en-US"
+    _last_seen_queue: Optional[queue.Queue] = field(default=None, init=False, repr=False)
+    _last_seen_worker_started: bool = field(default=False, init=False, repr=False)
+    _last_seen_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
+    _last_seen_next_flush: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         self.clients = {}
@@ -408,11 +414,11 @@ class HiveMindListenerProtocol:
         self.trusted_pubkeys: dict = {}  # client.key -> PEM public key
         self._seen_flood_ids: set = set()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
-        self._last_seen_updates: dict = {}  # client.key -> last persisted timestamp
         self.last_seen_update_interval = _non_negative_float(
             get_server_config().get("last_seen_update_interval", 0),
             0.0,
         )
+        self._start_last_seen_worker()
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -568,27 +574,76 @@ class HiveMindListenerProtocol:
         # if client is in protocol V1 -> self.handle_handshake_message
         # clients can rotate their pubkey or session_key by sending a new handshake
 
-    def update_last_seen(self, client: HiveMindClientConnection):
-        """track timestamps of last client interaction"""
-        update_interval = getattr(self, "last_seen_update_interval", 0)
-        mono_now = None
-        if update_interval > 0:
-            mono_now = time.monotonic()
-            last_update = self._last_seen_updates.get(client.key)
-            if last_update is not None and mono_now - last_update < update_interval:
+    @staticmethod
+    def _last_seen_queue_size() -> int:
+        raw = get_server_config().get("last_seen_queue_size", 1024)
+        try:
+            return max(1, int(raw))
+        except (TypeError, ValueError):
+            return 1024
+
+    def _start_last_seen_worker(self) -> None:
+        """Start the best-effort writer for client activity timestamps."""
+        if self._last_seen_worker_started:
+            return
+        self._last_seen_queue = queue.Queue(maxsize=self._last_seen_queue_size())
+        self._last_seen_worker_started = True
+        thread = threading.Thread(
+            target=self._last_seen_worker,
+            name="hivemind-last-seen",
+            daemon=True,
+        )
+        thread.start()
+
+    def _last_seen_worker(self) -> None:
+        while True:
+            client, seen_at = self._last_seen_queue.get()
+            try:
+                self.update_last_seen(client, seen_at=seen_at)
+            except Exception as exc:
+                LOG.warning(
+                    "Failed to flush HiveMind last_seen update: "
+                    f"{type(exc).__name__}: {exc!r}"
+                )
+            finally:
+                self._last_seen_queue.task_done()
+
+    def touch_last_seen(self, client: HiveMindClientConnection) -> None:
+        """Record activity without blocking message handling on database I/O."""
+        seen_at = time.time()
+        mono_now = time.monotonic()
+        client.last_seen = seen_at
+        interval = getattr(self, "last_seen_update_interval", 0)
+        next_flush = mono_now
+        with self._last_seen_lock:
+            current = self._last_seen_next_flush.get(client.key)
+            if interval > 0 and current is not None and mono_now < current:
                 return
+            next_flush = mono_now + interval
+            self._last_seen_next_flush[client.key] = next_flush
+
+        if self._last_seen_queue is None:
+            self._start_last_seen_worker()
+        try:
+            self._last_seen_queue.put_nowait((client, seen_at))
+        except queue.Full:
+            with self._last_seen_lock:
+                if self._last_seen_next_flush.get(client.key) == next_flush:
+                    self._last_seen_next_flush.pop(client.key, None)
+            LOG.warning("Dropping last_seen update because the queue is full")
+
+    def update_last_seen(self, client: HiveMindClientConnection,
+                         seen_at: Optional[float] = None):
+        """track timestamps of last client interaction"""
         with self.db:
             user = self.db.get_client_by_api_key(client.key)
             if user is None:
                 # key was revoked / never existed — nothing to update
                 LOG.debug(f"can not update last seen, no client for key: {client.key}")
-                self._last_seen_updates.pop(client.key, None)
                 return
-            user.last_seen = time.time()
+            user.last_seen = seen_at if seen_at is not None else time.time()
             LOG.debug(f"updated last seen timestamp: {client.key} - {user.last_seen}")
             self.db.update_item(user)
-            if mono_now is not None:
-                self._last_seen_updates[client.key] = mono_now
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         try:
@@ -609,7 +664,8 @@ class HiveMindListenerProtocol:
         if client.peer in self.clients:
             self.clients.pop(client.peer)
         if not any(conn.key == client.key for conn in self.clients.values()):
-            self._last_seen_updates.pop(client.key, None)
+            with self._last_seen_lock:
+                self._last_seen_next_flush.pop(client.key, None)
         client.disconnect()
         message = Message(
             "hive.client.disconnect",
@@ -710,7 +766,7 @@ class HiveMindListenerProtocol:
         else:
             self.handle_unknown_message(message, client)
 
-        self.update_last_seen(client)
+        self.touch_last_seen(client)
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(

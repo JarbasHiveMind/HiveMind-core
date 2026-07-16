@@ -14,7 +14,6 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 def _make_protocol(db):
     proto = object.__new__(HiveMindListenerProtocol)
     proto.db = db
-    proto._last_seen_updates = {}
     return proto
 
 
@@ -48,4 +47,16 @@ def test_present_key_updates_last_seen():
     proto.update_last_seen(client)
 
     assert user.last_seen > 0
+    db.update_item.assert_called_once_with(user)
+
+
+def test_worker_preserves_queued_seen_at_timestamp():
+    user = MagicMock(last_seen=-1)
+    db = _mock_db(user)
+    proto = _make_protocol(db)
+    client = MagicMock(key="good-key")
+
+    proto.update_last_seen(client, seen_at=123.5)
+
+    assert user.last_seen == 123.5
     db.update_item.assert_called_once_with(user)

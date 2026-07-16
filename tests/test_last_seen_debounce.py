@@ -1,3 +1,4 @@
+import queue
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -45,47 +46,73 @@ def _client(peer="peer", key="access-key"):
     return SimpleNamespace(
         disconnect=MagicMock(),
         key=key,
+        last_seen=-1,
         peer=peer,
         sess=SimpleNamespace(serialize=MagicMock(return_value={})),
     )
 
 
-def test_last_seen_updates_are_debounced_per_client_key():
+def test_last_seen_touches_are_queued_and_coalesced_per_client_key():
     user = SimpleNamespace(last_seen=0)
     db = FakeClientDatabase(user)
     proto = _protocol(db)
     proto.last_seen_update_interval = 30
+    queued = []
+    proto._last_seen_queue = MagicMock()
+    proto._last_seen_queue.put_nowait.side_effect = queued.append
+    client = _client()
 
     with (
+        patch("hivemind_core.protocol.time.time", side_effect=[1000.0, 1005.0, 1031.0]),
         patch("hivemind_core.protocol.time.monotonic", side_effect=[100.0, 105.0, 131.0]),
-        patch("hivemind_core.protocol.time.time", side_effect=[1000.0, 1031.0]),
     ):
-        proto.update_last_seen(_client())
-        proto.update_last_seen(_client())
-        proto.update_last_seen(_client())
+        proto.touch_last_seen(client)
+        proto.touch_last_seen(client)
+        proto.touch_last_seen(client)
 
-    assert db.lookups == 2
-    assert db.updates == 2
-    assert user.last_seen == 1031.0
+    assert queued == [(client, 1000.0), (client, 1031.0)]
+    assert client.last_seen == 1031.0
+    assert db.lookups == 0
+    assert db.updates == 0
 
 
-def test_zero_last_seen_interval_preserves_per_message_updates():
+def test_zero_last_seen_interval_queues_every_message_without_database_io():
     user = SimpleNamespace(last_seen=0)
     db = FakeClientDatabase(user)
     proto = _protocol(db)
     proto.last_seen_update_interval = 0
+    queued = []
+    proto._last_seen_queue = MagicMock()
+    proto._last_seen_queue.put_nowait.side_effect = queued.append
+    client = _client()
 
     with (
-        patch("hivemind_core.protocol.time.monotonic") as monotonic,
         patch("hivemind_core.protocol.time.time", side_effect=[100.0, 101.0]),
+        patch("hivemind_core.protocol.time.monotonic", side_effect=[10.0, 11.0]),
     ):
-        proto.update_last_seen(_client())
-        proto.update_last_seen(_client())
+        proto.touch_last_seen(client)
+        proto.touch_last_seen(client)
 
-    assert db.lookups == 2
-    assert db.updates == 2
-    assert user.last_seen == 101.0
-    monotonic.assert_not_called()
+    assert queued == [(client, 100.0), (client, 101.0)]
+    assert client.last_seen == 101.0
+    assert db.lookups == 0
+    assert db.updates == 0
+
+
+def test_full_queue_reopens_coalescing_gate_for_retry():
+    proto = _protocol(FakeClientDatabase(SimpleNamespace(last_seen=0)))
+    proto.last_seen_update_interval = 30
+    proto._last_seen_queue = MagicMock()
+    proto._last_seen_queue.put_nowait.side_effect = queue.Full
+    client = _client()
+
+    with (
+        patch("hivemind_core.protocol.time.time", return_value=100.0),
+        patch("hivemind_core.protocol.time.monotonic", return_value=10.0),
+    ):
+        proto.touch_last_seen(client)
+
+    assert client.key not in proto._last_seen_next_flush
 
 
 def test_disconnect_keeps_debounce_cache_for_shared_key_sibling():
@@ -96,13 +123,13 @@ def test_disconnect_keeps_debounce_cache_for_shared_key_sibling():
         disconnected.peer: disconnected,
         sibling.peer: sibling,
     }
-    proto._last_seen_updates["access-key"] = 100.0
+    proto._last_seen_next_flush["access-key"] = 100.0
 
     proto.handle_client_disconnected(disconnected)
 
     assert disconnected.peer not in proto.clients
     assert sibling.peer in proto.clients
-    assert proto._last_seen_updates["access-key"] == 100.0
+    assert proto._last_seen_next_flush["access-key"] == 100.0
     disconnected.disconnect.assert_called_once_with()
 
 
@@ -114,10 +141,10 @@ def test_disconnect_clears_debounce_cache_after_last_key_peer_leaves():
         disconnected.peer: disconnected,
         other_key.peer: other_key,
     }
-    proto._last_seen_updates["access-key"] = 100.0
-    proto._last_seen_updates["other-key"] = 101.0
+    proto._last_seen_next_flush["access-key"] = 100.0
+    proto._last_seen_next_flush["other-key"] = 101.0
 
     proto.handle_client_disconnected(disconnected)
 
-    assert "access-key" not in proto._last_seen_updates
-    assert proto._last_seen_updates["other-key"] == 101.0
+    assert "access-key" not in proto._last_seen_next_flush
+    assert proto._last_seen_next_flush["other-key"] == 101.0
