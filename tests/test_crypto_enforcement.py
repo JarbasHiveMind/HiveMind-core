@@ -20,7 +20,7 @@ Covers the additive, wire-compatible enforcement paths:
 import json
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pybase64
 import pytest
@@ -95,12 +95,16 @@ class TestCryptoRequiredOnReceive(unittest.TestCase):
     def test_cleartext_hello_and_handshake_always_accepted(self):
         proto = _make_protocol(require_crypto=True)
         client = _make_client(proto)
+        client.crypto_key = os.urandom(32)
         hello = HiveMessage(HiveMessageType.HELLO,
                             payload={"pubkey": "xxx"}).serialize()
         shake = HiveMessage(HiveMessageType.HANDSHAKE,
                             payload={"envelope": "yyy"}).serialize()
-        assert client.decode(hello).msg_type == HiveMessageType.HELLO
-        assert client.decode(shake).msg_type == HiveMessageType.HANDSHAKE
+        with patch("hivemind_core.protocol.LOG") as log:
+            assert client.decode(hello).msg_type == HiveMessageType.HELLO
+            assert client.decode(shake).msg_type == HiveMessageType.HANDSHAKE
+        log.warning.assert_not_called()
+        assert log.debug.call_count == 2
         client.disconnect.assert_not_called()
 
     def test_cleartext_bus_accepted_when_crypto_not_required(self):
