@@ -12,7 +12,9 @@ import json
 
 import pytest
 
+import hivemind_bus_client.identity as _identity_module
 import poorman_handshake.symmetric as _pm_symmetric
+from json_database import JsonConfigXDG as _JsonConfigXDG
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +22,22 @@ def isolated_xdg(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    # JsonConfigXDG binds its default xdg_folder when json_database is
+    # imported, before this fixture can change the environment. Patch the
+    # constructor used by NodeIdentity so every test identity is guaranteed
+    # to live below tmp_path even when the module was imported during pytest
+    # collection. Without this, an e2e client can overwrite a developer's
+    # real ~/.config/hivemind/_identity.json.
+    identity_config_root = tmp_path / "config"
+
+    def isolated_identity_config(name, *args, **kwargs):
+        kwargs["xdg_folder"] = identity_config_root
+        return _JsonConfigXDG(name, *args, **kwargs)
+
+    monkeypatch.setattr(
+        _identity_module, "JsonConfigXDG", isolated_identity_config
+    )
 
     # The suite uses short human-readable passwords ("matrix-pwd", ...) that
     # poorman-handshake's strength backstop would refuse. Disable the runtime
