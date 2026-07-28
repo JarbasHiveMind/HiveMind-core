@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
+import inspect
 import json
 import os
 import time
@@ -468,13 +469,17 @@ class HiveMindListenerProtocol:
         ``emit_client_message``. Agents without that optional hook retain the
         existing ``get_bus(...).emit(...)`` behavior.
         """
-        hook_name = "emit_client_message"
-        instance_attrs = getattr(self.agent_protocol, "__dict__", {})
-        if (hasattr(type(self.agent_protocol), hook_name)
-                or hook_name in instance_attrs):
-            hook = getattr(self.agent_protocol, hook_name, None)
-            if callable(hook):
-                return bool(hook(message, client))
+        hook = inspect.getattr_static(
+            self.agent_protocol, "emit_client_message", None
+        )
+        if hook is not None:
+            bound_hook = getattr(self.agent_protocol,
+                                 "emit_client_message", None)
+            if not callable(bound_hook):
+                raise TypeError(
+                    "AgentProtocol.emit_client_message must be callable"
+                )
+            return bool(bound_hook(message, client))
 
         bus = self.get_bus(client)
         bus.emit(message)

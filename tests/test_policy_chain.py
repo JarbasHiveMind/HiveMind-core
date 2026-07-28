@@ -689,29 +689,44 @@ class TestOnVerdictAccumulatedMutations(unittest.TestCase):
         self.assertEqual(len(v.mutations), 1)
 
 
+class _AgentStub:
+    """Structural AgentProtocol stand-in without the optional new hook."""
+
+    def __init__(self, bus):
+        self.bus = bus
+        self.hm_protocol = None
+        self.callbacks = MagicMock()
+
+    def get_bus(self, client=None):
+        return self.bus
+
+
+class _DeliveryAgentStub(_AgentStub):
+    """Concrete hook implementation with an inspectable delivery spy."""
+
+    def __init__(self, bus):
+        super().__init__(bus)
+        self.delivery = MagicMock(return_value=True)
+
+    def emit_client_message(self, message, client=None):
+        return self.delivery(message, client)
+
+
 class TestProtocolWiring(unittest.TestCase):
     """Unit tests for how the admission chain is wired into
     HiveMindListenerProtocol.handle_inject_agent_msg and
     handle_binary_message — verify the deny→client-notification path and
     the observe fire-and-forget contract without a real network stack."""
 
-    def _make_protocol(self):
+    def _make_protocol(self, agent_type=_AgentStub):
         """Build a minimal HiveMindListenerProtocol with FakeBus agent."""
         from unittest.mock import MagicMock
         from ovos_utils.fakebus import FakeBus
-        from hivemind_plugin_manager.protocols import AgentProtocol
         from hivemind_core.protocol import HiveMindListenerProtocol
         from hivemind_core.policy import PolicyChain
 
         bus = FakeBus()
-        agent = MagicMock(spec=AgentProtocol)
-        agent.bus = bus
-        # core routes the inject bus through agent.get_bus(client); mirror a
-        # real agent's default (return its own bus).
-        agent.get_bus.return_value = bus
-        agent.hm_protocol = None
-        agent.callbacks = MagicMock()
-        agent.callbacks.on_connect = MagicMock()
+        agent = agent_type(bus)
 
         proto = HiveMindListenerProtocol.__new__(HiveMindListenerProtocol)
         proto.agent_protocol = agent
@@ -803,8 +818,7 @@ class TestProtocolWiring(unittest.TestCase):
 
     def test_allow_uses_agent_delivery_hook_when_available(self):
         """An agent can own reliable delivery instead of exposing its raw bus."""
-        proto, bus = self._make_protocol()
-        proto.agent_protocol.emit_client_message = MagicMock(return_value=True)
+        proto, bus = self._make_protocol(_DeliveryAgentStub)
         client = self._make_client()
 
         emitted = []
@@ -814,7 +828,7 @@ class TestProtocolWiring(unittest.TestCase):
                       {"session": {"session_id": "session-1"}})
         proto.handle_inject_agent_msg(msg, client)
 
-        proto.agent_protocol.emit_client_message.assert_called_once_with(msg, client)
+        proto.agent_protocol.delivery.assert_called_once_with(msg, client)
         self.assertEqual(emitted, [])
         self.assertFalse(client.send.called)
 
@@ -828,9 +842,9 @@ class TestProtocolWiring(unittest.TestCase):
             def observe(self, msg, client):
                 observe_calls.append(msg.msg_type)
 
-        proto, bus = self._make_protocol()
+        proto, bus = self._make_protocol(_DeliveryAgentStub)
         proto.policy_chain = PolicyChain(policies=[_ObserveSpy()])
-        proto.agent_protocol.emit_client_message = MagicMock(
+        proto.agent_protocol.delivery = MagicMock(
             side_effect=ConnectionError("OVOS bus unavailable")
         )
         proto.agent_bus_callback = MagicMock()
@@ -853,8 +867,8 @@ class TestProtocolWiring(unittest.TestCase):
 
     def test_agent_delivery_rejection_is_reported(self):
         """A false delivery result is an explicit rejection, not success."""
-        proto, _bus = self._make_protocol()
-        proto.agent_protocol.emit_client_message = MagicMock(return_value=False)
+        proto, _bus = self._make_protocol(_DeliveryAgentStub)
+        proto.agent_protocol.delivery = MagicMock(return_value=False)
         client = self._make_client()
 
         msg = Message("speak", {"utterance": "hi"},
