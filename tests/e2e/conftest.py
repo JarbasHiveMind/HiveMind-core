@@ -32,6 +32,7 @@ def isolated_xdg(monkeypatch, tmp_path):
     identity_config_root = tmp_path / "config"
 
     def isolated_identity_config(name, *args, **kwargs):
+        """Construct an identity config below this test's XDG root."""
         kwargs["xdg_folder"] = identity_config_root
         return _JsonConfigXDG(name, *args, **kwargs)
 
