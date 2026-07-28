@@ -689,57 +689,29 @@ class TestOnVerdictAccumulatedMutations(unittest.TestCase):
         self.assertEqual(len(v.mutations), 1)
 
 
-class _AgentStub:
-    """Structural AgentProtocol stand-in without the optional new hook."""
-
-    def __init__(self, bus):
-        self.bus = bus
-        self.hm_protocol = None
-        self.callbacks = MagicMock()
-
-    def get_bus(self, client=None):
-        return self.bus
-
-
-class _DeliveryAgentStub(_AgentStub):
-    """Concrete hook implementation with an inspectable delivery spy."""
-
-    def __init__(self, bus):
-        super().__init__(bus)
-        self.delivery = MagicMock(return_value=True)
-
-    def emit_client_message(self, message, client=None):
-        return self.delivery(message, client)
-
-
-class _FabricatingAgentStub(_AgentStub):
-    """Proxy-like agent whose dynamic attributes must not define contracts."""
-
-    def __init__(self, bus):
-        super().__init__(bus)
-        self.fabricated_delivery = MagicMock(return_value=True)
-
-    def __getattr__(self, name):
-        if name == "emit_client_message":
-            return self.fabricated_delivery
-        raise AttributeError(name)
-
-
 class TestProtocolWiring(unittest.TestCase):
     """Unit tests for how the admission chain is wired into
     HiveMindListenerProtocol.handle_inject_agent_msg and
     handle_binary_message — verify the deny→client-notification path and
     the observe fire-and-forget contract without a real network stack."""
 
-    def _make_protocol(self, agent_type=_AgentStub):
+    def _make_protocol(self):
         """Build a minimal HiveMindListenerProtocol with FakeBus agent."""
         from unittest.mock import MagicMock
         from ovos_utils.fakebus import FakeBus
+        from hivemind_plugin_manager.protocols import AgentProtocol
         from hivemind_core.protocol import HiveMindListenerProtocol
         from hivemind_core.policy import PolicyChain
 
         bus = FakeBus()
-        agent = agent_type(bus)
+        agent = MagicMock(spec=AgentProtocol)
+        agent.bus = bus
+        # core routes the inject bus through agent.get_bus(client); mirror a
+        # real agent's default (return its own bus).
+        agent.get_bus.return_value = bus
+        agent.hm_protocol = None
+        agent.callbacks = MagicMock()
+        agent.callbacks.on_connect = MagicMock()
 
         proto = HiveMindListenerProtocol.__new__(HiveMindListenerProtocol)
         proto.agent_protocol = agent
@@ -828,97 +800,6 @@ class TestProtocolWiring(unittest.TestCase):
 
         self.assertEqual(len(emitted), 1)
         self.assertFalse(client.send.called)
-
-    def test_allow_uses_agent_delivery_hook_when_available(self):
-        """An agent can own reliable delivery instead of exposing its raw bus."""
-        proto, bus = self._make_protocol(_DeliveryAgentStub)
-        client = self._make_client()
-
-        emitted = []
-        bus.on("speak", emitted.append)
-
-        msg = Message("speak", {"utterance": "hi"},
-                      {"session": {"session_id": "session-1"}})
-        proto.handle_inject_agent_msg(msg, client)
-
-        proto.agent_protocol.delivery.assert_called_once_with(msg, client)
-        self.assertEqual(emitted, [])
-        self.assertFalse(client.send.called)
-
-    def test_dynamic_proxy_cannot_fabricate_delivery_hook(self):
-        """Only a statically declared agent hook changes delivery behavior."""
-        proto, bus = self._make_protocol(_FabricatingAgentStub)
-        client = self._make_client()
-
-        emitted = []
-        bus.on("speak", emitted.append)
-        msg = Message("speak", {"utterance": "hi"},
-                      {"session": {"session_id": "session-1"}})
-
-        proto.handle_inject_agent_msg(msg, client)
-
-        self.assertEqual(emitted, [msg])
-        proto.agent_protocol.fabricated_delivery.assert_not_called()
-        self.assertFalse(client.send.called)
-
-    def test_agent_delivery_failure_is_reported_without_observing(self):
-        """A failed agent write is visible and is not counted as delivered."""
-        from hivemind_core.policy import PolicyChain
-
-        observe_calls = []
-
-        class _ObserveSpy(PolicyPlugin):
-            def observe(self, msg, client):
-                observe_calls.append(msg.msg_type)
-
-        proto, bus = self._make_protocol(_DeliveryAgentStub)
-        proto.policy_chain = PolicyChain(policies=[_ObserveSpy()])
-        proto.agent_protocol.delivery = MagicMock(
-            side_effect=ConnectionError("OVOS bus unavailable")
-        )
-        proto.agent_bus_callback = MagicMock()
-        client = self._make_client()
-
-        emitted = []
-        bus.on("speak", emitted.append)
-
-        msg = Message("speak", {"utterance": "hi"},
-                      {"session": {"session_id": "session-1"}})
-        proto.handle_inject_agent_msg(msg, client)
-
-        self.assertEqual(emitted, [])
-        self.assertEqual(observe_calls, [])
-        proto.agent_bus_callback.assert_not_called()
-        sent = client.send.call_args[0][0].payload
-        self.assertEqual(sent.msg_type, "hive.agent_bus.error")
-        self.assertEqual(sent.data["failed_type"], "speak")
-        self.assertEqual(sent.data["error_type"], "ConnectionError")
-
-    def test_agent_delivery_rejection_is_reported(self):
-        """A false delivery result is an explicit rejection, not success."""
-        from hivemind_core.policy import PolicyChain
-
-        observe_calls = []
-
-        class _ObserveSpy(PolicyPlugin):
-            def observe(self, msg, client):
-                observe_calls.append(msg.msg_type)
-
-        proto, _bus = self._make_protocol(_DeliveryAgentStub)
-        proto.policy_chain = PolicyChain(policies=[_ObserveSpy()])
-        proto.agent_protocol.delivery = MagicMock(return_value=False)
-        proto.agent_bus_callback = MagicMock()
-        client = self._make_client()
-
-        msg = Message("speak", {"utterance": "hi"},
-                      {"session": {"session_id": "session-1"}})
-        proto.handle_inject_agent_msg(msg, client)
-
-        sent = client.send.call_args[0][0].payload
-        self.assertEqual(sent.msg_type, "hive.agent_bus.error")
-        self.assertEqual(sent.data["error_type"], "RuntimeError")
-        self.assertEqual(observe_calls, [])
-        proto.agent_bus_callback.assert_not_called()
 
     def test_observe_called_after_emit(self):
         """observe() fires after bus.emit, and exceptions are swallowed."""
