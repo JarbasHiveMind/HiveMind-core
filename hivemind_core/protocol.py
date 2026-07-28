@@ -460,6 +460,26 @@ class HiveMindListenerProtocol:
         # routing on the inject path stays transparent here.
         return self.agent_protocol.get_bus(client)
 
+    def _emit_agent_message(self, message: Message,
+                            client: HiveMindClientConnection) -> bool:
+        """Inject a client message through an agent-owned delivery hook.
+
+        Agents that manage reconnects, pools, or checked writes can expose
+        ``emit_client_message``. Agents without that optional hook retain the
+        existing ``get_bus(...).emit(...)`` behavior.
+        """
+        hook_name = "emit_client_message"
+        instance_attrs = getattr(self.agent_protocol, "__dict__", {})
+        if (hasattr(type(self.agent_protocol), hook_name)
+                or hook_name in instance_attrs):
+            hook = getattr(self.agent_protocol, hook_name, None)
+            if callable(hook):
+                return bool(hook(message, client))
+
+        bus = self.get_bus(client)
+        bus.emit(message)
+        return True
+
     def handle_new_client(self, client: HiveMindClientConnection):
         try:
             self.callbacks.on_connect(client)
@@ -1682,8 +1702,16 @@ class HiveMindListenerProtocol:
         message.context["peer"] = message.context["source"] = client.peer
         message.context["source"] = client.peer
 
-        bus = self.get_bus(client)
-        bus.emit(message)
+        try:
+            if not self._emit_agent_message(message, client):
+                raise RuntimeError("agent bus rejected message")
+        except Exception as exc:
+            LOG.exception(
+                f"failed to forward '{message.msg_type}' to agent bus "
+                f"from client: {client.peer}"
+            )
+            self._send_agent_bus_error(client, message, exc)
+            return
 
         self.policy_chain.observe(message, client)
 
@@ -1707,6 +1735,23 @@ class HiveMindListenerProtocol:
             client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
         except Exception:
             LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
+
+    def _send_agent_bus_error(self, client: HiveMindClientConnection,
+                              message: Message, exc: Exception) -> None:
+        """Tell the originating client that its allowed message was not delivered."""
+        payload = Message(
+            "hive.agent_bus.error",
+            {
+                "failed_type": getattr(message, "msg_type", None),
+                "error_type": type(exc).__name__,
+                "error": "message was not delivered to the agent bus",
+            },
+            {"source": "hivemind-core", "destination": client.peer},
+        )
+        try:
+            client.send(HiveMessage(HiveMessageType.BUS, payload=payload))
+        except Exception:
+            LOG.exception(f"failed to send hive.agent_bus.error to {client.peer}")
 
     def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
         # this message is going inside the client bus

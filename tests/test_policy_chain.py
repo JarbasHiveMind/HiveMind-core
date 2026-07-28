@@ -801,6 +801,70 @@ class TestProtocolWiring(unittest.TestCase):
         self.assertEqual(len(emitted), 1)
         self.assertFalse(client.send.called)
 
+    def test_allow_uses_agent_delivery_hook_when_available(self):
+        """An agent can own reliable delivery instead of exposing its raw bus."""
+        proto, bus = self._make_protocol()
+        proto.agent_protocol.emit_client_message = MagicMock(return_value=True)
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"},
+                      {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        proto.agent_protocol.emit_client_message.assert_called_once_with(msg, client)
+        self.assertEqual(emitted, [])
+        self.assertFalse(client.send.called)
+
+    def test_agent_delivery_failure_is_reported_without_observing(self):
+        """A failed agent write is visible and is not counted as delivered."""
+        from hivemind_core.policy import PolicyChain
+
+        observe_calls = []
+
+        class _ObserveSpy(PolicyPlugin):
+            def observe(self, msg, client):
+                observe_calls.append(msg.msg_type)
+
+        proto, bus = self._make_protocol()
+        proto.policy_chain = PolicyChain(policies=[_ObserveSpy()])
+        proto.agent_protocol.emit_client_message = MagicMock(
+            side_effect=ConnectionError("OVOS bus unavailable")
+        )
+        proto.agent_bus_callback = MagicMock()
+        client = self._make_client()
+
+        emitted = []
+        bus.on("speak", emitted.append)
+
+        msg = Message("speak", {"utterance": "hi"},
+                      {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        self.assertEqual(emitted, [])
+        self.assertEqual(observe_calls, [])
+        proto.agent_bus_callback.assert_not_called()
+        sent = client.send.call_args[0][0].payload
+        self.assertEqual(sent.msg_type, "hive.agent_bus.error")
+        self.assertEqual(sent.data["failed_type"], "speak")
+        self.assertEqual(sent.data["error_type"], "ConnectionError")
+
+    def test_agent_delivery_rejection_is_reported(self):
+        """A false delivery result is an explicit rejection, not success."""
+        proto, _bus = self._make_protocol()
+        proto.agent_protocol.emit_client_message = MagicMock(return_value=False)
+        client = self._make_client()
+
+        msg = Message("speak", {"utterance": "hi"},
+                      {"session": {"session_id": "session-1"}})
+        proto.handle_inject_agent_msg(msg, client)
+
+        sent = client.send.call_args[0][0].payload
+        self.assertEqual(sent.msg_type, "hive.agent_bus.error")
+        self.assertEqual(sent.data["error_type"], "RuntimeError")
+
     def test_observe_called_after_emit(self):
         """observe() fires after bus.emit, and exceptions are swallowed."""
         from hivemind_core.policy import PolicyChain
