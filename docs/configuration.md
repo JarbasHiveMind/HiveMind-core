@@ -224,3 +224,6 @@ hpm list database
 hpm set database hivemind-redis-db-plugin
 hpm show-config
 ```
+
+---
+[← Architecture](architecture.md) · [Home](README.md) · [CLI Reference →](cli-reference.md)

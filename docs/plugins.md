@@ -11,7 +11,7 @@ Responsible for accepting connections and delivering raw payloads to `HiveMindLi
 | `hivemind-websocket-protocol` | WebSocket-based real-time connections | `pip install hivemind-websocket-protocol` |
 | `hivemind-http-protocol` | HTTP request/response, for clients without persistent connections | `pip install hivemind-http-protocol` |
 
-Multiple network protocols can run simultaneously — each is started in its own daemon thread.
+Multiple network protocols can run at the same time. Each starts in its own daemon thread.
 
 Configuration example (in `server.json`):
 
@@ -73,8 +73,8 @@ Binary payload types dispatched to the plugin:
 
 | Plugin | Description | Install |
 |---|---|---|
-| `hivemind-json-db-plugin` | JSON flat-file storage (default) | bundled |
-| `hivemind-sqlite-database` | SQLite storage for production deployments | `pip install hivemind-sqlite-database` |
+| `hivemind-sqlite-database` | SQLite storage (default for fresh installs) | bundled |
+| `hivemind-json-db-plugin` | JSON flat-file storage (kept for existing JSON deployments) | bundled |
 | `hivemind-redis-database` | Redis storage for distributed deployments | `pip install hivemind-redis-database` |
 
 Configuration example:
@@ -104,3 +104,6 @@ The four base classes are:
 | `AgentProtocol` | `hivemind_plugin_manager.protocols` |
 | `BinaryDataHandlerProtocol` | `hivemind_plugin_manager.protocols` |
 | `AbstractDB` | `hivemind_plugin_manager.database` |
+
+---
+[← Policy Chain](policy.md) · [Home](README.md) · [Extending →](extending.md)

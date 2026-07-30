@@ -15,14 +15,11 @@ pip install hivemind-core
 ## Install with optional database backends
 
 ```bash
-# SQLite backend
-pip install hivemind-core hivemind-sqlite-database
-
 # Redis backend
 pip install hivemind-core hivemind-redis-database
 ```
 
-The default database backend is JSON (`hivemind-json-db-plugin`), which is installed automatically as a dependency.
+Fresh installs use the SQLite backend (`hivemind-sqlite-database`) by default. It installs automatically as a dependency, along with the JSON backend (`hivemind-json-db-plugin`) for existing JSON deployments.
 
 ## Install network protocol plugins
 
@@ -53,3 +50,6 @@ hivemind-core --help
 ## Next step
 
 After installing, [configure the server](configuration.md) and [add your first client](cli.md#add-client).
+
+---
+[← Authentication](auth.md) · [Home](index.md) · [Security →](security.md)

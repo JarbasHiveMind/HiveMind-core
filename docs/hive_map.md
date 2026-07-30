@@ -1,9 +1,14 @@
 # Hive Map — Topology Discovery and Visualization
 
-`HiveMapper` is the utility class that collects PONG responses from a PING flood and builds a
-directed graph of the reachable hive. It is defined in `hivemind_core.hive_map`.
+`HiveMapper` is the utility class that collects PING-flood responses and builds a
+directed graph of the reachable network. It lives in `hivemind_bus_client.hive_map`
+and the server imports it in `hivemind_core/protocol.py`.
 
-For a conceptual overview of the PING/PONG protocol, see
+Discovery is PING-only. Every node answers an inbound PING by relaying its own PING
+with the same `flood_id`, so all nodes in the network sync in one round. There is
+no separate PONG message. The `flood_id` stops infinite relay loops.
+
+For a conceptual overview of the discovery protocol, see
 [`HiveMind-community-docs: docs/20_network_discovery.md`](../../HiveMind-community-docs/docs/20_network_discovery.md).
 
 ---
@@ -11,21 +16,21 @@ For a conceptual overview of the PING/PONG protocol, see
 ## Design Overview
 
 ```
-Originator sends PING
+Originator sends PING (flood_id)
         │
         ▼
-HiveMapper.start_ping(ping_id)   ← register expected ping_id
+HiveMapper.start_ping(flood_id)   ← register expected flood_id
         │
         ▼
-PONGs arrive (each via PROPAGATE)
+PINGs arrive from other nodes (each via PROPAGATE)
         │
         ▼
-HiveMapper.on_pong(pong_msg)     ← extract route, upsert nodes/edges
+HiveMapper.on_ping(ping_msg)      ← extract route, upsert nodes/edges
         │
         ▼
-HiveMapper.to_ascii()            ← render to terminal
-HiveMapper.to_dict()             ← export as JSON-serialisable dict
-HiveMapper.to_json()             ← export as JSON string
+HiveMapper.to_ascii()             ← render to terminal
+HiveMapper.to_dict()              ← export as a JSON-serializable dict
+HiveMapper.to_json()              ← export as a JSON string
 ```
 
 ---
@@ -38,35 +43,36 @@ HiveMapper.to_json()             ← export as JSON string
 class HiveMapper:
     def __init__(self) -> None:
         """
-        Initialise an empty topology map.
+        Initialize an empty topology map.
 
         Attributes:
-            nodes (Dict[str, NodeInfo]): peer_id → node metadata
-            edges (Dict[str, Set[str]]): peer_id → set of peer_ids it was seen routing to
-            _seen_pongs (Dict[str, Set[str]]): ping_id → set of peer_ids that already responded
+            nodes (Dict[str, NodeInfo]): peer_id -> node metadata
+            edges (Dict[str, Set[str]]): peer_id -> set of peer_ids it was seen routing to
+            _seen_pings (Dict[str, Set[str]]): flood_id -> set of peer_ids that already sent a PING
+            _seen_flood_ids (OrderedDict[str, float]): flood_id -> timestamp, for loop prevention
         """
 ```
 
-### `start_ping(ping_id: str) -> None`
+### `start_ping(flood_id: str) -> None`
 
-Register a new PING session. Clears any stale PONG-deduplication state for the given `ping_id`.
+Register a new PING session. Clears any stale deduplication state for the given `flood_id`.
 
 ```python
 mapper.start_ping("550e8400-e29b-41d4-a716-446655440000")
 ```
 
-### `on_pong(message: HiveMessage) -> bool`
+### `on_ping(message: HiveMessage, received_at: Optional[float] = None) -> bool`
 
-Ingest a received PONG (the inner message of a PROPAGATE wrapper). Extracts the responding node's
-peer, site_id, and pong_timestamp from the payload, then walks the `route` list to upsert directed
-edges into the adjacency graph.
+Ingest a received PING (the inner message of a PROPAGATE wrapper). It reads the sending
+node's peer, site_id, timestamp, public_key, and lang from the payload, then walks the
+`route` list to upsert directed edges into the adjacency graph.
 
-Returns `True` if the PONG was new (not a duplicate), `False` if it was already seen.
+Returns `True` if the PING was new (not a duplicate), `False` if it was already seen.
 
 ```python
 from hivemind_bus_client.message import HiveMessage
 
-handled = mapper.on_pong(pong_msg)
+handled = mapper.on_ping(ping_msg, received_at=time.time())
 ```
 
 **Route extraction logic:**
@@ -75,20 +81,34 @@ handled = mapper.on_pong(pong_msg)
 for hop in message.route:
     source  = hop["source"]       # str peer_id
     targets = hop["targets"]      # List[str] peer_ids
-    # add source → target edges
+    # add source -> target edges
 ```
+
+### `mark_trusted_nodes(trusted_keys: Dict[str, str]) -> None`
+
+Mark each discovered node's `NodeInfo.trusted` flag based on whether its `public_key`
+appears in the given alias-to-public-key mapping (for example, `NodeIdentity.trusted_keys`).
+Call this after PING discovery completes.
+
+### `is_peer_trusted(peer: str) -> bool`
+
+Return `True` if the given peer was discovered by PING and its `trusted` flag is set.
 
 ### `to_dict() -> dict`
 
-Return a JSON-serialisable snapshot of the current topology.
+Return a JSON-serializable snapshot of the current topology.
 
 ```python
 {
     "nodes": [
         {
-            "peer":           "kitchen-node::abc123",
-            "site_id":        "kitchen",
-            "pong_timestamp": 1741478400.456
+            "peer":        "kitchen-node::abc123",
+            "site_id":     "kitchen",
+            "timestamp":   1741478400.456,
+            "latency_ms":  333.0,
+            "public_key":  None,
+            "lang":        "en-us",
+            "trusted":     False
         },
         ...
     ],
@@ -103,34 +123,36 @@ Return a JSON-serialisable snapshot of the current topology.
 
 Return `to_dict()` as a formatted JSON string.
 
-### `to_ascii() -> str`
+### `to_ascii(root_peer: Optional[str] = None) -> str`
 
-Render the topology as a human-readable tree rooted at the local node. Uses the `rich` library when
-available for colour and box-drawing characters; falls back to plain ASCII.
+Render the topology as a human-readable ASCII tree. PING routes flow toward the
+originator, so the mapper stores edges as `relayer -> originator`. Pass `root_peer`
+(the local node) to invert the display so the tree reads top-down from the originator
+to the leaf nodes, labeled `[self]` at the root.
 
-**Example output (plain):**
+**Example output:**
 
 ```
 [self] kitchen-node::abc123
-├── bedroom-node::def456  (site: bedroom)
-│   └── bathroom-node::ghi789  (site: bathroom)
-└── garage-node::jkl012  (site: garage)
+├── bedroom-node::def456  site=bedroom  latency=333ms
+│   └── bathroom-node::ghi789  site=bathroom  latency=511ms
+└── garage-node::jkl012  site=garage  latency=210ms
 ```
 
-**Example output (rich):**
+`latency_ms` on `NodeInfo` is an estimate: receiver clock minus sender clock. It is
+not a true round-trip measurement, and it can read negative or inaccurate on
+unsynchronized clocks.
 
-```
-┌─ [self] kitchen-node::abc123
-├─── bedroom-node::def456        site=bedroom  rtt=333ms
-│    └─── bathroom-node::ghi789  site=bathroom rtt=511ms
-└─── garage-node::jkl012         site=garage   rtt=210ms
-```
+### `check_flood_id(flood_id: str, max_size: int = 1000) -> bool`
 
-RTT (round-trip time) is computed as `pong_timestamp − ping_timestamp` when both are available.
+Check whether `flood_id` was already seen, and register it. The first call for a
+given `flood_id` returns `False` (not seen). Later calls return `True`. When the
+cache passes `max_size`, the oldest entries are evicted first (FIFO).
 
 ### `clear() -> None`
 
-Reset the mapper to an empty state (nodes, edges, seen-pong deduplication).
+Reset the mapper to an empty state (nodes, edges, seen-ping and seen-flood-id
+deduplication).
 
 ---
 
@@ -139,16 +161,19 @@ Reset the mapper to an empty state (nodes, edges, seen-pong deduplication).
 ```python
 @dataclass
 class NodeInfo:
-    peer:           str
-    site_id:        Optional[str]   = None
-    pong_timestamp: Optional[float] = None
-    ping_timestamp: Optional[float] = None
+    peer:        str
+    site_id:     Optional[str]   = None
+    timestamp:   Optional[float] = None    # sender's clock when it created the PING
+    received_at: Optional[float] = None    # local clock when we received it
+    public_key:  Optional[str]   = None    # RSA public key, if provided in the PING
+    lang:        Optional[str]   = None    # locale announced by the node (e.g. "en-us")
+    trusted:     bool            = False   # whether this peer's key is in the trusted list
 
     @property
-    def rtt_ms(self) -> Optional[float]:
-        """Round-trip time in milliseconds, or None if timestamps unavailable."""
-        if self.pong_timestamp is not None and self.ping_timestamp is not None:
-            return (self.pong_timestamp - self.ping_timestamp) * 1000
+    def latency_ms(self) -> Optional[float]:
+        """Estimated one-way latency in milliseconds, or None if timestamps are unavailable."""
+        if self.received_at is not None and self.timestamp is not None:
+            return (self.received_at - self.timestamp) * 1000
         return None
 ```
 
@@ -156,23 +181,23 @@ class NodeInfo:
 
 ## Integration with `HiveMindListenerProtocol`
 
-The server-side protocol creates a `HiveMapper` instance and feeds it PONGs:
+The server-side protocol creates a `HiveMapper` instance and feeds it PINGs:
 
 ```python
-# hivemind_core/protocol.py (planned)
+# hivemind_core/protocol.py
 
-def handle_pong_message(self, message: HiveMessage, client: HiveMindClientConnection) -> None:
+def handle_ping_message(self, message: HiveMessage, client: HiveMindClientConnection) -> None:
     """
-    Relay PONG upstream/downstream via PROPAGATE, then ingest into the local HiveMapper.
-
-    Args:
-        message: The inner PONG HiveMessage (already unwrapped from PROPAGATE).
-        client:  The client connection that delivered this message.
+    Feed the PING into the local HiveMapper, emit hive.ping.received, then,
+    if this flood_id has not been seen before, relay this node's own
+    responsive PING (same flood_id) to all connected peers.
     """
-    self.hive_mapper.on_pong(message)
-    self.agent_bus.emit(Message("hive.pong.received", data=message.payload))
-    # relay onward (PROPAGATE semantics)
-    self._relay_propagate(message, client)
+    self.hive_mapper.on_ping(message, received_at=time.time())
+    self.agent_protocol.bus.emit(Message("hive.ping.received", {...}))
+    if flood_id_already_seen:
+        return
+    for peer_id, conn in self.clients.items():
+        conn.send(own_ping_outer)
 ```
 
 ---
@@ -184,24 +209,25 @@ import time
 import uuid
 from hivemind_bus_client import HiveMessageBusClient
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
-from hivemind_core.hive_map import HiveMapper
+from hivemind_bus_client.hive_map import HiveMapper
 
 client = HiveMessageBusClient()
 client.run_in_thread()
 client.connected_event.wait()
 
-mapper  = HiveMapper()
-ping_id = str(uuid.uuid4())
+mapper    = HiveMapper()
+flood_id  = str(uuid.uuid4())
+mapper.start_ping(flood_id)
 
-def on_pong(message):
-    if message.payload.get("ping_id") == ping_id:
-        mapper.on_pong(message)
+def on_ping(message):
+    if message.payload.get("flood_id") == flood_id:
+        mapper.on_ping(message, received_at=time.time())
 
-client.on(HiveMessageType.PONG, on_pong)
+client.on(HiveMessageType.PING, on_ping)
 
 # Send PING
 ping_payload = {
-    "ping_id":   ping_id,
+    "flood_id":  flood_id,
     "timestamp": time.time(),
     "peer":      client.peer,
     "site_id":   client.site_id,
@@ -213,7 +239,7 @@ client.emit(ping_msg)
 # Collect for 5 seconds
 time.sleep(5)
 
-print(mapper.to_ascii())
+print(mapper.to_ascii(root_peer=client.peer))
 print(mapper.to_json())
 ```
 
@@ -223,13 +249,16 @@ print(mapper.to_json())
 
 | File | Purpose |
 |---|---|
-| `hivemind_core/hive_map.py` | `HiveMapper` and `NodeInfo` implementation |
-| `hivemind_core/protocol.py` | `handle_ping_message()` and `handle_pong_message()` handlers |
+| `hivemind_bus_client/hive_map.py` | `HiveMapper` and `NodeInfo` implementation |
+| `hivemind_core/protocol.py` | `handle_ping_message()` handler that feeds the mapper |
 
 ---
 
 ## Related Documents
 
-- [Protocol Internals](protocol.md) — Handler lifecycle and message routing
-- [`HiveMind-community-docs: 20_network_discovery.md`](../../HiveMind-community-docs/docs/20_network_discovery.md) — Conceptual overview
-- [`hivemind-websocket-client: docs/cli_guide.md`](../../hivemind-websocket-client/docs/cli_guide.md) — `hivemind-client ping` command
+- [Protocol Internals](protocol.md): handler lifecycle and message routing.
+- [`HiveMind-community-docs: 20_network_discovery.md`](../../HiveMind-community-docs/docs/20_network_discovery.md): conceptual overview.
+- [`hivemind-websocket-client: docs/cli_guide.md`](../../hivemind-websocket-client/docs/cli_guide.md): the `hivemind-client ping` command.
+
+---
+[← Plugin Development](plugin_development.md) · [Home](index.md) · [Ecosystem →](ecosystem.md)

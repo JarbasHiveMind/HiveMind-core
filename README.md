@@ -2,66 +2,66 @@
 
 # HiveMind Core
 
-HiveMind is a flexible [protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/) that facilitates communication and collaboration among devices and AI agents within a unified network. 
-It enables lightweight devices, called **satellites**, to connect to a central hub, with customizable permissions and centralized control.
+HiveMind is a [protocol](https://jarbashivemind.github.io/HiveMind-community-docs/04_protocol/) for communication and collaboration between devices and AI agents in one network.
+It lets lightweight devices, called **satellites**, connect to a central HiveMind Core server, with customizable permissions and centralized control.
 
-HiveMind also supports [hierarchical hub-to-hub connections](https://jarbashivemind.github.io/HiveMind-community-docs/15_nested/), creating powerful, scalable smart environments.
+HiveMind also supports [connections between HiveMind Core servers](https://jarbashivemind.github.io/HiveMind-community-docs/15_nested/), so you can build layered, scalable environments.
 
-Initially developed as part of the [OpenVoiceOS (OVOS)](https://github.com/OpenVoiceOS/) ecosystem, HiveMind is adaptable to various AI backend systems.
+HiveMind started as part of the [OpenVoiceOS (OVOS)](https://github.com/OpenVoiceOS/) ecosystem. You can adapt it to other AI backend systems.
 
-For more details and demonstrations, check our [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/).
+For more details and demonstrations, check the [YouTube channel](https://www.youtube.com/channel/UCYoV5kxp2zrH6pnoqVZpKSA/).
 
 ---
 
 - [HiveMind Core](#hivemind-core)
-   * [Key Features](#-key-features)
-   * [Modular Design with Plugins](#-modular-design-with-plugins)
-   * [Protocol Configuration](#-protocol-configuration)
-   * [Quick Start](#-quick-start)
+   * [Key Features](#key-features)
+   * [Modular Design with Plugins](#modular-design-with-plugins)
+   * [Protocol Configuration](#protocol-configuration)
+   * [Quick Start](#quick-start)
       + [Installation](#installation)
       + [Adding a Satellite](#adding-a-satellite)
       + [Running the Server](#running-the-server)
-   * [Commands Overview](#-commands-overview)
-   * [Plugins Overview](#-plugins-overview)
-   * [Clients Overview](#-clients-overview)
-   * [Next Steps](#-next-steps)
-   * [License](#-license)
+   * [Commands Overview](#commands-overview)
+   * [Plugins Overview](#plugins-overview)
+   * [Clients Overview](#clients-overview)
+   * [Next Steps](#next-steps)
+   * [License](#license)
    * [Trademark](#trademark)
-   * [Contributing](#-contributing)
-  
+   * [Contributing](#contributing)
+
 ---
 
-## 🌟 Key Features
+## Key Features
 
-- **Modular Design**: Easily extend functionality with plugins for different protocols and behaviors.
-- **Protocol Flexibility**: Use HiveMind with different **network**, **agent**, and **binary protocols**.
-- **Customizable Database Options**: Support for JSON, SQLite, and Redis.
-- **Centralized Control**: Manage and monitor devices from a single hub.
-- **[Fine-Grained Permissions](https://jarbashivemind.github.io/HiveMind-community-docs/16_permissions/)**: Control
+- **Modular design**: extend functionality with plugins for different protocols and behaviors.
+- **Protocol flexibility**: use HiveMind with different **network**, **agent**, and **binary protocols**.
+- **Customizable database options**: JSON, SQLite, and Redis.
+- **Centralized control**: manage and monitor devices from one HiveMind Core server.
+- **[Fine-grained permissions](https://jarbashivemind.github.io/HiveMind-community-docs/16_permissions/)**: control
   access to skills, intents, and message types for each satellite.
-- **Multi-Agent Support**: Integrate various AI assistants, such as [OpenVoiceOS](https://github.com/OpenVoiceOS/)
+- **Multi-agent support**: integrate AI assistants such as [OpenVoiceOS](https://github.com/OpenVoiceOS/)
   or [LLMs](https://github.com/OpenVoiceOS/ovos-persona).
 
 ---
 
-## 🔌 Modular Design with Plugins
+## Modular Design with Plugins
 
-HiveMind is designed to be modular, allowing you to customize its behavior through plugins managed by the **HiveMind Plugin Manager**.
+HiveMind is modular. You customize its behavior through plugins managed by the **HiveMind Plugin Manager**.
 
-- **Transport Mechanism** 🚚: The protocol does not specify **how** messages are transported; this is implemented via **network protocol plugins** (e.g., Websockets, HTTP).
-- **Payload Handling** 🤖 : The protocol does not dictate **who** handles the messages; this is implemebted via **agent protocol plugins** (e.g., OVOS, Persona).
-- **Message Format** 📦: The protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/) and **binary** data; what happens to the received binary data is implemented via **binary data protocol plugins** (e.g., process incoming audio).
-- **Database**: 🗃️ how client credentials are stored is implemented via **database plugins** (e.g., JSON, SQLite, Redis).
+- **Transport mechanism**: the protocol does not specify **how** messages are transported. **Network protocol plugins** implement this (for example, Websockets, HTTP).
+- **Payload handling**: the protocol does not dictate **who** handles the messages. **Agent protocol plugins** implement this (for example, OVOS, Persona).
+- **Message format**: the protocol supports **JSON data** modeled after the `Message` [structure from OVOS](https://jarbashivemind.github.io/HiveMind-community-docs/13_mycroft/), and **binary** data. **Binary data protocol plugins** implement what happens to received binary data (for example, processing incoming audio).
+- **Database**: **database plugins** implement how client credentials are stored (for example, JSON, SQLite, Redis).
 
 ---
 
-## 📖 Protocol Configuration
+## Protocol Configuration
 
-HiveMind Core now supports a configuration file, making it easier for users to define server settings and reduce the need for complex command-line arguments. 
+HiveMind Core supports a configuration file. This lets you define server settings without long command-line arguments.
 
-> 💡 The configuration file is stored at `~/.config/hivemind-core/server.json`
+> The configuration file is stored at `~/.config/hivemind-core/server.json`
 
-The default configuration
+The default configuration:
 
 ```json
 {
@@ -100,21 +100,20 @@ The default configuration
 }
 ```
 
-
-> **Default backend:** fresh installs use **SQLite** (transactional, concurrency-safe, stdlib). An existing JSON deployment (a `clients.json` already on disk) keeps using JSON so upgrades never strand the credentials store. Move an existing store with `hivemind-core migrate-db --to sqlite` (also supports `--from`/`--to` for JSON ⇄ SQLite ⇄ Redis).
+> **Default backend:** fresh installs use **SQLite** (transactional, concurrency-safe, stdlib). An existing JSON deployment (a `clients.json` already on disk) keeps using JSON, so upgrades never strand the credentials store. Move an existing store with `hivemind-core migrate-db --to sqlite` (also supports `--from`/`--to` for JSON ⇄ SQLite ⇄ Redis).
 
 ### Policy Admission Chain
 
-Every inbound message passes through an ordered **policy admission chain** before reaching the agent bus. See [issue #85](https://github.com/JarbasHiveMind/HiveMind-core/issues/85) for the full spec.
+Every inbound message passes through an ordered **policy admission chain** before it reaches the agent bus. See [issue #85](https://github.com/JarbasHiveMind/HiveMind-core/issues/85) for the full spec.
 
 **How it works:**
 
-1. `MessageTypeACLPolicy` is **always prepended** to the chain and cannot be removed by configuration. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. `Client.is_admin` is informational and gives no admission bypass — admins are subject to the whitelist like any other client. — `hivemind_core/policy.py:174`
+1. `MessageTypeACLPolicy` is **always prepended** to the chain. Configuration cannot remove it. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. `Client.is_admin` is informational and gives no admission bypass. Admins follow the whitelist like any other client (`hivemind_core/policy.py:174`).
 2. Configured plugins in `policy.chain` run after `MessageTypeACLPolicy`, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
-3. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator knob to override this. — `hivemind_core/policy.py:36`
-4. If the chain fails to build at startup, a `DenyAllPolicy` fallback is installed, rejecting every message with `code="policy_chain_unavailable"` until configuration is fixed. — `hivemind_core/policy.py:151`
+3. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator setting to override this (`hivemind_core/policy.py:36`).
+4. If the chain fails to build at startup, HiveMind installs a `DenyAllPolicy` fallback, which rejects every message with `code="policy_chain_unavailable"` until you fix the configuration (`hivemind_core/policy.py:151`).
 
-**Denied messages** receive a `hive.policy.denied` BUS response with payload:
+**Denied messages** get a `hive.policy.denied` BUS response with this payload:
 
 ```json
 {
@@ -125,12 +124,12 @@ Every inbound message passes through an ordered **policy admission chain** befor
 }
 ```
 
-`handle_inject_agent_msg` runs `policy_chain.review()` then `policy_chain.observe()` for every accepted message. `handle_binary_message` runs `policy_chain.review_binary()`. — `hivemind_core/protocol.py:908`, `hivemind_core/protocol.py:457`
+`handle_inject_agent_msg` runs `policy_chain.review()` then `policy_chain.observe()` for every accepted message. `handle_binary_message` runs `policy_chain.review_binary()` (`hivemind_core/protocol.py:908`, `hivemind_core/protocol.py:457`).
 
-**ACL model — whitelist-only, deny-by-default:**
+**ACL model: whitelist-only, deny-by-default**
 
-- `allowed_types` is the only ACL field on `HiveMindClientConnection`. There is no message blacklist. — `hivemind_core/protocol.py:92`
-- A freshly created client (via `add-client`) has an **empty** `allowed_types` list and will be denied all messages until the operator explicitly grants types with `allow-msg`. This applies to admin clients too — `Client.is_admin` is informational only and gives no admission bypass.
+- `allowed_types` is the only ACL field on `HiveMindClientConnection`. There is no message blacklist (`hivemind_core/protocol.py:92`).
+- A freshly created client (via `add-client`) has an **empty** `allowed_types` list. HiveMind denies it all messages until the operator explicitly grants types with `allow-msg`. This applies to admin clients too. `Client.is_admin` is informational only and gives no admission bypass.
 
 To grant a message type:
 
@@ -139,17 +138,17 @@ $ hivemind-core allow-msg "recognizer_loop:utterance" 1
 $ hivemind-core allow-msg "speak" 1
 ```
 
-**Removing a type** (mutates `allowed_types`; not deprecated):
+**Removing a type** (mutates `allowed_types`, not deprecated):
 
 ```bash
 $ hivemind-core blacklist-msg "speak" 1
 ```
 
-**Skill and intent filtering** are OVOS-specific concerns handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`, the default `agent_protocol`). The CLI commands `blacklist-skill`, `allow-skill`, `blacklist-intent`, and `allow-intent` manage the `skill_blacklist` / `intent_blacklist` lists in `Client.metadata`, which `OVOSAgentPolicy` injects into the OVOS session. They take effect only when that policy is configured in `policy.chain`. For any other policy-relevant key, use **`set-metadata`** to write arbitrary `Client.metadata`. — `hivemind_core/scripts.py`
+**Skill and intent filtering** are OVOS-specific concerns handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`, the default `agent_protocol`). The CLI commands `blacklist-skill`, `allow-skill`, `blacklist-intent`, and `allow-intent` manage the `skill_blacklist` / `intent_blacklist` lists in `Client.metadata`, which `OVOSAgentPolicy` injects into the OVOS session. They take effect only when you configure that policy in `policy.chain`. For any other policy-relevant key, use **`set-metadata`** to write arbitrary `Client.metadata` (`hivemind_core/scripts.py`).
 
-**On-disk migration of legacy blacklist fields.** Database backends (e.g. `hivemind-sqlite-database`, `hivemind-redis-database`) implement the new `AbstractDB.migrate(from_version)` hook from `hivemind-plugin-manager` and run a one-shot `v1 → v2` migration on first open. The migration folds any legacy top-level `intent_blacklist` / `skill_blacklist` / `message_blacklist` storage (SQLite columns, JSON keys, Redis hash fields) into each row's `metadata` dict via `setdefault` (explicit metadata wins), then clears the legacy storage. Backends track their schema version natively (SQLite `PRAGMA user_version`, Redis sentinel key) so the migration runs exactly once per database. Third-party backends that do not override `migrate()` keep working — the property shims on `Client` ensure read-path code is agnostic to on-disk shape.
+**On-disk migration of legacy blacklist fields.** Database backends (for example, `hivemind-sqlite-database`, `hivemind-redis-database`) implement the `AbstractDB.migrate(from_version)` hook from `hivemind-plugin-manager` and run a one-shot `v1 → v2` migration on first open. The migration folds any legacy top-level `intent_blacklist` / `skill_blacklist` / `message_blacklist` storage (SQLite columns, JSON keys, Redis hash fields) into each row's `metadata` dict via `setdefault` (explicit metadata wins), then clears the legacy storage. Backends track their schema version natively (SQLite `PRAGMA user_version`, Redis sentinel key), so the migration runs exactly once per database. Third-party backends that do not override `migrate()` keep working. The property shims on `Client` keep read-path code agnostic to on-disk shape.
 
-To add additional policies, extend the `policy.chain` list with plugin module names:
+To add more policies, extend the `policy.chain` list with plugin module names:
 
 ```json
 "policy": {
@@ -160,14 +159,13 @@ To add additional policies, extend the `policy.chain` list with plugin module na
 }
 ```
 
-Drop `hivemind-ovos-agent-policy` from the list only if you are running a non-OVOS agent backend.
-
+Drop `hivemind-ovos-agent-policy` from the list only if you run a non-OVOS agent backend.
 
 ---
 
-## 🛰️  Quick Start
+## Quick Start
 
-To get started, HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and connections.
+HiveMind Core provides a command-line interface (CLI) for managing clients, permissions, and connections.
 
 ### Installation
 
@@ -192,7 +190,7 @@ Encryption Key: f46351c54f61a715
 WARNING: Encryption Key is deprecated, only use if your client does not support password
 ```
 
-**NOTE**: You will need to provide this information on the client devices to connect.
+**NOTE**: You must provide this information on the client devices so they can connect.
 
 ### Running the Server
 
@@ -204,9 +202,9 @@ $ hivemind-core listen
 
 ---
 
-## 🛠️ Commands Overview
+## Commands Overview
 
-HiveMind Core CLI supports the following commands:
+The HiveMind Core CLI supports these commands:
 
 ```bash
 $ hivemind-core --help
@@ -236,9 +234,9 @@ Commands:
   set-metadata         set arbitrary metadata on a client (read by policy plugins)
 ```
 
-For detailed help on each command, use `--help` (e.g., `hivemind-core add-client --help`).
+For detailed help on each command, use `--help` (for example, `hivemind-core add-client --help`).
 
-> 💡 **Tip**: if you don't specify the numeric client_id in your commands you will be prompted for it interactively
+> **Tip**: if you do not specify the numeric client_id in your commands, HiveMind prompts you for it.
 
 <details>
   <summary>Click for more details</summary>
@@ -253,9 +251,8 @@ Add credentials for a new client that will connect to the HiveMind instance.
 $ hivemind-core add-client --name "satellite_1" --access-key "mykey123" --password "mypass"
 ```
 
-- **When to use**:  
-  Use this command when setting up a new HiveMind client (e.g., Raspberry Pi, IoT device). Provide credentials for
-  secure communication with the server.
+- **When to use**:
+  Use this command when you set up a new HiveMind client (for example, a Raspberry Pi or another IoT device). It provides credentials for secure communication with the server.
 - **Optional metadata**:
   Admins can attach plugin-specific client context with `--metadata`:
 
@@ -273,9 +270,8 @@ List all registered clients and their credentials.
 $ hivemind-core list-clients
 ```
 
-- **When to use**:  
-  Use this command to view or inspect all registered clients, helpful for debugging or managing devices connected to
-  HiveMind.
+- **When to use**:
+  Use this command to view or inspect all registered clients. It helps with debugging or managing devices connected to HiveMind.
 
 ---
 
@@ -287,7 +283,7 @@ Rename a registered client.
 $ hivemind-core rename-client "new name" 1
 ```
 
-- **When to use**:  
+- **When to use**:
   Use this command when you need to change the name of an existing client in the database.
 
 ---
@@ -300,22 +296,22 @@ Remove a registered client from the HiveMind instance.
 $ hivemind-core delete-client 1
 ```
 
-- **When to use**:  
-  Use this command to revoke a client’s access, for example, when a device is lost, no longer in use, or compromised.
+- **When to use**:
+  Use this command to revoke a client's access, for example when a device is lost, no longer in use, or compromised.
 
 ---
 
 ### `allow-msg`
 
-Grant a specific message type to a client’s `allowed_types` whitelist. New clients have an **empty** whitelist and are denied all messages until at least one type is granted.
+Grant a specific message type to a client's `allowed_types` whitelist. New clients have an **empty** whitelist and are denied all messages until you grant at least one type.
 
 ```bash
 $ hivemind-core allow-msg "recognizer_loop:utterance" 1
 $ hivemind-core allow-msg "speak" 1
 ```
 
-- **When to use**:  
-  Use this command after `add-client` to grant the message types the client needs. Without any `allow-msg` calls the client is effectively locked out (deny-by-default).
+- **When to use**:
+  Use this command after `add-client` to grant the message types the client needs. Without any `allow-msg` calls, the client is locked out (deny-by-default).
 
 ---
 
@@ -327,15 +323,14 @@ Revoke specific message types from being allowed to be sent by a client.
 $ hivemind-core blacklist-msg "speak"
 ```
 
-- **When to use**:  
-  Use this command to prevent specific message types from being sent by a client, adding a layer of control over
-  communication.
+- **When to use**:
+  Use this command to stop specific message types from being sent by a client. It adds a layer of control over communication.
 
 ---
 
 ### `blacklist-skill` / `allow-skill` / `blacklist-intent` / `allow-intent` (OVOS-policy)
 
-> Skill and intent filtering is an OVOS-specific concern handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`). These commands manage the `skill_blacklist` / `intent_blacklist` lists in `Client.metadata`; `OVOSAgentPolicy` injects them into the OVOS session. They take effect only when that policy is configured in `policy.chain`. — `hivemind_core/scripts.py`
+> Skill and intent filtering is an OVOS-specific concern handled by `OVOSAgentPolicy` (shipped with `hivemind-ovos-agent-plugin`). These commands manage the `skill_blacklist` / `intent_blacklist` lists in `Client.metadata`. `OVOSAgentPolicy` injects them into the OVOS session. They take effect only when you configure that policy in `policy.chain` (`hivemind_core/scripts.py`).
 
 ```bash
 $ hivemind-core blacklist-skill "skill-weather" 1   # writes Client.metadata["skill_blacklist"]
@@ -348,7 +343,7 @@ $ hivemind-core allow-intent "intent.check_weather" 1
 
 ### `set-metadata`
 
-Set arbitrary `Client.metadata` on an existing client. Metadata keys are consumed by policy plugins — `OVOSAgentPolicy` reads `skill_blacklist` / `intent_blacklist`; other policies read their own keys. Merge a JSON object, set a single entry, or remove a key:
+Set arbitrary `Client.metadata` on an existing client. Policy plugins consume metadata keys. `OVOSAgentPolicy` reads `skill_blacklist` / `intent_blacklist`. Other policies read their own keys. Merge a JSON object, set a single entry, or remove a key:
 
 ```bash
 $ hivemind-core set-metadata 1 --metadata '{"tier":"pro","region":"eu"}'   # merge
@@ -367,9 +362,8 @@ Start the HiveMind instance to listen for client connections.
 $ hivemind-core listen
 ```
 
-- **When to use**:  
-  Use this command to start the HiveMind instance, enabling it to accept connections from clients (e.g., satellite
-  devices). Configure the host, port, and security options as needed.
+- **When to use**:
+  Use this command to start the HiveMind instance so it accepts connections from clients (for example, satellite devices). Configure the host, port, and security options as needed.
 
 ---
 
@@ -378,63 +372,63 @@ $ hivemind-core listen
 
 ---
 
-## 🧩 Plugins Overview
+## Plugins Overview
 
 | **Category**         | **Plugin**                                                                                   | **Description**                                                                                                                                                                                          |
-|----------------------|----------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Network Protocol** | [hivemind-websocket-protocol](https://github.com/JarbasHiveMind/hivemind-websocket-protocol) | Provides WebSocket-based communication for Hivemind, enabling real-time data exchange.                                                                                                                   |
-|   | [hivemind-http-protocol](https://github.com/JarbasHiveMind/hivemind-http-protocol) | Provides HTTP-based communication for Hivemind, ideal for when a persistent connected is undesirable/not-possible                                                                                                                   |
-| **Binary Protocol**  | [hivemind-audio-binary-protocol](https://github.com/JarbasHiveMind/hivemind-audio-binary-protocol)                     | Listens for incoming audio and processes it using the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), enabling seamless interaction between Hivemind and audio input systems. |
-| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, facilitated by [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client/blob/dev/ovos_bus_client/hpm.py), enabling seamless communication with OVOS systems.                                       |
-|                      | [Persona](https://github.com/OpenVoiceOS/ovos-persona)                                | LLM (Large Language Model) integration provided by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona/blob/dev/ovos_persona/hpm.py), works with all OpenAI server compatible projects.                                         |
-| **Database**         | [hivemind-sqlite-database](https://github.com/JarbasHiveMind/hivemind-sqlite-database)       | SQLite-based database solution for managing local data within Hivemind applications.                                                                                                                     |
-|                      | [hivemind-redis-database](https://github.com/JarbasHiveMind/hivemind-redis-database)         | Redis integration for scalable, in-memory database solutions with fast data access.                                                                                                                      |
-|                      | [hivemind-json-database](https://github.com/TigreGotico/json_database/pull/7)                | A JSON-based database plugin provided by [json-database](https://github.com/TigreGotico/json_database), offering lightweight storage and retrieval using JSON format.                                    |
+|----------------------|----------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Network Protocol** | [hivemind-websocket-protocol](https://github.com/JarbasHiveMind/hivemind-websocket-protocol) | Provides WebSocket-based communication for HiveMind, for real-time data exchange.                                                                                                                   |
+|   | [hivemind-http-protocol](https://github.com/JarbasHiveMind/hivemind-http-protocol) | Provides HTTP-based communication for HiveMind, for cases where a persistent connection is undesirable or not possible.                                                                                                                   |
+| **Binary Protocol**  | [hivemind-audio-binary-protocol](https://github.com/JarbasHiveMind/hivemind-audio-binary-protocol)                     | Listens for incoming audio and processes it with the [ovos-plugin-manager](https://github.com/OpenVoiceOS/ovos-plugin-manager), connecting HiveMind to audio input systems. |
+| **Agent Protocol**   | [OpenVoiceOS](https://github.com/OpenVoiceOS/ovos-core)                                      | Integration with OpenVoiceOS, through [ovos-bus-client](https://github.com/OpenVoiceOS/ovos-bus-client/blob/dev/ovos_bus_client/hpm.py), for communication with OVOS systems.                                       |
+|                      | [Persona](https://github.com/OpenVoiceOS/ovos-persona)                                | LLM (Large Language Model) integration provided by [ovos-persona](https://github.com/OpenVoiceOS/ovos-persona/blob/dev/ovos_persona/hpm.py), which works with all OpenAI server compatible projects.                                         |
+| **Database**         | [hivemind-sqlite-database](https://github.com/JarbasHiveMind/hivemind-sqlite-database)       | SQLite-based database plugin for managing local data in HiveMind.                                                                                                                     |
+|                      | [hivemind-redis-database](https://github.com/JarbasHiveMind/hivemind-redis-database)         | Redis integration for scalable, in-memory database storage with fast data access.                                                                                                                      |
+|                      | [hivemind-json-database](https://github.com/TigreGotico/json_database/pull/7)                | A JSON-based database plugin provided by [json-database](https://github.com/TigreGotico/json_database), for lightweight storage and retrieval using the JSON format.                                    |
 
 ---
 
-## 💬 Clients Overview
+## Clients Overview
 
 | **Category**   | **Client**                                                                      | **Description**                                                                                              |
-|----------------|---------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
-| **Satellites** | [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)             | Standalone OVOS *local* audio stack for Hivemind.                                                            |
-|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite, STT/TTS processed *server* side, **requires** `hivemind-audio-binary-protocol`.              |
-|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on device, audio streamed and fully processed *server* side, **requires** `hivemind-audio-binary-protocol`. |
-|                | [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat)                      | *Client-side* browser Hivemind connection for web-based communication.                                       |
-| **Bridges**    | [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)   | Bridge for talking to Hivemind via Mattermost                                                                |
-|                | [Matrix Bridge](https://github.com/JarbasHiveMind/HiveMind-matrix-bridge)       | Bridge for talking to Hivemind via Matrix                                                                    |
-|                | [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge) | Bridge for talking to Hivemind via DeltaChat                                                                 |
+|----------------|-----------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| **Satellites** | [Voice Satellite](https://github.com/OpenJarbas/HiveMind-voice-sat)             | Standalone OVOS *local* audio stack for HiveMind.                                                            |
+|                | [Voice Relay](https://github.com/JarbasHiveMind/HiveMind-voice-relay)           | Lightweight audio satellite. STT/TTS runs *server* side. **Requires** `hivemind-audio-binary-protocol`.              |
+|                | [Mic Satellite](https://github.com/JarbasHiveMind/hivemind-mic-satellite)       | Only VAD runs on the device. Audio streams to the server and processes fully *server* side. **Requires** `hivemind-audio-binary-protocol`. |
+|                | [Web Chat](https://github.com/OpenJarbas/HiveMind-webchat)                      | *Client-side* browser HiveMind connection for web-based communication.                                       |
+| **Bridges**    | [Mattermost Bridge](https://github.com/OpenJarbas/HiveMind_mattermost_bridge)   | Bridge for talking to HiveMind through Mattermost.                                                                |
+|                | [Matrix Bridge](https://github.com/JarbasHiveMind/HiveMind-matrix-bridge)       | Bridge for talking to HiveMind through Matrix.                                                                    |
+|                | [DeltaChat Bridge](https://github.com/JarbasHiveMind/HiveMind-deltachat-bridge) | Bridge for talking to HiveMind through DeltaChat.                                                                |
 
 ---
 
-## 🚀 Next Steps
+## Next Steps
 
 - Visit the [documentation](https://jarbashivemind.github.io/HiveMind-community-docs) for detailed guides.
 - Join the [HiveMind Matrix Chat](https://matrix.to/#/#jarbashivemind:matrix.org) for support and updates.
-- Explore additional plugins and expand your HiveMind ecosystem.
+- Explore other plugins and expand your HiveMind setup.
 
 ---
 
-## ⚖️ License
+## License
 
 HiveMind-core is licensed under the **[Apache License 2.0](./LICENSE)**, matching the rest of the HiveMind ecosystem.
 
-> 💡 Releases ≤ **`hivemind-core` 3.4.0** were Apache-2.0. The **4.x** series shipped under AGPL-3.0 as a short-lived experiment; from this release forward HiveMind-core returns to Apache-2.0. Previously published 3.x and 4.x releases on PyPI remain under the licence they were published with.
+> Releases up to **`hivemind-core` 3.4.0** were Apache-2.0. The **4.x** series shipped under AGPL-3.0 as a short-lived experiment. From this release forward, HiveMind-core returns to Apache-2.0. Previously published 3.x and 4.x releases on PyPI stay under the license they were published with.
 
 ### Trademark
 
-The names **HiveMind**, **HiveMind-core**, **HiveMind Protocol**, the HiveMind logos, and any "HiveMind Compatible / Powered by HiveMind" marks are protected trademarks and are **not** licensed under Apache-2.0 (see Apache-2.0 §6). See [TRADEMARK-USAGE.md](./TRADEMARK-USAGE.md) for the brand-use policy. A no-cost trademark grant is available for nonprofits, academic projects, and OSI-licensed downstreams.
+The names **HiveMind**, **HiveMind-core**, **HiveMind Protocol**, the HiveMind logos, and any "HiveMind Compatible / Powered by HiveMind" marks are protected trademarks and are **not** licensed under Apache-2.0 (see Apache-2.0 §6). See [TRADEMARK-USAGE.md](./TRADEMARK-USAGE.md) for the brand-use policy. A no-cost trademark grant is available for nonprofits, academic projects, and OSI-licensed downstream projects.
 
 ### Supporting the project
 
-If your organisation depends on HiveMind-core in production, consider sponsoring the project, contracting paid support / custom integrations, or commissioning proprietary skills. Contact: **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)**.
+If your organization depends on HiveMind-core in production, consider sponsoring the project, contracting paid support or custom integrations, or commissioning proprietary skills. Contact: **[jarbasai@mailfence.com](mailto:jarbasai@mailfence.com)**.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-HiveMind-core welcomes external contributions. Inbound code is licensed under Apache-2.0 by default (per Apache-2.0 §5 — no separate CLA needed).
+HiveMind-core welcomes external contributions. Inbound code is licensed under Apache-2.0 by default (per Apache-2.0 §5, no separate CLA needed).
 
-- **Bugs & features** — open an issue on GitHub.
-- **Pull requests** — target the `dev` branch. Keep changes focused; follow existing code style.
-- **Discussion** — [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org).
+- **Bugs & features**: open an issue on GitHub.
+- **Pull requests**: target the `dev` branch. Keep changes focused and follow the existing code style.
+- **Discussion**: [Matrix chat](https://matrix.to/#/#jarbashivemind:matrix.org).

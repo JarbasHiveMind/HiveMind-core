@@ -91,13 +91,13 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 Called when a PROPAGATE message's inner payload is a PING.
 
 All nodes SHOULD relay the PING to all connected peers (except the sender) and MAY respond with a
-PONG. Whether to respond is a node-level policy decision — for example, a master may be configured
-to act as a discovery boundary and silently drop the PING rather than relaying it further upstream.
+PONG. Whether to respond is a node-level policy decision. For example, a top-level node may be configured
+to act as a discovery boundary and silently drop the PING instead of relaying it further upstream.
 
 ```
 Receive PROPAGATE(PING)
   ├─ relay PROPAGATE(PING) to all connected peers except sender   [SHOULD]
-  └─ build PROPAGATE(PONG) and send back toward originator        [MAY — node policy]
+  └─ build PROPAGATE(PONG) and send back toward originator        [MAY, node policy]
 ```
 
 See [network discovery docs](../../HiveMind-community-docs/docs/20_network_discovery.md) for the
@@ -219,8 +219,11 @@ The context manager (`with ClientDatabase() as db`) commits changes on exit.
 |---|---|
 | `CANDIDATE_NODE` | Connecting but not yet authenticated |
 | `NODE` | Any authenticated connection |
-| `MIND` | A hub listening for connections |
-| `SLAVE` | A node that can be partially controlled by a mind |
+| `MIND` | A server node listening for connections |
+| `SLAVE` | A node that another node can partially control |
 | `TERMINAL` | User-facing endpoint that does not accept connections |
-| `BRIDGE` | Connects an external service to the hive |
-| `FAKECROFT` | A mind using a non-Mycroft AI backend |
+| `BRIDGE` | Connects an external service to the network |
+| `FAKECROFT` | A `MIND` node using a non-Mycroft AI backend |
+
+---
+[← Security](security.md) · [Home](index.md) · [CLI Reference →](cli.md)

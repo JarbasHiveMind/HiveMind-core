@@ -7,7 +7,7 @@ client ID from any command that requires one, you will be prompted to select int
 Usage: hivemind-core [OPTIONS] COMMAND [ARGS]...
 
 Commands:
-  listen              Start the HiveMind hub server
+  listen              Start the HiveMind Core server
   add-client          Register credentials for a new satellite
   list-clients        Print all registered clients
   rename-client       Rename a registered client
@@ -32,7 +32,7 @@ Commands:
 
 ## `listen`
 
-Start the HiveMind hub server.
+Start the HiveMind Core server.
 
 ```bash
 hivemind-core listen
@@ -65,7 +65,7 @@ Options:
 | `--db-backend TEXT` | from config | Override the database backend for this command |
 | `--metadata JSON` | `{}` | Initial `Client.metadata` as a JSON object |
 
-A freshly created client has an **empty** `allowed_types` whitelist — it is denied all
+A freshly created client has an **empty** `allowed_types` whitelist. It is denied all
 messages until you run `allow-msg`.
 
 ---
@@ -100,7 +100,7 @@ hivemind-core delete-client 1
 
 ## `make-admin` / `revoke-admin`
 
-Set `Client.is_admin`. This is **informational only** — it does not bypass the policy
+Set `Client.is_admin`. This is **informational only**. It does not bypass the policy
 chain or the `allowed_types` whitelist.
 
 ```bash
@@ -170,8 +170,8 @@ hivemind-core allow-intent "skill-weather.WeatherIntent" 1
 
 ## `set-metadata`
 
-Write arbitrary key/value pairs to `Client.metadata`. Metadata is consumed by policy
-plugins — each plugin reads the keys it knows about.
+Write arbitrary key/value pairs to `Client.metadata`. Policy plugins consume metadata.
+Each plugin reads the keys it knows about.
 
 ```bash
 # Merge a JSON object
@@ -204,3 +204,6 @@ hivemind-core migrate-db --from sqlite --to redis \
 ```
 
 Source: `hivemind_core/scripts.py`
+
+---
+[← Configuration](configuration.md) · [Home](README.md) · [Policy Chain →](policy.md)

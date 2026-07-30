@@ -16,12 +16,12 @@
 pip install hivemind-core
 ```
 
-This installs the hub server and the `hivemind-core` CLI. The default transport (WebSocket)
+This installs the HiveMind Core server and the `hivemind-core` CLI. The default transport (WebSocket)
 and the default database backend (SQLite) are pulled in automatically.
 
 ---
 
-## Start the Hub
+## Start the Server
 
 ```bash
 hivemind-core listen
@@ -81,7 +81,10 @@ Once the satellite connects, its `last_seen` timestamp updates.
 
 ## Next Steps
 
-- [Architecture](architecture.md) — understand how messages flow through the hub.
-- [Configuration](configuration.md) — change ports, switch database backend, add TLS.
-- [CLI Reference](cli-reference.md) — all available commands.
-- [Policy Chain](policy.md) — fine-grained per-client admission control.
+- [Architecture](architecture.md): understand how messages flow through the server.
+- [Configuration](configuration.md): change ports, switch database backend, add TLS.
+- [CLI Reference](cli-reference.md): all available commands.
+- [Policy Chain](policy.md): fine-grained per-client admission control.
+
+---
+[Home](README.md) · [Architecture →](architecture.md)

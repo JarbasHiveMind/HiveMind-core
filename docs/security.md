@@ -1,24 +1,28 @@
 # Security and Encryption
 
-HiveMind prioritizes secure communication between the Mind and its satellites, using the `poorman_handshake` library as its cryptographic foundation.
+HiveMind Core secures communication between the server and its satellites with the `poorman_handshake` library as its cryptographic foundation.
 
 ## Handshake and Key Exchange
 
-HiveMind uses the `poorman_handshake` protocol for initial authentication and session key establishment, managed by the `HiveMindClientConnection` in `hivemind_core.protocol`.
+HiveMind Core uses the `poorman_handshake` protocol for initial authentication and session key setup, managed by `HiveMindClientConnection` in `hivemind_core.protocol`.
 
-1. **Identity**: Every client has an `Access Key` and a `Password` stored in `hivemind_core.database.HiveMindDatabase`.
-2. **Session Key**: During connection, a temporary AES-256-GCM session key is derived using PBKDF2 via `poorman_handshake.PasswordHandShake` or `poorman_handshake.HandShake`.
-3. **Encryption**: All subsequent traffic is encrypted using this session key.
+1. **Identity**: every client has an `Access Key` and a `Password` stored through `hivemind_core.database.ClientDatabase`.
+2. **Session Key**: during connection, the server derives a temporary AES-256-GCM session key with PBKDF2, using `poorman_handshake.PasswordHandShake` or `poorman_handshake.HandShake`.
+3. **Encryption**: this session key encrypts all later traffic.
 
 ## Encryption Standards
 
-- **AES-256-GCM**: Used for transport layer encryption. GCM (Galois/Counter Mode) provides both confidentiality and data integrity (AEAD).
-- **PBKDF2**: Used for deriving keys from passwords, ensuring resistance to brute-force attacks.
-- **PGP (Optional)**: Used for `INTERCOM` messages, allowing end-to-end encrypted secret messages between nodes that the Mind itself cannot decrypt.
+- **AES-256-GCM**: used for transport layer encryption. GCM (Galois/Counter Mode) provides both confidentiality and data integrity (AEAD).
+- **PBKDF2**: used for deriving keys from passwords, resisting brute-force attacks.
+- **PGP (optional)**: used for `INTERCOM` messages, so nodes can exchange end-to-end encrypted secret messages that the server itself cannot decrypt.
 
 ## Permissions and Access Control
 
-The Mind enforces strict access control through the `HiveMindDatabase` and `HiveMindClientConnection`:
-- **Message Blacklisting**: Managed by `HiveMindDatabase.blacklist_msg` and checked during routing in `HiveMindClientConnection.send`.
-- **Skill/Intent Blacklisting**: Restrict which AI skills a specific satellite can trigger via `HiveMindDatabase.blacklist_skill` and `blacklist_intent`.
-- **Node-Level Isolation**: Clients only receive messages intended for them or broadcasted to their permission level, as defined by `HiveMindNodeType` in `hivemind_core.protocol`.
+The server enforces access control through `ClientDatabase` and `HiveMindClientConnection`:
+
+- **Message whitelist**: `MessageTypeACLPolicy` checks each client's `allowed_types` whitelist during routing. See [Policy Admission Chain](policy.md).
+- **Skill/intent blacklisting**: restrict which AI skills a specific satellite can trigger with `hivemind-core blacklist-skill` and `blacklist-intent` (`hivemind_core.scripts`).
+- **Node-level isolation**: clients only receive messages meant for them, or broadcast to their permission level, as defined by `HiveMindNodeType` in `hivemind_core.protocol`.
+
+---
+[← Installation](installation.md) · [Home](index.md) · [Protocol →](protocol.md)
