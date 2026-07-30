@@ -1,6 +1,6 @@
 # HiveMind Core
 
-HiveMind Core is the central hub (master node) of the HiveMind network. It accepts connections from satellites and other nodes, authenticates them, enforces per-client permissions, and routes messages to the configured AI agent backend.
+HiveMind Core is the central server of the HiveMind network. It accepts connections from satellites and other nodes, authenticates them, enforces per-client permissions, and routes messages to the configured AI agent backend.
 
 ## Overview
 
@@ -29,18 +29,16 @@ HiveMind Core is fully **plugin-driven**:
 
 ## Documentation
 
-- [Architecture Guide](architecture.md) - Deep dive into Mind, Satellite, and Bridge components.
-- [Security and Encryption](security.md) - Handshakes, AES-256-GCM, and session keys.
-- [Authentication and Client Management](auth.md) - Adding clients and managing permissions.
-- [Installation](installation.md) - Getting started with HiveMind Core.
-- [Configuration](configuration.md) - Configuring protocols and databases.
-- [CLI Reference](cli.md) - Complete command-line reference.
-- [Protocol Internals](protocol.md) - Deep dive into the HiveMind message format.
-- [Plugin System](plugins.md) - Overview of the modular plugin architecture.
-- [Plugin Development](plugin_development.md) - Guide for creating custom plugins.
+- [Architecture Guide](architecture.md): explains the Mind, Satellite, and Bridge components.
+- [Security and Encryption](security.md): covers handshakes, AES-256-GCM, and session keys.
+- [Authentication and Client Management](auth.md): covers adding clients and managing permissions.
+- [Installation](installation.md): gets you started with HiveMind Core.
+- [Configuration](configuration.md): covers configuring protocols and databases.
+- [CLI Reference](cli.md): a complete command-line reference.
+- [Protocol Internals](protocol.md): explains the HiveMind message format.
+- [Plugin System](plugins.md): an overview of the modular plugin architecture.
+- [Plugin Development](plugin_development.md): a guide for creating custom plugins.
 
 ## License
 
-HiveMind Core v4.0+ is licensed under **AGPL-3.0**. Commercial deployments that cannot comply with AGPL disclosure obligations require a separate commercial license. Contact [jarbasai@mailfence.com](mailto:jarbasai@mailfence.com).
-
-The last Apache-2.0 release was `hivemind-core` **3.4.0**.
+HiveMind-core is licensed under **Apache-2.0**. Releases up to `hivemind-core` **3.4.0** were Apache-2.0. The **4.x** series shipped under AGPL-3.0 as a short-lived experiment. From this release forward, HiveMind-core returns to Apache-2.0. Previously published 3.x and 4.x releases on PyPI stay under the license they were published with. Contact [jarbasai@mailfence.com](mailto:jarbasai@mailfence.com) for support or sponsorship.

@@ -1,6 +1,6 @@
 # Authentication and Client Management
 
-Client management is handled through the `hivemind-core` CLI and the `hivemind_core.database.HiveMindDatabase` interface.
+Client management runs through the `hivemind-core` CLI and the `hivemind_core.database.ClientDatabase` interface.
 
 ## Adding a Client
 
@@ -11,30 +11,41 @@ hivemind-core add-client --name "LivingRoom-Sat"
 ```
 
 This generates:
-- **Node ID**: Unique integer ID.
-- **Access Key**: Public identifier for the client.
-- **Password**: Secret used for the handshake.
+- **Node ID**: a unique integer ID.
+- **Access Key**: a public identifier for the client.
+- **Password**: a secret used for the handshake.
 
 ## Managing Permissions
 
-Permissions are managed by the `HiveMindDatabase` and its associated methods.
+The CLI writes permissions to the client row through `ClientDatabase`.
 
 ### Blacklisting Skills
-To prevent a specific client (ID 1) from using a specific skill:
+
+To stop a specific client (ID 1) from using a specific skill:
+
 ```bash
 hivemind-core blacklist-skill "mycroft-weather.mycroftai" 1
 ```
-- **Source**: `hivemind_core.database.HiveMindDatabase.blacklist_skill`
+
+- **Source**: `hivemind_core.scripts.blacklist_skill`
 
 ### Allowing Messages
-By default, most message types are restricted. To allow a client to receive `speak` messages:
+
+New clients start with an empty `allowed_types` whitelist and are denied all messages. To let a client receive `speak` messages:
+
 ```bash
 hivemind-core allow-msg "speak" 1
 ```
-- **Source**: `hivemind_core.database.HiveMindDatabase.allow_msg`
+
+- **Source**: `hivemind_core.scripts.allow_msg`
 
 ## Database Backends
+
 HiveMind supports multiple database plugins for storing client credentials:
-- **JSON**: `hivemind_core.database.JsonDB` (implemented via `json_database.hpm.JsonDB`).
-- **SQLite**: `hivemind_core.database.SQLiteDB` (implemented via `hivemind_sqlite_database.SQLiteDB`).
-- **Redis**: `hivemind_core.database.RedisDB` (implemented via `hivemind_redis_database.RedisDB`).
+
+- **SQLite** (default for fresh installs): `hivemind_sqlite_database.SQLiteDB`.
+- **JSON** (kept for existing JSON deployments): `json_database.hpm.JsonDB`.
+- **Redis**: `hivemind_redis_database.RedisDB`.
+
+---
+[Home](index.md) · [Installation →](installation.md)

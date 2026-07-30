@@ -52,7 +52,7 @@ hivemind-core add-client [OPTIONS]
 | `--crypto-key` | `str` | **Deprecated.** Legacy 16-character encryption key. Use `--password` instead |
 | `--admin` | `bool` | Grant administrator privileges (default: `False`) |
 
-**Example — auto-generated credentials:**
+**Example: auto-generated credentials**
 
 ```bash
 $ hivemind-core add-client --name "living-room-pi"
@@ -164,7 +164,7 @@ hivemind-core blacklist-msg MSG_TYPE [NODE_ID]
 
 ### `allow-escalate` / `blacklist-escalate`
 
-Control whether a client may send `ESCALATE` messages (forwarded up the hub hierarchy).
+Control whether a client may send `ESCALATE` messages (forwarded up the server hierarchy).
 
 ```bash
 hivemind-core allow-escalate [NODE_ID]
@@ -173,7 +173,7 @@ hivemind-core blacklist-escalate [NODE_ID]
 
 ### `allow-propagate` / `blacklist-propagate`
 
-Control whether a client may send `PROPAGATE` messages (forwarded to all peers and upstream hubs).
+Control whether a client may send `PROPAGATE` messages (forwarded to all peers and upstream servers).
 
 ```bash
 hivemind-core allow-propagate [NODE_ID]
@@ -211,3 +211,6 @@ hivemind-core allow-intent INTENT_ID [NODE_ID]
 ```bash
 hivemind-core blacklist-intent skill-weather.openvoiceos:WeatherIntent 1
 ```
+
+---
+[← Protocol](protocol.md) · [Home](index.md) · [Plugin Development →](plugin_development.md)

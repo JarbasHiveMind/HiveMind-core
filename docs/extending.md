@@ -1,13 +1,13 @@
 # Extending HiveMind Core
 
-HiveMind Core is assembled from plugins. Every backend concern — database, transport,
-agent, binary handling, and admission control — is a separate installable Python package
-that registers itself under a setuptools entry-point group. No changes to hivemind-core
-itself are required.
+HiveMind Core is assembled from plugins. Every backend concern (database, transport,
+agent, binary handling, and admission control) is a separate installable Python package
+that registers itself under a setuptools entry-point group. It needs no changes to
+hivemind-core itself.
 
 The abstract base classes are defined in
 [hivemind-plugin-manager](https://github.com/JarbasHiveMind/hivemind-plugin-manager).
-This page summarises how to wire a plugin to hivemind-core; for the full ABC contracts
+This page summarizes how to wire a plugin to hivemind-core. For the full ABC contracts
 and complete walkthroughs, see the
 [plugin-manager docs](https://github.com/JarbasHiveMind/hivemind-plugin-manager/tree/dev/docs).
 
@@ -228,3 +228,6 @@ my-policy = "my_package.policy:MyPolicy"
 `MessageTypeACLPolicy` is implicit and always first. Do not list it.
 Full guide: [docs/policy.md](policy.md) and
 [hivemind-plugin-manager/docs/plugins/policy.md](https://github.com/JarbasHiveMind/hivemind-plugin-manager/blob/dev/docs/plugins/policy.md)
+
+---
+[← Plugins](plugins.md) · [Home](README.md)
