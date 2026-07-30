@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.2a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a3) (2026-07-30)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a2...4.10.2a3)
+
+**Merged pull requests:**
+
+- docs: rewrite README in Simplified Technical English [\#160](https://github.com/JarbasHiveMind/HiveMind-core/pull/160) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.2a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a2) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a1...4.10.2a2)
@@ -268,6 +276,253 @@
 **Merged pull requests:**
 
 - Feat: ping [\#75](https://github.com/JarbasHiveMind/HiveMind-core/pull/75) ([JarbasAl](https://github.com/JarbasAl))
+
+## [4.0.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.0.0) (2026-01-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a4...4.0.0)
+
+**Merged pull requests:**
+
+- Release 3.4.1a4 [\#71](https://github.com/JarbasHiveMind/HiveMind-core/pull/71) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.4.1a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a4) (2026-01-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a3...3.4.1a4)
+
+**Merged pull requests:**
+
+- chore!: change license to AGPL [\#70](https://github.com/JarbasHiveMind/HiveMind-core/pull/70) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.4.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a3) (2026-01-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a2...3.4.1a3)
+
+**Merged pull requests:**
+
+- chore\(deps\): update actions/setup-python action to v6 [\#69](https://github.com/JarbasHiveMind/HiveMind-core/pull/69) ([renovate[bot]](https://github.com/apps/renovate))
+- chore\(deps\): update actions/checkout action to v6 [\#66](https://github.com/JarbasHiveMind/HiveMind-core/pull/66) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [3.4.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a2) (2025-12-18)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a1...3.4.1a2)
+
+**Merged pull requests:**
+
+- chore: Configure Renovate [\#64](https://github.com/JarbasHiveMind/HiveMind-core/pull/64) ([renovate[bot]](https://github.com/apps/renovate))
+
+## [3.4.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a1) (2025-04-26)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.0...3.4.1a1)
+
+**Merged pull requests:**
+
+- refactor: allow "default" session for clients [\#60](https://github.com/JarbasHiveMind/HiveMind-core/pull/60) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.4.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0) (2025-04-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.0a1...3.4.0)
+
+**Merged pull requests:**
+
+- Release 3.4.0a1 [\#59](https://github.com/JarbasHiveMind/HiveMind-core/pull/59) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0a1) (2025-04-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.3.0a1...3.4.0a1)
+
+**Merged pull requests:**
+
+- feat: print-config cli util [\#58](https://github.com/JarbasHiveMind/HiveMind-core/pull/58) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.3.0a1) (2025-02-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.3...3.3.0a1)
+
+**Merged pull requests:**
+
+- Release 3.3.0a1 [\#55](https://github.com/JarbasHiveMind/HiveMind-core/pull/55) ([github-actions[bot]](https://github.com/apps/github-actions))
+- log to file `~/.local/state/hivemind/core.log` [\#54](https://github.com/JarbasHiveMind/HiveMind-core/pull/54) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.2.3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.3) (2025-01-09)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.3a1...3.2.3)
+
+**Merged pull requests:**
+
+- Release 3.2.3a1 [\#52](https://github.com/JarbasHiveMind/HiveMind-core/pull/52) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.2.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.3a1) (2025-01-09)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.2...3.2.3a1)
+
+**Merged pull requests:**
+
+- fix:delete\_client [\#51](https://github.com/JarbasHiveMind/HiveMind-core/pull/51) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.2.2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.2) (2025-01-08)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.2a1...3.2.2)
+
+**Merged pull requests:**
+
+- Release 3.2.2a1 [\#50](https://github.com/JarbasHiveMind/HiveMind-core/pull/50) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.2a1) (2025-01-08)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.1...3.2.2a1)
+
+**Merged pull requests:**
+
+- fix:automations [\#49](https://github.com/JarbasHiveMind/HiveMind-core/pull/49) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.2.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.1) (2025-01-08)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.1a1...3.2.1)
+
+**Merged pull requests:**
+
+- Release 3.2.1a1 [\#48](https://github.com/JarbasHiveMind/HiveMind-core/pull/48) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.2.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.1a1) (2025-01-07)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.0a1...3.2.1a1)
+
+**Merged pull requests:**
+
+- fix: track last\_seen , add missing cli permission management scripts … [\#44](https://github.com/JarbasHiveMind/HiveMind-core/pull/44) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.0a1) (2025-01-07)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.1...3.2.0a1)
+
+**Merged pull requests:**
+
+- Release 3.2.0a1 [\#47](https://github.com/JarbasHiveMind/HiveMind-core/pull/47) ([github-actions[bot]](https://github.com/apps/github-actions))
+- feat:multiple\_net\_protos [\#46](https://github.com/JarbasHiveMind/HiveMind-core/pull/46) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.1.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1) (2025-01-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.1a1...3.1.1)
+
+**Merged pull requests:**
+
+- Release 3.1.1a1 [\#43](https://github.com/JarbasHiveMind/HiveMind-core/pull/43) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1a1) (2025-01-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.0...3.1.1a1)
+
+**Merged pull requests:**
+
+- fix:binarization\_protocol [\#42](https://github.com/JarbasHiveMind/HiveMind-core/pull/42) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.1.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0) (2025-01-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.0a1...3.1.0)
+
+**Merged pull requests:**
+
+- Release 3.1.0a1 [\#41](https://github.com/JarbasHiveMind/HiveMind-core/pull/41) ([github-actions[bot]](https://github.com/apps/github-actions))
+
+## [3.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0a1) (2025-01-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.3...3.1.0a1)
+
+**Merged pull requests:**
+
+- feat:cipher negotiation [\#40](https://github.com/JarbasHiveMind/HiveMind-core/pull/40) ([JarbasAl](https://github.com/JarbasAl))
+
+## [3.0.3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.3) (2025-01-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.3a1...3.0.3)
+
+## [3.0.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.3a1) (2025-01-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.2...3.0.3a1)
+
+## [3.0.2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.2) (2025-01-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.2a1...3.0.2)
+
+## [3.0.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.2a1) (2025-01-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.1a1...3.0.2a1)
+
+## [3.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.1a1) (2025-01-01)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.0...3.0.1a1)
+
+## [3.0.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.0) (2024-12-29)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.0a1...3.0.0)
+
+## [3.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.0a1) (2024-12-29)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/2.0.0...3.0.0a1)
+
+## [2.0.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/2.0.0) (2024-12-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.2a1...2.0.0)
+
+## [1.0.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.2a1) (2024-12-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.1...1.0.2a1)
+
+## [1.0.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.1) (2024-12-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.1a1...1.0.1)
+
+## [1.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.1a1) (2024-12-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.0...1.0.1a1)
+
+## [1.0.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.0) (2024-12-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/1.0.0a1...1.0.0)
+
+## [1.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/1.0.0a1) (2024-12-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.2...1.0.0a1)
+
+## [0.2.2](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.2) (2024-12-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.2a1...0.2.2)
+
+## [0.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.2a1) (2024-12-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.1...0.2.2a1)
+
+## [0.2.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.1) (2024-12-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.1a1...0.2.1)
+
+## [0.2.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.1a1) (2024-12-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.0a2...0.2.1a1)
+
+## [0.2.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0a2) (2024-12-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.0...0.2.0a2)
+
+## [0.2.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0) (2024-12-22)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.1...0.2.0)
+
+## [0.1.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.1.1) (2024-12-22)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.2.0a1...0.1.1)
+
+## [0.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.2.0a1) (2024-12-22)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.1a1...0.2.0a1)
+
+## [0.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.1.1a1) (2024-12-21)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/0.1.0...0.1.1a1)
+
+## [0.1.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/0.1.0) (2024-12-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/66e6f7f991347ceed423f4cfd0a78ba17dc413e9...0.1.0)
 
 
 
