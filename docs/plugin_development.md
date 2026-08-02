@@ -36,6 +36,16 @@ Define where the server stores client credentials and permissions.
 - **Entry point**: `hivemind.database`
 - **Example implementation**: `hivemind_sqlite_database.SQLiteDB`
 
+### 5. Policy Plugins
+
+Define admission control: rate limits, quotas, metadata injection, or audit logging.
+
+- **Base class**: `hivemind_plugin_manager.policy.PolicyPlugin`
+- **Entry point**: `hivemind.policy`
+- **Example implementation**: `hivemind_ovos_agent_plugin.policy.OVOSAgentPolicy`
+
+Add the plugin to the `policy.chain` list in `server.json`. See [Policy Chain](policy.md).
+
 ## Example: Creating a Database Plugin
 
 1. Inherit from `hivemind_plugin_manager.database.AbstractDB`.

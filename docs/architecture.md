@@ -45,17 +45,18 @@ messages). Responses from the agent travel back through the same path.
 | Type | Direction | Purpose |
 |---|---|---|
 | `HANDSHAKE` | bidirectional | Cipher/key negotiation on connect |
-| `HELLO` | server → satellite | Server identity announcement |
+| `HELLO` | bidirectional | Identity announcement. The server sends its pubkey and peer id; the client answers with its session, site id, and pubkey |
 | `BUS` | bidirectional | Wraps an OVOS `Message`; the most common type |
 | `SHARED_BUS` | server → satellite | Bus event pushed to satellite |
 | `BROADCAST` | satellite → server | Deliver to all connected satellites |
 | `PROPAGATE` | satellite → server | Forward upstream to the parent server |
 | `ESCALATE` | satellite → server | Forward up the relay chain |
-| `PING` | bidirectional | Keepalive |
+| `PING` | bidirectional | Topology discovery flood. Each node answers with its own PING carrying the same `flood_id`. There is no PONG |
 | `QUERY` | satellite → server | Natural-language query. The server streams answer chunks |
 | `CASCADE` | server → satellite(s) | Scatter/gather: distributes a query across children |
 | `INTERCOM` | bidirectional | Signed/encrypted end-to-end peer message |
-| `BINARY` | bidirectional | Raw bytes (audio, image, file) |
+| `BINARY` | bidirectional | Raw bytes (audio, image, file). Crosses the same `allowed_types` gate as `BUS` |
+| `THIRDPRTY` | bidirectional | User-land message. HiveMind carries it and does nothing else with it |
 
 ### QUERY / CASCADE streaming
 

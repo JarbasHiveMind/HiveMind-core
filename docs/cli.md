@@ -50,7 +50,9 @@ hivemind-core add-client [OPTIONS]
 | `--access-key` | `str` | API access key (auto-generated if omitted) |
 | `--password` | `str` | Password used for session key derivation (auto-generated if omitted) |
 | `--crypto-key` | `str` | **Deprecated.** Legacy 16-character encryption key. Use `--password` instead |
-| `--admin` | `bool` | Grant administrator privileges (default: `False`) |
+| `--admin` | `bool` | Mark the client as an administrator (default: `False`). Informational only: it grants no admission bypass |
+| `--metadata` | `str` | Initial `Client.metadata` as a JSON object |
+| `--allow-weak-password` | flag | Accept a password below `min_password_bits` |
 
 **Example: auto-generated credentials**
 
@@ -66,6 +68,9 @@ Encryption Key: f46351c54f61a715
 ```
 
 Provide the **Access Key** and **Password** to the client device.
+
+A new client has an **empty** `allowed_types` whitelist. Grant the message types it needs
+with [`allow-msg`](#allow-msg) before it can send anything.
 
 ---
 
@@ -135,11 +140,13 @@ hivemind-core revoke-admin [NODE_ID]
 
 ## Message type permissions
 
-By default, clients may only send a restricted set of message types (e.g. `recognizer_loop:utterance`). Use these commands to expand or restrict that set.
+A client may only send the message types in its `allowed_types` whitelist. A new client
+has an empty whitelist, so the server denies every message and every binary payload it
+sends. Use these commands to grant and revoke types.
 
 ### `allow-msg`
 
-Allow a client to send an additional OVOS message type.
+Add an OVOS message type to a client's `allowed_types` whitelist.
 
 ```bash
 hivemind-core allow-msg MSG_TYPE [NODE_ID]
@@ -184,7 +191,9 @@ hivemind-core blacklist-propagate [NODE_ID]
 
 ## Skill & intent permissions
 
-These permissions are enforced by injecting blacklists into the OVOS session associated with the client's requests.
+`OVOSAgentPolicy` enforces these permissions. It reads the lists from `Client.metadata`
+and injects them into the OVOS session for each request. The commands have no effect
+unless `hivemind-ovos-agent-policy` is in the server's `policy.chain`.
 
 ### `blacklist-skill` / `allow-skill`
 
@@ -211,6 +220,56 @@ hivemind-core allow-intent INTENT_ID [NODE_ID]
 ```bash
 hivemind-core blacklist-intent skill-weather.openvoiceos:WeatherIntent 1
 ```
+
+---
+
+## Client metadata
+
+### `set-metadata`
+
+Write arbitrary keys to `Client.metadata`. Policy plugins read the keys they know about.
+
+```bash
+hivemind-core set-metadata 1 --metadata '{"tier":"pro","region":"eu"}'
+hivemind-core set-metadata 1 --key tier --value pro
+hivemind-core set-metadata 1 --unset region
+```
+
+---
+
+## Keys and databases
+
+### `derive-psk`
+
+Print the pre-shared key that a site password and a node id produce.
+
+```bash
+hivemind-core derive-psk --password "site-secret" --node-id "kitchen-pi"
+```
+
+### `migrate-db`
+
+Copy every client from one database backend to another. Both flags take a database plugin
+entry-point name. The source is left untouched.
+
+```bash
+hivemind-core migrate-db --from hivemind-json-db-plugin --to hivemind-sqlite-db-plugin
+```
+
+---
+
+## Policy chain
+
+### `policy list` / `policy test`
+
+```bash
+hivemind-core policy list
+hivemind-core policy test <access_key> "speak"
+```
+
+`policy list` prints the built-in policies, then the plugins from `policy.chain`.
+`policy test` runs a fake message of the given type through the chain and prints the
+verdict as JSON.
 
 ---
 [← Protocol](protocol.md) · [Home](index.md) · [Plugin Development →](plugin_development.md)

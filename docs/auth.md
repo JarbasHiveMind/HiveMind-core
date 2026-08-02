@@ -31,7 +31,9 @@ hivemind-core blacklist-skill "mycroft-weather.mycroftai" 1
 
 ### Allowing Messages
 
-New clients start with an empty `allowed_types` whitelist and are denied all messages. To let a client receive `speak` messages:
+New clients start with an empty `allowed_types` whitelist. The server denies every
+message, and every binary payload, that such a client sends. To let a client send `speak`
+messages:
 
 ```bash
 hivemind-core allow-msg "speak" 1
