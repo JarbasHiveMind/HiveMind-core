@@ -13,9 +13,6 @@ from hivemind_plugin_manager.database import Client
 class ClientDatabase:
 
     def __init__(self, config=None):
-        """
-        Initialize the client database with the specified backend.
-        """
         config = config or get_server_config()["database"]
         name = config["module"]
         db_class = DatabaseFactory.get_class(name)
@@ -36,13 +33,7 @@ class ClientDatabase:
         return self.db.search_by_value("name", name)
 
     def get_client_by_api_key(self, api_key: str) -> Optional[Client]:
-        direct_lookup = getattr(self.db, "get_client_by_api_key", None)
-        if callable(direct_lookup):
-            return direct_lookup(api_key)
-        search: List[Client] = self.db.search_by_value("api_key", api_key)
-        if len(search):
-            return search[0]
-        return None
+        return self.db.get_client_by_api_key(api_key)
 
     def get_client_by_id(self, client_id: int) -> Optional[Client]:
         return self.db.get_client_by_id(client_id)
@@ -82,6 +73,9 @@ class ClientDatabase:
                 user.name = name
             if allowed_types:
                 user.allowed_types = allowed_types
+            # unlike the fields above, admin is compared against None so that
+            # an explicit admin=False demotes the client instead of being
+            # read as "no change"
             if admin is not None:
                 user.is_admin = admin
             if crypto_key:

@@ -155,7 +155,10 @@ def runtime_password_min_bits() -> float:
         "1", "true", "yes", "on",
     ):
         return 0.0
+    # get_server_config() backfills every top level key, so _DEFAULT is the
+    # single source of truth for these fallbacks
     cfg = get_server_config()
-    if not cfg.get("runtime_password_strength_check", True):
+    if not cfg.get("runtime_password_strength_check",
+                   _DEFAULT["runtime_password_strength_check"]):
         return 0.0
-    return float(cfg.get("min_password_bits", 40))
+    return float(cfg.get("min_password_bits", _DEFAULT["min_password_bits"]))

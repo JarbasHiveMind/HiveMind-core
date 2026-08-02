@@ -1,10 +1,6 @@
 # hivemind-core
 # Copyright (C) 2026 Casimiro Ferreira
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# SPDX-License-Identifier: Apache-2.0
 """Policy admission chain — consumer side of the primitives shipped in
 hivemind-plugin-manager (PolicyPlugin / Verdict / Mutation).
 
