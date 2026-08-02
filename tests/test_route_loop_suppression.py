@@ -229,3 +229,69 @@ def test_escalate_appends_self_hop_and_drops_on_loop():
     node2.handle_escalate_message(looped, _make_client("peer::2"))
     assert captured2 == [], "already-routed ESCALATE must not be forwarded upstream"
     node2.escalate_callback.assert_called_once()  # local delivery still runs
+
+
+def test_cascade_appends_self_hop_and_drops_on_loop():
+    """MSG-1 §5 applies equally to CASCADE forwarding — keyed on public key.
+    CASCADE is the most complex handler (permission gate, local answer, peer
+    fan-out AND upstream forward), so both halves are pinned here:
+
+    * a fresh CASCADE is fanned out with a self-hop (public key) on its route
+      and forwarded upstream carrying the same route; and
+    * a CASCADE whose route already names this node is still answered locally
+      but is NOT re-forwarded to peers or upstream.
+    """
+    def _cascade_node(key):
+        node = _make_node(key)
+        # handle_cascade_message answers the cascade locally through the agent
+        # bus + query machinery; stub those out — forwarding is what's under test
+        node.get_bus = MagicMock(return_value=MagicMock())
+        node._answer_query_locally = MagicMock()
+        node._route_query_response = MagicMock()
+        return node
+
+    def _cascade(utt):
+        inner = HiveMessage(HiveMessageType.BUS,
+                            payload=Message("speak", {"utterance": utt}))
+        return HiveMessage(HiveMessageType.CASCADE, payload=inner,
+                           metadata={"query_id": "q1",
+                                     "originator_peer": "origin::0"})
+
+    # -- fresh CASCADE: self-hop stamped, fanned out to peers AND upstream --
+    node = _cascade_node("pubkey-K")
+    sent, upstream = [], []
+    conn = MagicMock()
+    conn.send = lambda m: sent.append(m)
+    node.clients = {"downstream::9": conn}
+    node._upstream_hm = MagicMock()
+    node._upstream_hm.emit = lambda m: upstream.append(m)
+
+    msg = _cascade("hello")
+    _deliver_preamble(msg, "origin::0")
+    node.handle_cascade_message(msg, _make_client("origin::0"))
+
+    node._answer_query_locally.assert_called_once()
+    assert len(sent) == 1, "fresh CASCADE must be fanned out to the other peer"
+    assert len(upstream) == 1, "fresh CASCADE must also be forwarded upstream"
+    for fwd in (sent[0], upstream[0]):
+        sources = [hop.get("source") for hop in fwd.route]
+        assert "pubkey-K" in sources, \
+            f"self-hop not carried on forwarded CASCADE; sources={sources}"
+
+    # -- looped CASCADE: answered locally, NOT re-forwarded anywhere --
+    node2 = _cascade_node("pubkey-K")
+    sent2, upstream2 = [], []
+    conn2 = MagicMock()
+    conn2.send = lambda m: sent2.append(m)
+    node2.clients = {"downstream::9": conn2}
+    node2._upstream_hm = MagicMock()
+    node2._upstream_hm.emit = lambda m: upstream2.append(m)
+
+    looped = _cascade("again")
+    looped.replace_route([{"source": "pubkey-K", "targets": ["p::2"]}])
+    _deliver_preamble(looped, "peer::2")
+    node2.handle_cascade_message(looped, _make_client("peer::2"))
+
+    node2._answer_query_locally.assert_called_once()  # local answer still runs
+    assert sent2 == [], "already-routed CASCADE must not be re-fanned to peers"
+    assert upstream2 == [], "already-routed CASCADE must not go upstream again"
