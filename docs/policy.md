@@ -66,7 +66,13 @@ Mutation classes are agent-specific and live with the agent plugin
   whitelist from the database on every admission so
   `hivemind-core allow-msg` takes effect without a reconnect. Caches
   the resolved client row on the connection (`client.resolve_user`) so
-  downstream policies skip a second DB hit.
+  downstream policies skip a second DB hit. A failed database lookup
+  denies with `code="policy_error"`; it never falls back to the
+  whitelist captured when the client connected, because that would keep
+  a revoked grant alive while the database is unreachable. Binary
+  payloads cross the same gate: a client with an empty whitelist is
+  denied binary too. The whitelist holds message types only, so there
+  is no per-`bin_type` granularity yet.
 - **`DenyAllPolicy`**: fail-closed fallback installed when
   `PolicyChain.from_config` raises. Denies every message and binary
   payload with `code="policy_chain_unavailable"`.
