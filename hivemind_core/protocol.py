@@ -1652,11 +1652,20 @@ class HiveMindListenerProtocol:
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ) -> bool:
+        """Handle an INTERCOM frame.
 
+        Returns True when the frame is consumed by this node and MUST NOT be
+        relayed any further - either because the inner message was dispatched
+        locally, or because the frame was rejected (a refused message is
+        dropped, never forwarded to peers or escalated upstream).
+
+        Returns False only when the frame is not ours to consume and the
+        caller should keep relaying it.
+        """
         # if the message targets us, send it to internal bus
         k = message.target_public_key
         if k and k != self.identity.public_key:
-            # not for us
+            # not for us, keep relaying
             return False
 
         pload = message.payload
@@ -1669,26 +1678,27 @@ class HiveMindListenerProtocol:
                 # against the TOFU-pinned public key (pinned from the
                 # client's HELLO). Without a pinned/known pubkey, or without
                 # a signature, the origin cannot be authenticated at all -
-                # fail closed and reject rather than dispatch unverified.
+                # fail closed and drop rather than dispatch unverified.
+                # A rejection returns True: the frame is consumed here, it is
+                # not relayed to peers nor escalated upstream.
                 pub = self.trusted_pubkeys.get(client.key) or client.pub_key
                 if not pub:
                     LOG.warning(f"INTERCOM from {client.peer} has no pinned/known "
-                                f"public key: rejecting unverifiable origin")
-                    return False
+                                f"public key: dropping unverifiable origin")
+                    return True
                 if not signature:
                     LOG.warning(f"INTERCOM from {client.peer} has no signature: "
-                                f"rejecting unverifiable origin")
-                    return False
+                                f"dropping unverifiable origin")
+                    return True
 
-                signature = pybase64.b64decode(signature)
                 try:
-                    verified = verify_RSA(pub, ciphertext, signature)
+                    verified = verify_RSA(pub, ciphertext, pybase64.b64decode(signature))
                 except Exception:
                     verified = False
                 if not verified:
                     LOG.error(f"INTERCOM signature verification failed for "
-                              f"{client.peer}: rejecting forged/mismatched message")
-                    return False
+                              f"{client.peer}: dropping forged/mismatched message")
+                    return True
                 # first verified sighting pins the key for this listener's lifetime
                 self.trusted_pubkeys.setdefault(client.key, pub)
 
@@ -1698,9 +1708,10 @@ class HiveMindListenerProtocol:
                 inner = HiveMessage.deserialize(decrypted)
             except:
                 if k:
+                    # explicitly addressed to us and undecryptable: drop it
                     LOG.error("failed to decrypt message!")
-                else:
-                    LOG.debug("failed to decrypt message, not for us")
+                    return True
+                LOG.debug("failed to decrypt message, not for us")
                 return False
         elif isinstance(pload, HiveMessage):
             inner = pload
