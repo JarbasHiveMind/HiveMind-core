@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.13a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.13a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.12a1...4.10.13a1)
+
+**Merged pull requests:**
+
+- fix: make-admin now reports Invalid Node ID like its sibling commands [\#182](https://github.com/JarbasHiveMind/HiveMind-core/pull/182) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
@@ -427,10 +435,6 @@
 ## [3.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.3.0a1) (2025-02-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.3...3.3.0a1)
-
-**Merged pull requests:**
-
-- Release 3.3.0a1 [\#55](https://github.com/JarbasHiveMind/HiveMind-core/pull/55) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.2.3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.3) (2025-01-09)
 
