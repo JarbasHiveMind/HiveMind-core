@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.5a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.4a1...4.10.5a1)
+
+**Merged pull requests:**
+
+- fix: require a verifiable origin on signed INTERCOM, and drop rejected frames [\#166](https://github.com/JarbasHiveMind/HiveMind-core/pull/166) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.4a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.3a2...4.10.4a1)
@@ -427,10 +435,6 @@
 ## [3.1.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1) (2025-01-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.1a1...3.1.1)
-
-**Merged pull requests:**
-
-- Release 3.1.1a1 [\#43](https://github.com/JarbasHiveMind/HiveMind-core/pull/43) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1a1) (2025-01-03)
 
