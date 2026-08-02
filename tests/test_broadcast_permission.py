@@ -22,6 +22,9 @@ from hivemind_core.protocol import HiveMindClientConnection, HiveMindListenerPro
 def _make_protocol():
     proto = object.__new__(HiveMindListenerProtocol)
     proto.peer = "master:0.0.0.0"
+    # provenance is stamped from the node public key, so a hand-built
+    # protocol needs an identity even when the test is about permissions
+    proto.identity = MagicMock(public_key="pubkey-master", site_id=None)
     proto.clients = {}
     proto.illegal_callback = MagicMock()
     proto.broadcast_callback = MagicMock()
