@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.6a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.5a1...4.10.6a1)
+
+**Merged pull requests:**
+
+- fix: refuse unauthenticated INTERCOM when crypto is required [\#169](https://github.com/JarbasHiveMind/HiveMind-core/pull/169) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.5a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.4a1...4.10.5a1)
@@ -418,10 +426,6 @@
 ## [3.2.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.1a1) (2025-01-07)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.0a1...3.2.1a1)
-
-**Merged pull requests:**
-
-- fix: track last\_seen , add missing cli permission management scripts … [\#44](https://github.com/JarbasHiveMind/HiveMind-core/pull/44) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [3.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.0a1) (2025-01-07)
 
