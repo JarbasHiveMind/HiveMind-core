@@ -184,8 +184,8 @@ Available backends:
 
 ## `policy`
 
-Configures the admission-control chain. `MessageTypeACLPolicy` is always prepended and
-cannot be removed. See [policy.md](policy.md) for the full policy chain specification.
+Configures the admission-control chain. `MessageTypeACLPolicy` and
+`DefaultSessionPolicy` are always prepended and cannot be removed. See [policy.md](policy.md) for the full policy chain specification.
 
 ```json
 "policy": {

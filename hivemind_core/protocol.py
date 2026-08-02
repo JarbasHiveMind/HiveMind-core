@@ -63,7 +63,7 @@ from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from hivemind_plugin_manager.database import Client
 from hivemind_plugin_manager.policy import PolicyPlugin
-from hivemind_core.policy import PolicyChain
+from hivemind_core.policy import BACKEND_UNAVAILABLE, PolicyChain
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
 
@@ -179,6 +179,10 @@ class HiveMindClientConnection:
     _resolved_user: Optional[Client] = field(default=None, init=False, repr=False)
     _resolved_user_ts: float = field(default=0.0, init=False, repr=False)
 
+    # Appended to ``peer`` when another live connection already owns the same
+    # ``name::session_id`` string. See ``handle_hello_message``.
+    _peer_suffix: str = field(default="", init=False, repr=False)
+
     def resolve_user(self, db, ttl: float = 5.0,
                      force: bool = False) -> Optional[Client]:
         """Return the cached DB row for this connection, refetching at
@@ -214,7 +218,7 @@ class HiveMindClientConnection:
     def peer(self) -> str:
         # friendly id that ovos components can use to refer to this connection
         # this is how ovos refers to connected nodes in message.context
-        return f"{self.name}::{self.sess.session_id}"
+        return f"{self.name}::{self.sess.session_id}{self._peer_suffix}"
 
     def send(self, message: HiveMessage):
         is_bin = message.msg_type == HiveMessageType.BINARY
@@ -438,38 +442,43 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception(
                     "failed to build policy chain; installing DenyAllPolicy "
-                    "fallback — every admission will be rejected until "
+                    "fallback \u2014 every admission will be rejected until "
                     "configuration is fixed"
                 )
                 self.policy_chain = PolicyChain(
                     policies=[DenyAllPolicy(hm_protocol=self)],
                 )
         # every chain is normalized, including one handed to the constructor
-        # by an embedder — the ACL gate is not opt-out
-        self.policy_chain = self._with_acl_gate(self.policy_chain)
+        # by an embedder \u2014 the builtin gates are not opt-out
+        self.policy_chain = self._with_builtin_policies(self.policy_chain)
 
-    def _with_acl_gate(self, chain: PolicyChain) -> PolicyChain:
-        """Return ``chain`` with MessageTypeACLPolicy in first position.
+    def _with_builtin_policies(self, chain: PolicyChain) -> PolicyChain:
+        """Return ``chain`` with the non-removable builtin policies first.
 
         MessageTypeACLPolicy is the canonical ``allowed_types`` whitelist
-        enforcement and is non-removable, so it is prepended to whatever
-        chain we were given, deduping an explicitly listed copy so the
-        operator cannot reorder it. Always mandatory — ``_optional[0]``
-        is False, so an exception in the gate fails the chain closed.
+        enforcement; DefaultSessionPolicy protects the reserved "default"
+        session. Both are prepended to whatever chain we were given,
+        deduping an explicitly listed copy so the operator cannot reorder
+        or drop them. Always mandatory \u2014 their ``_optional`` entries are
+        False, so an exception in a gate fails the chain closed.
         """
-        from hivemind_core.policy import MessageTypeACLPolicy
+        from hivemind_core.policy import (DefaultSessionPolicy,
+                                          MessageTypeACLPolicy)
+        builtins = (MessageTypeACLPolicy, DefaultSessionPolicy)
         policies: List[PolicyPlugin] = []
         optional: List[bool] = []
         for i, p in enumerate(chain.policies):
-            if isinstance(p, MessageTypeACLPolicy):
+            if isinstance(p, builtins):
                 continue
             policies.append(p)
             optional.append(
                 chain._optional[i] if i < len(chain._optional) else False
             )
+        mandatory = [MessageTypeACLPolicy(hm_protocol=self),
+                     DefaultSessionPolicy(hm_protocol=self)]
         return PolicyChain(
-            policies=[MessageTypeACLPolicy(hm_protocol=self), *policies],
-            _optional=[False, *optional],
+            policies=[*mandatory, *policies],
+            _optional=[*[False] * len(mandatory), *optional],
             on_verdict=chain.on_verdict,
         )
 
@@ -480,7 +489,34 @@ class HiveMindListenerProtocol:
         # routing on the inject path stays transparent here.
         return self.agent_protocol.get_bus(client)
 
+    def _emit_lifecycle(self, client: HiveMindClientConnection,
+                        message: Message) -> None:
+        """Emit a connect/disconnect/error notification on the agent bus.
+
+        These are notifications about the connection, not client traffic. An
+        unreachable agent bus must not abort the handler that reports them:
+        the connection still has to be accepted, cleaned up or rejected, and
+        the peer has nothing to act on. So log and continue.
+        """
+        try:
+            self.get_bus(client).emit(message)
+        except ConnectionError as e:
+            LOG.error(f"can not emit '{message.msg_type}' for {client.peer}, "
+                      f"the agent bus is unreachable: {e}")
+
     def handle_new_client(self, client: HiveMindClientConnection):
+        # "default" is the reserved device-local session: every OVOS message
+        # carrying it writes into the orchestrator's own session store
+        # (OVOS-SESSION-2 §5). A connection is not allowed to be born in it —
+        # hivemind-websocket-protocol mints one that way as a placeholder, and
+        # HELLO is not mandatory, so without this the placeholder can reach the
+        # OVOS bus untouched (HIVEMIND-BRIDGE-1 §4.1). Admins that really want
+        # the reserved session still get it by asking for it in HELLO.
+        if client.sess.session_id == "default":
+            client.sess = Session()
+            LOG.debug(f"moved new connection off the reserved 'default' "
+                      f"session to {client.sess.session_id}")
+
         try:
             self.callbacks.on_connect(client)
         except:
@@ -504,8 +540,7 @@ class HiveMindListenerProtocol:
             {"source": client.peer},
         )
 
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_lifecycle(client, message)
 
         crypto_min = (
             ProtocolVersion.ONE
@@ -626,13 +661,18 @@ class HiveMindListenerProtocol:
         if not any(conn.key == client.key for conn in self.clients.values()):
             self._last_seen_updates.pop(client.key, None)
         client.disconnect()
-        message = Message(
-            "hive.client.disconnect",
-            {"key": client.key},
-            {"source": client.peer, "session": client.sess.serialize()},
-        )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        context = {"source": client.peer}
+        # never hand the reserved session of a non-admin to the OVOS bus: it
+        # would update the device-local default session (OVOS-SESSION-2 §5)
+        # on behalf of a peer that is not allowed to touch it
+        # (HIVEMIND-BRIDGE-1 §4.1). This emit is outside the policy chain.
+        if client.sess.session_id != "default" or client.is_admin:
+            context["session"] = client.sess.serialize()
+        else:
+            LOG.warning(f"not reporting the 'default' session of non-admin "
+                        f"{client.peer} on disconnect")
+        message = Message("hive.client.disconnect", {"key": client.key}, context)
+        self._emit_lifecycle(client, message)
 
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
         try:
@@ -656,8 +696,7 @@ class HiveMindListenerProtocol:
             {"error": "invalid access key", "peer": client.peer},
             {"source": client.peer},
         )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_lifecycle(client, message)
 
     def handle_invalid_protocol_version(self, client: HiveMindClientConnection):
         try:
@@ -681,8 +720,7 @@ class HiveMindListenerProtocol:
             {"error": "protocol error", "peer": client.peer},
             {"source": client.peer},
         )
-        bus = self.get_bus(client)
-        bus.emit(message)
+        self._emit_lifecycle(client, message)
 
     def handle_message(self, message: HiveMessage, client: HiveMindClientConnection):
         """
@@ -1073,6 +1111,25 @@ class HiveMindListenerProtocol:
             LOG.warning("Client requested 'default' session, but is not an administrator")
             client.disconnect()
         else:
+            # a client that HELLOs again with a different session_id leaves a
+            # stale entry behind under its old peer id — drop it, or a later
+            # connection collides with a peer that no longer exists.
+            for peer, conn in list(self.clients.items()):
+                if conn is client and peer != client.peer:
+                    self.clients.pop(peer)
+
+            # HIVEMIND-BRIDGE-1 §3: every peer needs a distinct ``source``.
+            # ``name`` comes from the access key and ``session_id`` comes from
+            # this HELLO, so two connections that share an access key can ask
+            # for the same peer string. The second one would evict the first
+            # from ``self.clients`` and then receive its responses
+            # (HIVEMIND-AGENT-1 §3). Give the newcomer a server-generated
+            # suffix instead — BRIDGE-1 §3.1 allows exactly this.
+            other = self.clients.get(client.peer)
+            if other is not None and other is not client:
+                client._peer_suffix = f"::{uuid.uuid4().hex[:8]}"
+                LOG.warning(f"peer id collision on '{other.peer}'; the new "
+                            f"connection is now known as '{client.peer}'")
             self.clients[client.peer] = client
 
     def handle_bus_message(
@@ -1547,7 +1604,15 @@ class HiveMindListenerProtocol:
                     query_id=query_id, originator_peer=originator_peer)
             collector = self._pending_cascades[query_id]
             collector.add_response(message)
-            bus = self.get_bus(self.clients[originator_peer])
+            try:
+                bus = self.get_bus(self.clients[originator_peer])
+            except ConnectionError as e:
+                # keep the collector: the responses stay queued and the next
+                # one retries once the agent bus is back
+                LOG.error(f"can not run the cascade select callback for "
+                          f"query_id={query_id}, the agent bus is "
+                          f"unreachable: {e}")
+                return
             try:
                 selected = self.cascade_select_callback(query_id, collector.responses)
                 if selected is not None:
@@ -1595,7 +1660,13 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
-        bus = self.get_bus(client)
+        try:
+            bus = self.get_bus(client)
+        except ConnectionError as e:
+            # without the agent bus this node can not answer the query at
+            # all; tell the originator instead of dropping it in silence
+            self._send_backend_unavailable(client, message, e)
+            return
         bus.emit(Message("hive.query.received",
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
@@ -1659,7 +1730,11 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
-        bus = self.get_bus(client)
+        try:
+            bus = self.get_bus(client)
+        except ConnectionError as e:
+            self._send_backend_unavailable(client, message, e)
+            return
         bus.emit(Message("hive.cascade.received",
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
@@ -1906,7 +1981,15 @@ class HiveMindListenerProtocol:
         message.context["peer"] = message.context["source"] = client.peer
         message.context["source"] = client.peer
 
-        bus = self.get_bus(client)
+        try:
+            bus = self.get_bus(client)
+        except ConnectionError as e:
+            # the chain already admitted this message — the peer must hear
+            # that it was not delivered instead of waiting for an answer
+            # that will never come. observe() stays unrun: nothing was
+            # forwarded, so there is nothing to observe.
+            self._send_backend_unavailable(client, message, e)
+            return
         bus.emit(message)
 
         self.policy_chain.observe(message, client)
@@ -1917,13 +2000,29 @@ class HiveMindListenerProtocol:
     def _send_policy_denied(self, client: HiveMindClientConnection,
                              message: Message, verdict) -> None:
         """Inform a client that an admission policy denied their message."""
+        self._send_denied(client, getattr(message, "msg_type", None),
+                          verdict.code, verdict.reason, verdict.data)
+
+    def _send_backend_unavailable(self, client: HiveMindClientConnection,
+                                  message: Union[Message, HiveMessage],
+                                  error: Exception) -> None:
+        """Inform a client that its message was admitted but could not be
+        delivered, because the agent bus behind this node is unreachable."""
+        msg_type = str(message.msg_type)
+        LOG.error(f"can not forward '{msg_type}' from {client.peer}, "
+                  f"the agent bus is unreachable: {error}")
+        self._send_denied(client, msg_type, BACKEND_UNAVAILABLE, str(error), {})
+
+    def _send_denied(self, client: HiveMindClientConnection,
+                     denied_type: Optional[str], code: str, reason: str,
+                     data: dict) -> None:
         payload = Message(
             "hive.policy.denied",
             {
-                "denied_type": getattr(message, "msg_type", None),
-                "code": verdict.code,
-                "reason": verdict.reason,
-                "data": verdict.data,
+                "denied_type": denied_type,
+                "code": code,
+                "reason": reason,
+                "data": data,
             },
             {"source": "hivemind-core", "destination": client.peer},
         )

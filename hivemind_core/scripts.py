@@ -647,11 +647,12 @@ def policy_group():
 
 @policy_group.command(name="list", help="Print the loaded policy chain.")
 def policy_list():
-    """List ``MessageTypeACLPolicy`` (always first, non-removable) followed
+    """List the built-in policies (always first, non-removable) followed
     by every plugin built from ``policy.chain`` in server config."""
-    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    from hivemind_core.policy import (DefaultSessionPolicy,
+                                      MessageTypeACLPolicy, PolicyChain)
     cfg = get_server_config()
-    builtin = MessageTypeACLPolicy()
+    builtins = [MessageTypeACLPolicy(), DefaultSessionPolicy()]
     try:
         chain = PolicyChain.from_config(cfg)
     except Exception as e:
@@ -661,8 +662,9 @@ def policy_list():
     table.add_column("Position", justify="right", style="cyan")
     table.add_column("Plugin", style="magenta")
     table.add_column("Source", style="yellow")
-    table.add_row("0", type(builtin).__name__, "builtin")
-    for i, plug in enumerate(chain.policies, start=1):
+    for i, plug in enumerate(builtins):
+        table.add_row(str(i), type(plug).__name__, "builtin")
+    for i, plug in enumerate(chain.policies, start=len(builtins)):
         table.add_row(str(i), type(plug).__name__, "config")
     Console().print(table)
 
@@ -672,17 +674,18 @@ def policy_list():
 @click.argument("msg_type", required=True, type=str)
 def policy_test(api_key, msg_type):
     """Construct a fake ``Message`` of ``msg_type``, look up the client by
-    ``api_key``, run the full chain (MessageTypeACLPolicy + configured
+    ``api_key``, run the full chain (built-in policies + configured
     plugins), and print the verdict."""
     from ovos_bus_client.message import Message
-    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    from hivemind_core.policy import (DefaultSessionPolicy,
+                                      MessageTypeACLPolicy, PolicyChain)
     db = ClientDatabase()
     client = db.get_client_by_api_key(api_key)
     if client is None:
         click.echo(f"no client found for api_key={api_key!r}", err=True)
         raise click.Abort()
     cfg = get_server_config()
-    policies = [MessageTypeACLPolicy()]
+    policies = [MessageTypeACLPolicy(), DefaultSessionPolicy()]
     try:
         chain = PolicyChain.from_config(cfg)
         policies.extend(chain.policies)

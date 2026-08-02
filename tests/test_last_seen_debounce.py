@@ -46,7 +46,9 @@ def _client(peer="peer", key="access-key"):
         disconnect=MagicMock(),
         key=key,
         peer=peer,
-        sess=SimpleNamespace(serialize=MagicMock(return_value={})),
+        is_admin=False,
+        sess=SimpleNamespace(session_id="a-session",
+                             serialize=MagicMock(return_value={})),
     )
 
 
