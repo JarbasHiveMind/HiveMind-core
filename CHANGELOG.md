@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a3...4.10.3a1)
+
+**Merged pull requests:**
+
+- fix: suppress routing loops per MSG-1 §5 \(append self-hop, drop already-routed\) [\#162](https://github.com/JarbasHiveMind/HiveMind-core/pull/162) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.2a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a3) (2026-07-30)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a2...4.10.2a3)
@@ -427,10 +435,6 @@
 ## [3.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0a1) (2025-01-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.0.3...3.1.0a1)
-
-**Merged pull requests:**
-
-- feat:cipher negotiation [\#40](https://github.com/JarbasHiveMind/HiveMind-core/pull/40) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [3.0.3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.0.3) (2025-01-02)
 
