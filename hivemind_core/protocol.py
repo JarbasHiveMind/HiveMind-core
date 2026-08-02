@@ -1144,12 +1144,12 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
-        # broadcast message to other peers
-        payload = self._unpack_message(message, client)
+        # broadcast message to other peers (NODE-1 §3.3: keep the envelope)
+        fwd = self._rewrap(message, payload)
         for peer in self.clients:
             if peer == client.peer:
                 continue
-            self.clients[peer].send(payload)
+            self.clients[peer].send(fwd)
 
     def _unpack_message(self, message: HiveMessage, client: HiveMindClientConnection):
         # propagate message to other peers
@@ -1159,6 +1159,29 @@ class HiveMindListenerProtocol:
         pload.update_source_peer(self.peer)
         pload.remove_target_peer(client.peer)
         return pload
+
+    def _rewrap(self, message: HiveMessage, payload: HiveMessage,
+                metadata: Optional[dict] = None) -> HiveMessage:
+        """Wrap an unpacked ``payload`` back into an outer envelope of the same
+        type as ``message``.
+
+        HIVEMIND-NODE-1 §3.3: a relay MUST preserve the envelope it relays.
+        ``metadata``, ``target_site_id`` and ``target_pubkey`` are
+        constructor-only on ``HiveMessage``, so a naive
+        ``HiveMessage(type, payload=payload)`` silently drops them — and site
+        targeting is read off the OUTER envelope, so a site-targeted message
+        would stop being deliverable after one relay hop.
+        """
+        fwd = HiveMessage(
+            message.msg_type, payload=payload,
+            metadata=message.metadata if metadata is None else metadata,
+            target_site_id=message.target_site_id,
+            target_pubkey=message.target_public_key,
+        )
+        # MSG-1 §5: carry the accumulated route (incl. our self-hop) on the
+        # outer envelope so the next node can detect a loop
+        fwd.replace_route(payload.route)
+        return fwd
 
     @property
     def _node_id(self) -> str:
@@ -1269,14 +1292,16 @@ class HiveMindListenerProtocol:
                       f"node {self._node_id} (MSG-1 §5); route={message.route}")
             return
 
-        # propagate message to other peers
+        # propagate message to other peers (NODE-1 §3.3: keep the envelope, so a
+        # peer receives a PROPAGATE it can fan out again instead of a bare BUS)
+        fwd = self._rewrap(message, payload)
         for peer in self.clients:
             if peer == client.peer:
                 continue
-            self.clients[peer].send(payload)
+            self.clients[peer].send(fwd)
 
         # forward upstream to the master this node relays to (no-op at top level)
-        self.propagate_to_master(payload)
+        self.propagate_to_master(fwd)
 
     def handle_ping_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -1334,9 +1359,11 @@ class HiveMindListenerProtocol:
 
         LOG.debug(f"Sending responsive PING for flood_id={flood_id}")
 
-        # Send to all downstream peers
-        for peer_id, conn in self.clients.items():
+        # NODE-1 §4: a PING fans out across the whole mesh — downstream peers
+        # and upstream alike, so a master learns of nodes below a relay
+        for conn in self.clients.values():
             conn.send(own_ping_outer)
+        self.propagate_to_master(own_ping_outer)
 
     def bind_upstream(self, slave) -> None:
         """Bind a ``HiveMindSlaveProtocol`` as this node's upstream connection,
@@ -1350,49 +1377,65 @@ class HiveMindListenerProtocol:
         slave.hm.on(HiveMessageType.QUERY, self.query_from_master)
         slave.hm.on(HiveMessageType.CASCADE, self.cascade_from_master)
 
+    def _relay_downstream(self, message: HiveMessage) -> None:
+        """Fan a routing message received from the upstream master out to every
+        downstream client, with NODE-1 §3.4 loop prevention: a message whose
+        route already names this node is not relayed again."""
+        if self._is_routing_loop(message):
+            LOG.debug(f"not relaying {message.msg_type} already routed through "
+                      f"this node {self._node_id} (NODE-1 §3.4); "
+                      f"route={message.route}")
+            return
+        self._append_self_hop(message)
+        for conn in self.clients.values():
+            conn.send(message)
+
     def broadcast_from_master(self, message: HiveMessage) -> None:
         """Fan a BROADCAST received from the upstream master out to all
-        downstream clients."""
-        for peer, conn in self.clients.items():
+        downstream clients.
+
+        No loop machinery here: NODE-1 §4 makes BROADCAST a single hop to the
+        directly connected downstream nodes, never re-broadcast by recipients.
+        It only ever travels upstream-to-downstream, so it cannot cycle.
+        """
+        for conn in self.clients.values():
             conn.send(message)
 
     def propagate_from_master(self, message: HiveMessage) -> None:
         """Fan a PROPAGATE received from the upstream master out to all
         downstream clients."""
-        for peer, conn in self.clients.items():
-            conn.send(message)
+        self._relay_downstream(message)
 
-    def escalate_to_master(self, payload: HiveMessage) -> None:
-        """Forward an ESCALATE upstream. No-op when this node is the top-level
-        master (nothing bound via :meth:`bind_upstream`)."""
+    def escalate_to_master(self, message: HiveMessage) -> None:
+        """Forward an ESCALATE envelope upstream. No-op when this node is the
+        top-level master (nothing bound via :meth:`bind_upstream`)."""
         if self._upstream_hm is None:
             return
-        msg = HiveMessage(HiveMessageType.ESCALATE, payload=payload)
-        # MSG-1 §5: carry the accumulated route on the outer envelope upstream
-        msg.replace_route(payload.route)
-        self._upstream_hm.emit(msg)
+        self._upstream_hm.emit(message)
 
-    def propagate_to_master(self, payload: HiveMessage) -> None:
-        """Forward a PROPAGATE upstream. No-op when this node is the top-level
-        master (nothing bound via :meth:`bind_upstream`)."""
+    def propagate_to_master(self, message: HiveMessage) -> None:
+        """Forward a PROPAGATE envelope upstream. No-op when this node is the
+        top-level master (nothing bound via :meth:`bind_upstream`)."""
         if self._upstream_hm is None:
             return
-        msg = HiveMessage(HiveMessageType.PROPAGATE, payload=payload)
-        # MSG-1 §5: carry the accumulated route on the outer envelope upstream
-        msg.replace_route(payload.route)
-        self._upstream_hm.emit(msg)
+        self._upstream_hm.emit(message)
 
     def query_from_master(self, message: HiveMessage) -> None:
-        """Fan a QUERY received from the upstream master out to downstream clients."""
-        for peer, conn in self.clients.items():
-            conn.send(message)
+        """Relay a QUERY received from the upstream master.
 
-    def query_to_master(self, payload: HiveMessage, metadata: Optional[dict] = None) -> None:
-        """Forward a QUERY upstream. No-op at the top-level master."""
+        A *response* belongs to the one peer that asked (NODE-1 §5.2), so it
+        walks the return path; only requests fan out downstream.
+        """
+        if (message.metadata or {}).get("is_response"):
+            self._route_query_response(message, None)
+            return
+        self._relay_downstream(message)
+
+    def query_to_master(self, message: HiveMessage) -> None:
+        """Forward a QUERY envelope upstream. No-op at the top-level master."""
         if self._upstream_hm is None:
             return
-        self._upstream_hm.emit(HiveMessage(HiveMessageType.QUERY, payload=payload,
-                                           metadata=metadata))
+        self._upstream_hm.emit(message)
 
     def _build_query_response(self, msg_type: HiveMessageType, response: Message,
                               query_id: str, originator_peer: str,
@@ -1481,9 +1524,14 @@ class HiveMindListenerProtocol:
         return answered
 
     def _route_query_response(self, message: HiveMessage,
-                              client: HiveMindClientConnection):
+                              client: Optional[HiveMindClientConnection]):
         """Route a QUERY response downstream toward its originator (direct
-        client if connected here, else fan to downstream peers)."""
+        client if connected here, else fan to downstream peers).
+
+        ``client`` is the connection the response arrived on, excluded from the
+        last-resort fan-out. It is None when the response came from upstream.
+        """
+        sender = client.peer if client else None
         metadata = message.metadata or {}
         originator_peer = metadata.get("originator_peer", "")
         # CASCADE disambiguation: collect responses for a select callback at
@@ -1516,12 +1564,12 @@ class HiveMindListenerProtocol:
         # the originator (from the request's recorded route) instead of flooding
         for hop in reversed(message.route or []):
             src = hop.get("source")
-            if src and src != client.peer and src in self.clients:
+            if src and src != sender and src in self.clients:
                 self.clients[src].send(message)
                 return
         # unknown return path: fan downstream (excluding the sender) as a last resort
         for peer in self.clients:
-            if peer == client.peer:
+            if peer == sender:
                 continue
             self.clients[peer].send(message)
 
@@ -1558,7 +1606,7 @@ class HiveMindListenerProtocol:
             return
 
         if self._upstream_hm is not None:
-            self.query_to_master(payload, metadata)
+            self.query_to_master(self._rewrap(message, payload, metadata))
         else:
             error_bus = Message("hive.query.timeout",
                                 {"query_id": query_id, "error": "no_answer"})
@@ -1567,19 +1615,21 @@ class HiveMindListenerProtocol:
                 originator_peer, self.peer, route=message.route))
 
     def cascade_from_master(self, message: HiveMessage) -> None:
-        """Fan a CASCADE received from the upstream master out to downstream clients."""
-        for peer, conn in self.clients.items():
-            conn.send(message)
+        """Relay a CASCADE received from the upstream master.
 
-    def cascade_to_master(self, payload: HiveMessage, metadata: Optional[dict] = None) -> None:
-        """Forward a CASCADE upstream. No-op at the top-level master."""
+        As with QUERY, a response goes back to the peer that asked
+        (NODE-1 §5.2); only requests fan out downstream.
+        """
+        if (message.metadata or {}).get("is_response"):
+            self._route_query_response(message, None)
+            return
+        self._relay_downstream(message)
+
+    def cascade_to_master(self, message: HiveMessage) -> None:
+        """Forward a CASCADE envelope upstream. No-op at the top-level master."""
         if self._upstream_hm is None:
             return
-        msg = HiveMessage(HiveMessageType.CASCADE, payload=payload,
-                          metadata=metadata)
-        # MSG-1 §5: carry the accumulated route on the outer envelope upstream
-        msg.replace_route(payload.route)
-        self._upstream_hm.emit(msg)
+        self._upstream_hm.emit(message)
 
     def handle_cascade_message(self, message: HiveMessage,
                                client: HiveMindClientConnection):
@@ -1625,16 +1675,12 @@ class HiveMindListenerProtocol:
                       f"node {self._node_id} (MSG-1 §5); route={message.route}")
             return
 
-        cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
-                                  metadata=metadata)
-        # MSG-1 §5: carry the accumulated route (incl. our self-hop) on the
-        # outer envelope so downstream nodes can detect the loop
-        cascade_fwd.replace_route(payload.route)
+        cascade_fwd = self._rewrap(message, payload, metadata)
         for peer in self.clients:
             if peer == client.peer:
                 continue
             self.clients[peer].send(cascade_fwd)
-        self.cascade_to_master(payload, metadata)
+        self.cascade_to_master(cascade_fwd)
 
     def handle_escalate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -1686,7 +1732,7 @@ class HiveMindListenerProtocol:
             return
 
         # escalate up the chain to the master this node relays to (no-op at top level)
-        self.escalate_to_master(payload)
+        self.escalate_to_master(self._rewrap(message, payload))
 
     def handle_intercom_message(
             self, message: HiveMessage, client: HiveMindClientConnection
