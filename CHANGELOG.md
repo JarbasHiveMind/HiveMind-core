@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.4a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.3a2...4.10.4a1)
+
+**Merged pull requests:**
+
+- fix: enforce min\_protocol\_version at handshake time [\#165](https://github.com/JarbasHiveMind/HiveMind-core/pull/165) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.3a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a2) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.3a1...4.10.3a2)
@@ -427,10 +435,6 @@
 ## [3.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1a1) (2025-01-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.0...3.1.1a1)
-
-**Merged pull requests:**
-
-- fix:binarization\_protocol [\#42](https://github.com/JarbasHiveMind/HiveMind-core/pull/42) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [3.1.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0) (2025-01-03)
 
