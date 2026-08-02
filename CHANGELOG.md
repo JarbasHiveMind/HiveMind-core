@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.7a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.6a1...4.10.7a1)
+
+**Merged pull requests:**
+
+- fix: close three admission-control gaps in the policy chain [\#171](https://github.com/JarbasHiveMind/HiveMind-core/pull/171) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.6a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.5a1...4.10.6a1)
@@ -127,10 +135,6 @@
 ## [4.7.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.7.0a1) (2026-07-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.7a1...4.7.0a1)
-
-**Fixed bugs:**
-
-- Add type to allowed\_types requires a client restart [\#45](https://github.com/JarbasHiveMind/HiveMind-core/issues/45)
 
 **Merged pull requests:**
 
