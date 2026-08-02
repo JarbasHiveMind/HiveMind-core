@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+
+**Merged pull requests:**
+
+- fix: stamp provenance with the node public key, not a shared constant [\#183](https://github.com/JarbasHiveMind/HiveMind-core/pull/183) ([JarbasAl](https://github.com/JarbasAl))
+- fix: honour the can\_broadcast grant on BROADCAST [\#181](https://github.com/JarbasHiveMind/HiveMind-core/pull/181) ([JarbasAl](https://github.com/JarbasAl))
+- refactor: readability and duplication pass over the CLI, service, database and config [\#180](https://github.com/JarbasHiveMind/HiveMind-core/pull/180) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a1...4.10.9a2)
@@ -415,25 +425,13 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.3a1...3.2.3)
 
-**Merged pull requests:**
-
-- Release 3.2.3a1 [\#52](https://github.com/JarbasHiveMind/HiveMind-core/pull/52) ([github-actions[bot]](https://github.com/apps/github-actions))
-
 ## [3.2.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.3a1) (2025-01-09)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.2...3.2.3a1)
 
-**Merged pull requests:**
-
-- fix:delete\_client [\#51](https://github.com/JarbasHiveMind/HiveMind-core/pull/51) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [3.2.2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.2) (2025-01-08)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.2a1...3.2.2)
-
-**Merged pull requests:**
-
-- Release 3.2.2a1 [\#50](https://github.com/JarbasHiveMind/HiveMind-core/pull/50) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.2a1) (2025-01-08)
 
