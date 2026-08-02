@@ -1663,28 +1663,34 @@ class HiveMindListenerProtocol:
         if isinstance(pload, dict) and "ciphertext" in pload:
             try:
                 ciphertext = pybase64.b64decode(pload["ciphertext"])
-                signature = pybase64.b64decode(pload["signature"])
+                signature = pload.get("signature")
 
-                # HIVEMIND-CRYPTO-1 §5 - verify the origin signature against
-                # the TOFU-pinned public key (pinned from the client's HELLO).
-                # A signature that fails against a known key means a forged
-                # origin — reject. If no pubkey was ever presented we cannot
-                # authenticate the origin; keep permissive behavior but say so.
+                # HIVEMIND-CRYPTO-1 §5 - the origin signature MUST verify
+                # against the TOFU-pinned public key (pinned from the
+                # client's HELLO). Without a pinned/known pubkey, or without
+                # a signature, the origin cannot be authenticated at all -
+                # fail closed and reject rather than dispatch unverified.
                 pub = self.trusted_pubkeys.get(client.key) or client.pub_key
-                if pub:
-                    try:
-                        verified = verify_RSA(pub, ciphertext, signature)
-                    except Exception:
-                        verified = False
-                    if not verified:
-                        LOG.error(f"INTERCOM signature verification failed for "
-                                  f"{client.peer}: rejecting forged/mismatched message")
-                        return False
-                    # first verified sighting pins the key for this listener's lifetime
-                    self.trusted_pubkeys.setdefault(client.key, pub)
-                else:
+                if not pub:
                     LOG.warning(f"INTERCOM from {client.peer} has no pinned/known "
-                                f"public key: origin authenticity is unverified")
+                                f"public key: rejecting unverifiable origin")
+                    return False
+                if not signature:
+                    LOG.warning(f"INTERCOM from {client.peer} has no signature: "
+                                f"rejecting unverifiable origin")
+                    return False
+
+                signature = pybase64.b64decode(signature)
+                try:
+                    verified = verify_RSA(pub, ciphertext, signature)
+                except Exception:
+                    verified = False
+                if not verified:
+                    LOG.error(f"INTERCOM signature verification failed for "
+                              f"{client.peer}: rejecting forged/mismatched message")
+                    return False
+                # first verified sighting pins the key for this listener's lifetime
+                self.trusted_pubkeys.setdefault(client.key, pub)
 
                 private_key = load_RSA_key(self.identity.private_key)
 

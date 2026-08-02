@@ -10,8 +10,8 @@ Covers the additive, wire-compatible enforcement paths:
 - INTERCOM origin authentication (§5): signatures are verified against a
   TOFU-pinned public key (pin source = the pubkey presented in HELLO); a
   forged/mismatched signature after pinning is rejected; when no pubkey was
-  ever presented the message is still processed (permissive fallback) but
-  origin authenticity is unverified.
+  ever presented, or no signature is carried, the origin cannot be
+  authenticated and the message is rejected (fail closed).
 - Password handshake fail-fast (§3.2): a client envelope built with the
   wrong password is rejected at handshake time instead of only failing to
   decrypt the first encrypted frame.
@@ -20,7 +20,7 @@ Covers the additive, wire-compatible enforcement paths:
 import json
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pybase64
 import pytest
@@ -185,11 +185,26 @@ class TestIntercomSignatureVerification(unittest.TestCase):
         assert self.proto.handle_intercom_message(
             self._intercom(self.forger_priv), self.client) is False
 
-    def test_no_pubkey_falls_back_to_unverified_processing(self):
-        # peer never presented a pubkey: keep permissive (additive) behavior
+    def test_no_pubkey_rejects_unverifiable_origin(self):
+        # peer never presented a pubkey: origin cannot be authenticated,
+        # fail closed rather than dispatch unverified (CRYPTO-1 §5 MUST)
         self.client.pub_key = None
-        assert self.proto.handle_intercom_message(
-            self._intercom(self.forger_priv), self.client) is True
+        with patch("hivemind_core.protocol.LOG") as mock_log:
+            assert self.proto.handle_intercom_message(
+                self._intercom(self.forger_priv), self.client) is False
+        assert mock_log.warning.called
+        assert self.client.peer in mock_log.warning.call_args[0][0]
+
+    def test_missing_signature_rejected_even_with_pinned_key(self):
+        # pubkey is pinned, but the frame carries no signature at all:
+        # nothing to verify against, reject rather than trust blindly
+        self.proto.trusted_pubkeys["test-key"] = self.client_pub
+        frame = self._intercom(self.client_priv)
+        frame.payload.pop("signature")
+        with patch("hivemind_core.protocol.LOG") as mock_log:
+            assert self.proto.handle_intercom_message(frame, self.client) is False
+        assert mock_log.warning.called
+        assert "no signature" in mock_log.warning.call_args[0][0]
 
     def test_hello_pins_pubkey_and_keeps_first_pin(self):
         hello = HiveMessage(HiveMessageType.HELLO,
