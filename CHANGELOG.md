@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.3a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a2) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.3a1...4.10.3a2)
+
+**Merged pull requests:**
+
+- test: isolate E2E HiveMind identity storage [\#159](https://github.com/JarbasHiveMind/HiveMind-core/pull/159) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [4.10.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a3...4.10.3a1)
@@ -427,10 +435,6 @@
 ## [3.1.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0) (2025-01-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.0a1...3.1.0)
-
-**Merged pull requests:**
-
-- Release 3.1.0a1 [\#41](https://github.com/JarbasHiveMind/HiveMind-core/pull/41) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.0a1) (2025-01-03)
 
