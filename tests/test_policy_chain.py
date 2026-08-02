@@ -10,7 +10,10 @@ Covers:
 - observe swallows exceptions.
 - from_config loads plugins via PolicyPluginFactory; unknown entry
   points raise so __post_init__ can install DenyAllPolicy.
-- MessageTypeACLPolicy: allowed_types whitelist (admins are not exempt).
+- MessageTypeACLPolicy: allowed_types whitelist (admins are not exempt),
+  applied to binary payloads too, and denying when the DB lookup fails.
+- The ACL gate is prepended to any chain, including one supplied to the
+  HiveMindListenerProtocol constructor.
 - DenyAllPolicy: rejects every admission with policy_chain_unavailable.
 """
 from __future__ import annotations
@@ -277,9 +280,10 @@ class TestMessageTypeACLPolicy(unittest.TestCase):
         v = p.review(_msg("recognizer_loop:utterance"), client)
         self.assertFalse(v.denied)
 
-    def test_db_failure_falls_back_to_cached_values(self):
-        """If resolve_user raises, MessageTypeACLPolicy uses the cached
-        connection fields (no fail-open exception leak)."""
+    def test_db_failure_denies_with_policy_error(self):
+        """POLICY-1 §5: a DB error is a policy error, so it denies. Falling
+        back to the connection snapshot would keep a revoked client's
+        grants alive for as long as the DB stays unreachable."""
         from types import SimpleNamespace
         client = _FakeClient(allowed_types=["ok"], is_admin=False)
 
@@ -289,7 +293,72 @@ class TestMessageTypeACLPolicy(unittest.TestCase):
         db = MagicMock()
         p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
         v = p.review(_msg("ok"), client)
-        self.assertFalse(v.denied)  # used cached allowed_types
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+        self.assertIn("MessageTypeACLPolicy", v.reason)
+        self.assertIn("db down", v.reason)
+
+    def test_db_failure_denies_binary_with_policy_error(self):
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["ok"], is_admin=False)
+
+        def boom(db, ttl=5.0, force=False):
+            raise RuntimeError("db down")
+        client.resolve_user = boom
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=MagicMock()))
+        v = p.review_binary(b"\x00" * 10, client)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+
+class TestMessageTypeACLPolicyBinary(unittest.TestCase):
+    """POLICY-1 §2: BINARY payloads cross the same gate as BUS messages.
+    A client whose whitelist grants nothing must not be able to push
+    RAW_AUDIO into the STT pipeline or FILE payloads to disk."""
+
+    def test_empty_allowed_denies_binary(self):
+        p = MessageTypeACLPolicy()
+        client = _FakeClient(allowed_types=[])
+        v = p.review_binary(b"\x00" * 10, client)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
+
+    def test_none_allowed_types_denies_binary(self):
+        p = MessageTypeACLPolicy()
+        v = p.review_binary(b"\x00", _FakeClient(allowed_types=None))
+        self.assertTrue(v.denied)
+
+    def test_admins_are_not_exempt_for_binary(self):
+        p = MessageTypeACLPolicy()
+        client = _FakeClient(allowed_types=[], is_admin=True)
+        v = p.review_binary(b"\x00", client)
+        self.assertTrue(v.denied)
+
+    def test_non_empty_allowed_allows_binary(self):
+        """The whitelist has no per-bin_type granularity, so any grant
+        at all admits binary payloads."""
+        p = MessageTypeACLPolicy()
+        client = _FakeClient(allowed_types=["recognizer_loop:utterance"])
+        self.assertFalse(p.review_binary(b"\x00", client).denied)
+
+    def test_db_grant_admits_binary(self):
+        """A grant made mid-session is picked up for binary too."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=[], is_admin=False)
+        db = MagicMock()
+        db.get_client_by_api_key = MagicMock(
+            return_value=SimpleNamespace(allowed_types=["speak"]))
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        self.assertFalse(p.review_binary(b"\x00", client).denied)
+
+    def test_db_revocation_denies_binary(self):
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["speak"], is_admin=False)
+        db = MagicMock()
+        db.get_client_by_api_key = MagicMock(
+            return_value=SimpleNamespace(allowed_types=[]))
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=db))
+        self.assertTrue(p.review_binary(b"\x00", client).denied)
 
 
 class TestChainAdminHandling(unittest.TestCase):
@@ -870,6 +939,52 @@ class TestProtocolWiring(unittest.TestCase):
         sent_hm = client.send.call_args[0][0]
         denied_msg = sent_hm.payload
         self.assertEqual(denied_msg.data["code"], "policy_error")
+
+
+class TestACLGateIsNonRemovable(unittest.TestCase):
+    """POLICY-1 §4: the ACL gate is always present, always first, and
+    cannot be removed or reordered — including by an embedder that
+    hands HiveMindListenerProtocol a ready-made chain."""
+
+    def _make_protocol(self, policy_chain, db=None):
+        from unittest.mock import MagicMock
+        from ovos_utils.fakebus import FakeBus
+        from hivemind_plugin_manager.protocols import AgentProtocol
+        from hivemind_core.protocol import HiveMindListenerProtocol
+
+        agent = MagicMock(spec=AgentProtocol)
+        agent.bus = FakeBus()
+        agent.hm_protocol = None
+        return HiveMindListenerProtocol(
+            agent_protocol=agent,
+            binary_data_protocol=MagicMock(),
+            identity=MagicMock(),
+            db=db,
+            hive_mapper=MagicMock(),
+            policy_chain=policy_chain,
+        )
+
+    def test_supplied_chain_gets_the_acl_gate_prepended(self):
+        supplied = _AllowPolicy()
+        proto = self._make_protocol(PolicyChain(policies=[supplied]))
+        chain = proto.policy_chain
+        self.assertIsInstance(chain.policies[0], MessageTypeACLPolicy)
+        self.assertIs(chain.policies[1], supplied)
+        self.assertFalse(chain._optional[0])
+
+    def test_supplied_chain_cannot_reorder_the_acl_gate(self):
+        supplied = _AllowPolicy()
+        proto = self._make_protocol(
+            PolicyChain(policies=[supplied, MessageTypeACLPolicy()])
+        )
+        kinds = [type(p) for p in proto.policy_chain.policies]
+        self.assertEqual(kinds, [MessageTypeACLPolicy, _AllowPolicy])
+
+    def test_supplied_chain_gate_denies_empty_whitelist(self):
+        proto = self._make_protocol(PolicyChain(policies=[_AllowPolicy()]))
+        v = proto.policy_chain.review(_msg("speak"), _FakeClient(allowed_types=[]))
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
 
 
 if __name__ == "__main__":

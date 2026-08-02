@@ -431,10 +431,10 @@ class HiveMindListenerProtocol:
         else:
             self.binary_data_protocol.hm_protocol = self
         if self.policy_chain is None:
-            from hivemind_core.policy import MessageTypeACLPolicy, DenyAllPolicy
+            from hivemind_core.policy import DenyAllPolicy
             cfg = get_server_config()
             try:
-                chain = PolicyChain.from_config(cfg, hm_protocol=self)
+                self.policy_chain = PolicyChain.from_config(cfg, hm_protocol=self)
             except Exception:
                 LOG.exception(
                     "failed to build policy chain; installing DenyAllPolicy "
@@ -444,24 +444,34 @@ class HiveMindListenerProtocol:
                 self.policy_chain = PolicyChain(
                     policies=[DenyAllPolicy(hm_protocol=self)],
                 )
-            else:
-                # MessageTypeACLPolicy is the canonical allowed_types whitelist
-                # enforcement and is non-removable. Prepend it to the
-                # configured chain (deduping if an operator listed it
-                # explicitly). Always mandatory — _optional[0] = False.
-                configured: List[PolicyPlugin] = []
-                configured_optional: List[bool] = []
-                for i, p in enumerate(chain.policies):
-                    if isinstance(p, MessageTypeACLPolicy):
-                        continue
-                    configured.append(p)
-                    configured_optional.append(
-                        chain._optional[i] if i < len(chain._optional) else False
-                    )
-                self.policy_chain = PolicyChain(
-                    policies=[MessageTypeACLPolicy(hm_protocol=self), *configured],
-                    _optional=[False, *configured_optional],
-                )
+        # every chain is normalized, including one handed to the constructor
+        # by an embedder — the ACL gate is not opt-out
+        self.policy_chain = self._with_acl_gate(self.policy_chain)
+
+    def _with_acl_gate(self, chain: PolicyChain) -> PolicyChain:
+        """Return ``chain`` with MessageTypeACLPolicy in first position.
+
+        MessageTypeACLPolicy is the canonical ``allowed_types`` whitelist
+        enforcement and is non-removable, so it is prepended to whatever
+        chain we were given, deduping an explicitly listed copy so the
+        operator cannot reorder it. Always mandatory — ``_optional[0]``
+        is False, so an exception in the gate fails the chain closed.
+        """
+        from hivemind_core.policy import MessageTypeACLPolicy
+        policies: List[PolicyPlugin] = []
+        optional: List[bool] = []
+        for i, p in enumerate(chain.policies):
+            if isinstance(p, MessageTypeACLPolicy):
+                continue
+            policies.append(p)
+            optional.append(
+                chain._optional[i] if i < len(chain._optional) else False
+            )
+        return PolicyChain(
+            policies=[MessageTypeACLPolicy(hm_protocol=self), *policies],
+            _optional=[False, *optional],
+            on_verdict=chain.on_verdict,
+        )
 
     def get_bus(self, client: HiveMindClientConnection) -> Union[FakeBus, MessageBusClient]:
         # The agent decides which bus a client's messages land on. Default

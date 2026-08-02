@@ -238,9 +238,14 @@ class MessageTypeACLPolicy(PolicyPlugin):
     are not exempt — operators grant the message types they need via
     ``hivemind-core allow-msg`` like any other client.
 
+    Binary payloads cross the same gate: a client with an empty
+    whitelist is denied binary too (see ``review_binary``).
+
     Refreshes ``allowed_types`` from the DB on each admission so
     ``hivemind-core allow-msg`` / ``blacklist-msg`` take effect
-    immediately without forcing a reconnect.
+    immediately without forcing a reconnect. A DB error is a deny, not
+    a fallback to the connection snapshot — otherwise a revocation
+    issued while the DB is down would never take effect.
 
     The resolved DB row is cached on the connection via
     ``client.resolve_user(db)`` so downstream policies in the same chain
@@ -250,25 +255,68 @@ class MessageTypeACLPolicy(PolicyPlugin):
     live in agent policies like ``OVOSAgentPolicy``.
     """
 
+    def _allowed_types(self, client: "HiveMindClientConnection") -> List[str]:
+        """Resolve the whitelist for this admission.
+
+        The DB row wins so a grant or a revocation takes effect without a
+        reconnect; the snapshot taken at connection time is used only when
+        there is no DB at all. DB errors propagate — both callers turn them
+        into a POLICY_ERROR deny, never into a stale allow.
+        """
+        db = self.hm_protocol.db if self.hm_protocol is not None else None
+        if db is None:
+            return list(client.allowed_types or [])
+        user = client.resolve_user(db)
+        if user is None:
+            return list(client.allowed_types or [])
+        return list(user.allowed_types or [])
+
     def review(self, message: Message,
                client: "HiveMindClientConnection") -> Verdict:
-        allowed = list(getattr(client, "allowed_types", []) or [])
-        db = getattr(self.hm_protocol, "db", None)
-        if db is not None:
-            try:
-                user = client.resolve_user(db)
-                if user is not None:
-                    allowed = list(getattr(user, "allowed_types", allowed) or [])
-            except Exception:
-                LOG.warning("MessageTypeACLPolicy: DB refresh failed; using cached value",
-                            exc_info=True)
+        try:
+            allowed = self._allowed_types(client)
+        except Exception as e:
+            LOG.exception("MessageTypeACLPolicy: failed to resolve allowed_types")
+            return Verdict.deny(
+                DenyCodes.POLICY_ERROR,
+                f"MessageTypeACLPolicy: failed to resolve allowed_types: {e}",
+            )
 
-        msg_type = getattr(message, "msg_type", None)
+        msg_type = message.msg_type
         if msg_type not in allowed:
             return Verdict.deny(
                 DenyCodes.ACL_DISALLOWED_TYPE,
                 f"{msg_type} not in allowed_types",
                 msg_type=msg_type,
+                allowed=allowed,
+            )
+        return Verdict.allow()
+
+    def review_binary(self, payload: bytes,
+                      client: "HiveMindClientConnection") -> Verdict:
+        """Binary payloads cross the same gate as bus messages.
+
+        ``allowed_types`` lists message types, and the Client DB row has no
+        per-``bin_type`` grant, so the only decision this policy can make on
+        a binary payload is the deny-by-default one: a client with an empty
+        whitelist is granted nothing and gets nothing. Without this a client
+        that may not emit a single message type could still push RAW_AUDIO
+        into the STT pipeline and FILE payloads to disk.
+        """
+        try:
+            allowed = self._allowed_types(client)
+        except Exception as e:
+            LOG.exception("MessageTypeACLPolicy: failed to resolve allowed_types")
+            return Verdict.deny(
+                DenyCodes.POLICY_ERROR,
+                f"MessageTypeACLPolicy: failed to resolve allowed_types: {e}",
+            )
+
+        if not allowed:
+            return Verdict.deny(
+                DenyCodes.ACL_DISALLOWED_TYPE,
+                "binary payloads are denied for a client with an empty "
+                "allowed_types whitelist",
                 allowed=allowed,
             )
         return Verdict.allow()
