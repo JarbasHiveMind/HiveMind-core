@@ -33,14 +33,7 @@ class ClientDatabase:
         return self.db.search_by_value("name", name)
 
     def get_client_by_api_key(self, api_key: str) -> Optional[Client]:
-        # AbstractDB subclasses all expose this (and may index it), but the
-        # backend only has to be duck-typed, so fall back to the generic
-        # scan when it does not
-        direct_lookup = getattr(self.db, "get_client_by_api_key", None)
-        if direct_lookup is not None:
-            return direct_lookup(api_key)
-        matches: List[Client] = self.db.search_by_value("api_key", api_key)
-        return matches[0] if matches else None
+        return self.db.get_client_by_api_key(api_key)
 
     def get_client_by_id(self, client_id: int) -> Optional[Client]:
         return self.db.get_client_by_id(client_id)

@@ -4,6 +4,8 @@ import pytest
 from click import BadParameter
 from click.testing import CliRunner
 
+from hivemind_plugin_manager.database import AbstractDB
+
 from hivemind_core.database import ClientDatabase
 from hivemind_core.scripts import (
     add_client,
@@ -13,8 +15,13 @@ from hivemind_core.scripts import (
 )
 
 
-class MemoryDB:
-    """Minimal AbstractDB stand-in for ClientDatabase tests."""
+class MemoryDB(AbstractDB):
+    """In-memory backend for ClientDatabase tests.
+
+    Inherits AbstractDB so the fake is held to the same contract as a real
+    backend plugin, and inherits the generic implementations (such as
+    get_client_by_api_key) instead of quietly omitting them.
+    """
 
     def __init__(self):
         self.clients = []

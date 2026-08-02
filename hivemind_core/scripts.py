@@ -340,12 +340,16 @@ def blacklist_msg(msg_type, node_id):
         print(f"Blacklisted '{msg_type}' for {client.name}")
 
 
-def toggle_capability(attr: str, label: str, node_id, allow: bool) -> None:
-    """Flip one of the boolean routing capabilities on a client record.
+# HiveMessage type an operator can toggle -> the Client field holding it
+CAPABILITY_FIELDS = {
+    "ESCALATE": "can_escalate",
+    "PROPAGATE": "can_propagate",
+}
 
-    ``attr`` is the ``Client`` field (``can_escalate`` / ``can_propagate``)
-    and ``label`` the HiveMessage type name printed to the operator.
-    """
+
+def toggle_capability(label: str, node_id, allow: bool) -> None:
+    """Grant or revoke one of the routing capabilities in CAPABILITY_FIELDS."""
+    attr = CAPABILITY_FIELDS[label]
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
         if client is None:
@@ -370,25 +374,25 @@ def toggle_capability(attr: str, label: str, node_id, allow: bool) -> None:
 @hmcore_cmds.command(help="Allow 'ESCALATE' messages to be sent from a client.", name="allow-escalate")
 @click.argument("node_id", required=False, type=int)
 def allow_escalate(node_id):
-    toggle_capability("can_escalate", "ESCALATE", node_id, allow=True)
+    toggle_capability("ESCALATE", node_id, allow=True)
 
 
 @hmcore_cmds.command(help="blacklist 'ESCALATE' messages from being sent by a client", name="blacklist-escalate")
 @click.argument("node_id", required=False, type=int)
 def blacklist_escalate(node_id):
-    toggle_capability("can_escalate", "ESCALATE", node_id, allow=False)
+    toggle_capability("ESCALATE", node_id, allow=False)
 
 
 @hmcore_cmds.command(help="allow 'PROPAGATE' messages to be sent from a client", name="allow-propagate")
 @click.argument("node_id", required=False, type=int)
 def allow_propagate(node_id):
-    toggle_capability("can_propagate", "PROPAGATE", node_id, allow=True)
+    toggle_capability("PROPAGATE", node_id, allow=True)
 
 
 @hmcore_cmds.command(help="blacklist 'PROPAGATE' messages from being sent by a client", name="blacklist-propagate")
 @click.argument("node_id", required=False, type=int)
 def blacklist_propagate(node_id):
-    toggle_capability("can_propagate", "PROPAGATE", node_id, allow=False)
+    toggle_capability("PROPAGATE", node_id, allow=False)
 
 
 ##########################
