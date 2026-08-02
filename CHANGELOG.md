@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.8a1...4.10.9a1)
+
+**Merged pull requests:**
+
+- fix: isolate peer sessions and surface backend failures [\#174](https://github.com/JarbasHiveMind/HiveMind-core/pull/174) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.8a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.7a1...4.10.8a1)
@@ -442,10 +450,6 @@
 ## [3.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.0a1) (2025-01-07)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.1.1...3.2.0a1)
-
-**Merged pull requests:**
-
-- Release 3.2.0a1 [\#47](https://github.com/JarbasHiveMind/HiveMind-core/pull/47) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.1.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1) (2025-01-03)
 
