@@ -1742,6 +1742,16 @@ class HiveMindListenerProtocol:
                     return True
                 LOG.debug("failed to decrypt message, not for us")
                 return False
+        elif self.require_crypto:
+            # No signed envelope, so no origin signature to verify: this frame
+            # carries no proof of who sent it. HIVEMIND-CRYPTO-1 §5 requires
+            # the origin signature, and this listener advertises
+            # "crypto_required" to its clients — honour it and drop.
+            # Dropping returns True: consumed here, not relayed nor escalated.
+            LOG.warning(f"INTERCOM from {client.peer} is unencrypted and "
+                        f"unsigned, but this node requires crypto: dropping "
+                        f"unauthenticated message")
+            return True
         elif isinstance(pload, HiveMessage):
             inner = pload
         else:
