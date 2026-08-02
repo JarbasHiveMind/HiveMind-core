@@ -10,6 +10,7 @@ from hivemind_core.database import ClientDatabase
 from hivemind_core.scripts import (
     add_client,
     blacklist_skill,
+    make_admin,
     parse_client_metadata,
     set_metadata,
 )
@@ -325,6 +326,26 @@ def test_cli_set_metadata_requires_an_argument():
     with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
         result = runner.invoke(set_metadata, [str(client.client_id)])
     assert result.exit_code != 0
+
+
+def test_cli_make_admin_reports_invalid_node_id():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    _seed_client(fake_db)
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(make_admin, ["999999"])
+    assert "Invalid Node ID!" in result.output
+    assert fake_db.get_client_by_api_key("ak").is_admin is False
+
+
+def test_cli_make_admin_grants_admin_for_valid_node_id():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    client = _seed_client(fake_db)
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(make_admin, [str(client.client_id)])
+    assert result.exit_code == 0, result.output
+    assert fake_db.get_client_by_api_key("ak").is_admin is True
 
 
 def test_cli_blacklist_skill_writes_metadata_without_deprecation():
