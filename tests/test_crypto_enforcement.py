@@ -20,7 +20,7 @@ Covers the additive, wire-compatible enforcement paths:
 import json
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pybase64
 import pytest
@@ -249,6 +249,47 @@ class TestPasswordHandshakeFailFast(unittest.TestCase):
         proto.handle_handshake_message(msg, client)
         assert client.crypto_key is None
         client.disconnect.assert_called_once()
+
+
+class TestMinProtocolVersionFloor(unittest.TestCase):
+    """Fix for: min_protocol_version was advisory only.
+
+    A hub configured with a raised floor (e.g. 3, Noise-required) must
+    reject a client that completes a legacy v2 password handshake instead
+    of Noise, even though that same client is v3-*capable* (has a
+    pswd_handshake) and so was never caught by the min>max check done at
+    HELLO time. HIVEMIND-CRYPTO-1's floor is fail-closed: the hub MUST NOT
+    let a connection settle below the configured minimum.
+    """
+
+    _PASSWORD = "correct-horse-battery-staple-92"
+
+    def _handshake_msg(self):
+        peer_side = PasswordHandShake(self._PASSWORD)
+        return HiveMessage(HiveMessageType.HANDSHAKE,
+                           payload={"envelope": peer_side.generate_handshake()})
+
+    def test_v2_password_handshake_rejected_when_floor_is_3(self):
+        proto = _make_protocol()
+        client = _make_client(proto)
+        client.pswd_handshake = PasswordHandShake(self._PASSWORD)
+        with patch("hivemind_core.protocol.get_server_config",
+                  return_value={"min_protocol_version": 3}):
+            proto.handle_handshake_message(self._handshake_msg(), client)
+        assert client.crypto_key is None
+        client.disconnect.assert_called_once()
+        client.send_msg.assert_not_called()
+
+    def test_v2_password_handshake_accepted_when_floor_is_2(self):
+        proto = _make_protocol()
+        client = _make_client(proto)
+        client.pswd_handshake = PasswordHandShake(self._PASSWORD)
+        with patch("hivemind_core.protocol.get_server_config",
+                  return_value={"min_protocol_version": 2}):
+            proto.handle_handshake_message(self._handshake_msg(), client)
+        assert client.crypto_key is not None
+        client.disconnect.assert_not_called()
+        client.send_msg.assert_called_once()
 
 
 if __name__ == "__main__":
