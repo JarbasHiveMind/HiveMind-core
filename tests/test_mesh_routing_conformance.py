@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
+from hivemind_core.policy import PolicyChain
 from hivemind_core.protocol import HiveMindListenerProtocol
 
 DEFAULT_PEER = "master:0.0.0.0"
@@ -38,6 +39,9 @@ def _make_node(node_key: str = "pubkey-A", site_id=None) -> HiveMindListenerProt
     node.escalate_callback = None
     node.broadcast_callback = None
     node._upstream_hm = None
+    # these tests are about routing, not admission: an empty chain admits
+    # everything, so the NODE-1 §3.3 relay gate never interferes
+    node.policy_chain = PolicyChain()
     return node
 
 

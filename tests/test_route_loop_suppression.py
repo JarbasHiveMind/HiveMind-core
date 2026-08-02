@@ -25,6 +25,7 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
+from hivemind_core.policy import PolicyChain
 from hivemind_core.protocol import HiveMindListenerProtocol
 
 # HiveMindListenerProtocol.peer is a class default that service.py never sets,
@@ -44,6 +45,9 @@ def _make_node(node_key: str, peer: str = DEFAULT_PEER) -> HiveMindListenerProto
     node.propagate_callback = MagicMock()
     node.escalate_callback = MagicMock()
     node._upstream_hm = None
+    # these tests are about routing, not admission: an empty chain admits
+    # everything, so the NODE-1 §3.3 relay gate never interferes
+    node.policy_chain = PolicyChain()
     return node
 
 

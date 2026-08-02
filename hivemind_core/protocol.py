@@ -1294,6 +1294,59 @@ class HiveMindListenerProtocol:
                "targets": list(payload.target_peers) or [self._node_id]}
         payload.replace_route(list(payload.route) + [hop])
 
+    def _relayed_bus_payload(self, message: HiveMessage) -> Optional[Message]:
+        """Return the agent bus message carried inside a routing envelope, or
+        None when the envelope carries no agent traffic.
+
+        Nested routing envelopes are unwrapped: an ESCALATE wrapping a
+        PROPAGATE wrapping a BUS still ends up on some agent's bus, so wrapping
+        must not buy a way around the admission gate.
+        """
+        inner = message.payload
+        while isinstance(inner, HiveMessage) and inner.msg_type in (
+                HiveMessageType.ESCALATE, HiveMessageType.PROPAGATE,
+                HiveMessageType.CASCADE):
+            inner = inner.payload
+        if isinstance(inner, HiveMessage) and inner.msg_type == HiveMessageType.BUS:
+            inner = inner.payload
+        return inner if isinstance(inner, Message) else None
+
+    def _admit_relayed_message(self, message: HiveMessage,
+                               client: HiveMindClientConnection) -> bool:
+        """HIVEMIND-NODE-1 §3.3: a relay applies its own admission control to
+        traffic from a downstream node before relaying it.
+
+        Without this gate a downstream client denied here can still have its
+        payload relayed upstream, where the master admits it against the
+        RELAY's credentials instead of the originator's. ``can_escalate`` /
+        ``can_propagate`` do not help: they say whether a peer may route at
+        all, not what it may say.
+
+        Returns True when the message may be handled and relayed. On a deny the
+        originator gets the same ``hive.policy.denied`` frame the inject path
+        sends, and the caller stops.
+
+        Only agent traffic (an inner BUS message) is reviewed. PING is mesh
+        discovery with its own flood gate, INTERCOM is end-to-end encrypted and
+        unreadable to a relay, and the chain reviews an OVOS ``Message`` — none
+        of those are admission decisions this node can make.
+
+        ``observe()`` is deliberately not fired here. On the inject path it is
+        a post-delivery hook, run after the message reaches this node's agent
+        bus; a relayed message reaches no agent here. When the same message is
+        ALSO delivered locally, the inject path fires ``observe`` exactly once.
+        """
+        payload = self._relayed_bus_payload(message)
+        if payload is None:
+            return True
+        verdict = self.policy_chain.review(payload, client)
+        if not verdict.denied:
+            return True
+        LOG.info(f"policy denied relayed '{payload.msg_type}' from "
+                 f"{client.peer}: {verdict.code} ({verdict.reason})")
+        self._send_policy_denied(client, payload, verdict)
+        return False
+
     def handle_propagate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
@@ -1312,6 +1365,14 @@ class HiveMindListenerProtocol:
                 self.illegal_callback(payload)
             # kick client for misbehaviour so it stops doing that
             client.disconnect()
+            return
+
+        # NODE-1 §3.3: admit the traffic against THIS client's credentials
+        # before it is relayed anywhere. Run before local delivery: the local
+        # inject path applies the same chain to the same message, so a denied
+        # message loses no delivery here, and the originator gets one denial
+        # instead of two.
+        if not self._admit_relayed_message(message, client):
             return
 
         # HIVEMIND-MSG-1 §5 gates *re-forwarding* of a looped message, not local
@@ -1721,6 +1782,11 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
+        # NODE-1 §3.3: admit against this client's credentials before relaying
+        # (see handle_propagate_message for why this runs before local delivery)
+        if not self._admit_relayed_message(message, client):
+            return
+
         # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
         # handling; suppress only the fan-out + master-forward at the end.
         looped = self._is_routing_loop(message)
@@ -1777,6 +1843,11 @@ class HiveMindListenerProtocol:
                 self.illegal_callback(payload)
             # kick client for misbehaviour so it stops doing that
             client.disconnect()
+            return
+
+        # NODE-1 §3.3: admit against this client's credentials before relaying
+        # (see handle_propagate_message for why this runs before local delivery)
+        if not self._admit_relayed_message(message, client):
             return
 
         # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
