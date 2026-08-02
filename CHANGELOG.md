@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a1...4.10.9a2)
+
+**Merged pull requests:**
+
+- docs: correct stale CLI, config, and protocol claims [\#177](https://github.com/JarbasHiveMind/HiveMind-core/pull/177) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.8a1...4.10.9a1)
@@ -431,17 +439,9 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.1...3.2.2a1)
 
-**Merged pull requests:**
-
-- fix:automations [\#49](https://github.com/JarbasHiveMind/HiveMind-core/pull/49) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [3.2.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.1) (2025-01-08)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.2.1a1...3.2.1)
-
-**Merged pull requests:**
-
-- Release 3.2.1a1 [\#48](https://github.com/JarbasHiveMind/HiveMind-core/pull/48) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.2.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.2.1a1) (2025-01-07)
 
