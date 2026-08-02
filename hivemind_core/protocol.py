@@ -1121,6 +1121,31 @@ class HiveMindListenerProtocol:
         pload.remove_target_peer(client.peer)
         return pload
 
+    def _is_routing_loop(self, message: HiveMessage) -> bool:
+        """HIVEMIND-MSG-1 §5 loop suppression.
+
+        A node MUST NOT forward a routing message (PROPAGATE, ESCALATE,
+        CASCADE, PING) whose ``route`` already contains a hop naming it.
+        Each hop is a structured entry keyed by ``source``; this node's
+        stable identity in a hop is ``self.peer`` (the same value appended
+        by :meth:`_append_self_hop`). Returns True when this node already
+        appears in the route, meaning the message has looped back and must
+        be dropped.
+        """
+        return any(hop.get("source") == self.peer
+                   for hop in (message.route or []))
+
+    def _append_self_hop(self, payload: HiveMessage) -> None:
+        """HIVEMIND-MSG-1 §5: append a hop naming this node before forwarding
+        a routing message, so downstream nodes can detect the loop too.
+
+        ``_unpack_message`` already set ``payload``'s ``source_peer`` to
+        ``self.peer``; :meth:`HiveMessage.update_hop_data` appends a
+        ``{"source": self.peer, ...}`` hop only when the last hop is not
+        already this node, so this does not double-append.
+        """
+        payload.update_hop_data()
+
     def handle_propagate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
@@ -1131,7 +1156,16 @@ class HiveMindListenerProtocol:
         LOG.debug("PAYLOAD_TYPE: " + message.payload.msg_type)
         LOG.debug("PAYLOAD: " + str(message.payload.payload))
 
+        # HIVEMIND-MSG-1 §5: drop a routing message that already passed through
+        # this node instead of re-broadcasting it (prevents cyclic-topology flood)
+        if self._is_routing_loop(message):
+            LOG.debug(f"dropping PROPAGATE already routed through {self.peer} "
+                      f"(MSG-1 §5 loop suppression); route={message.route}")
+            return
+
         payload = self._unpack_message(message, client)
+        # MSG-1 §5: name ourselves in the route before forwarding
+        self._append_self_hop(payload)
 
         if not client.can_propagate:
             LOG.warning("Received propagate message from downstream, illegal action")
@@ -1255,14 +1289,20 @@ class HiveMindListenerProtocol:
         master (nothing bound via :meth:`bind_upstream`)."""
         if self._upstream_hm is None:
             return
-        self._upstream_hm.emit(HiveMessage(HiveMessageType.ESCALATE, payload=payload))
+        msg = HiveMessage(HiveMessageType.ESCALATE, payload=payload)
+        # MSG-1 §5: carry the accumulated route on the outer envelope upstream
+        msg.replace_route(payload.route)
+        self._upstream_hm.emit(msg)
 
     def propagate_to_master(self, payload: HiveMessage) -> None:
         """Forward a PROPAGATE upstream. No-op when this node is the top-level
         master (nothing bound via :meth:`bind_upstream`)."""
         if self._upstream_hm is None:
             return
-        self._upstream_hm.emit(HiveMessage(HiveMessageType.PROPAGATE, payload=payload))
+        msg = HiveMessage(HiveMessageType.PROPAGATE, payload=payload)
+        # MSG-1 §5: carry the accumulated route on the outer envelope upstream
+        msg.replace_route(payload.route)
+        self._upstream_hm.emit(msg)
 
     def query_from_master(self, message: HiveMessage) -> None:
         """Fan a QUERY received from the upstream master out to downstream clients."""
@@ -1457,8 +1497,11 @@ class HiveMindListenerProtocol:
         """Forward a CASCADE upstream. No-op at the top-level master."""
         if self._upstream_hm is None:
             return
-        self._upstream_hm.emit(HiveMessage(HiveMessageType.CASCADE, payload=payload,
-                                           metadata=metadata))
+        msg = HiveMessage(HiveMessageType.CASCADE, payload=payload,
+                          metadata=metadata)
+        # MSG-1 §5: carry the accumulated route on the outer envelope upstream
+        msg.replace_route(payload.route)
+        self._upstream_hm.emit(msg)
 
     def handle_cascade_message(self, message: HiveMessage,
                                client: HiveMindClientConnection):
@@ -1472,9 +1515,17 @@ class HiveMindListenerProtocol:
             self._route_query_response(message, client)
             return
 
+        # HIVEMIND-MSG-1 §5: drop a routing message that already passed through
+        # this node instead of re-forwarding it (prevents cyclic-topology flood)
+        if self._is_routing_loop(message):
+            LOG.debug(f"dropping CASCADE already routed through {self.peer} "
+                      f"(MSG-1 §5 loop suppression); route={message.route}")
+            return
+
         payload = self._unpack_message(message, client)
+        # MSG-1 §5: name ourselves in the route before forwarding
+        self._append_self_hop(payload)
         if not client.can_propagate:
-            LOG.warning("Received CASCADE from client without propagate permission")
             if self.illegal_callback:
                 self.illegal_callback(payload)
             client.disconnect()
@@ -1493,6 +1544,9 @@ class HiveMindListenerProtocol:
 
         cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
                                   metadata=metadata)
+        # MSG-1 §5: carry the accumulated route (incl. our self-hop) on the
+        # outer envelope so downstream nodes can detect the loop
+        cascade_fwd.replace_route(payload.route)
         for peer in self.clients:
             if peer == client.peer:
                 continue
@@ -1510,8 +1564,17 @@ class HiveMindListenerProtocol:
         LOG.debug("PAYLOAD_TYPE: " + message.payload.msg_type)
         LOG.debug("PAYLOAD: " + str(message.payload.payload))
 
+        # HIVEMIND-MSG-1 §5: drop a routing message that already passed through
+        # this node instead of re-forwarding it (prevents cyclic-topology flood)
+        if self._is_routing_loop(message):
+            LOG.debug(f"dropping ESCALATE already routed through {self.peer} "
+                      f"(MSG-1 §5 loop suppression); route={message.route}")
+            return
+
         # unpack message
         payload = self._unpack_message(message, client)
+        # MSG-1 §5: name ourselves in the route before forwarding
+        self._append_self_hop(payload)
 
         if not client.can_escalate:
             LOG.warning("Received escalate message from downstream, illegal action")
