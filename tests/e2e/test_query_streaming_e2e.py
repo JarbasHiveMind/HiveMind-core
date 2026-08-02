@@ -32,7 +32,7 @@ def _relay_chain():
     b = TopologyBuilder()
     m = b.add_master("M0")
     m.register_satellite("relay-key", password="relay-pw")
-    _sat, master_side = b.add_relay("R0", upstream=m)
+    master_side = b.add_relay("R0", upstream=m).listener
     master_side.register_satellite("sat-key", password="sat-pw",
                                    allowed_types=["recognizer_loop:utterance"])
     b.add_satellite("S0", upstream=master_side, allowed_types=["recognizer_loop:utterance"])
@@ -121,9 +121,9 @@ def _two_relay_chain():
     b = TopologyBuilder()
     m = b.add_master("M0")
     m.register_satellite("r1-key", password="p")
-    _s1, r1_master = b.add_relay("R1", upstream=m)
+    r1_master = b.add_relay("R1", upstream=m).listener
     r1_master.register_satellite("r2-key", password="p")
-    _s2, r2_master = b.add_relay("R2", upstream=r1_master)
+    r2_master = b.add_relay("R2", upstream=r1_master).listener
     r2_master.register_satellite("sat-key", password="p",
                                  allowed_types=["recognizer_loop:utterance"])
     b.add_satellite("S0", upstream=r2_master,
