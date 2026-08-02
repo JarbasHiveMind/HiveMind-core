@@ -19,6 +19,7 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 def _make_protocol():
     proto = object.__new__(HiveMindListenerProtocol)
     proto.peer = "master:0.0.0.0"
+    proto.identity = MagicMock(public_key="master-pubkey")
     proto.clients = {}
     proto.illegal_callback = MagicMock()
     proto.broadcast_callback = MagicMock()

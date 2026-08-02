@@ -388,6 +388,9 @@ class CascadeCollector:
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
     binary_data_protocol: Optional[BinaryDataHandlerProtocol] = None
+    # Human-readable label for logs only. ``service.py`` never sets it, so
+    # every deployed node shares this default — it identifies nothing. Use
+    # ``_node_id`` (the node public key) for provenance and addressing.
     peer: str = "master:0.0.0.0"
 
     require_crypto: bool = True  # throw error if crypto key not available
@@ -577,7 +580,7 @@ class HiveMindListenerProtocol:
             "pubkey": client.handshake.pubkey,
             # allows any node to verify messages are signed with this
             "peer": client.peer,  # this identifies the connected client in ovos message.context
-            "node_id": self.peer
+            "node_id": self._node_id
         }
         client._hello_payload = hello_payload  # bound into the Noise prologue
         msg = HiveMessage(HiveMessageType.HELLO, payload=hello_payload)
@@ -916,7 +919,7 @@ class HiveMindListenerProtocol:
                 client.noise_handshake = start_noise_handshake(
                     initiator=False, pattern=pattern, suite=suite,
                     password=client.pswd_handshake.password,
-                    node_id=self.peer, prologue=prologue,
+                    node_id=self._node_id, prologue=prologue,
                     key_path=self.identity.noise_key,
                     remote_pubkey=pinned if pattern == NOISE_PATTERN_KK else None)
                 node_payload = json.loads(
@@ -1218,7 +1221,7 @@ class HiveMindListenerProtocol:
         pload = message.payload
         # keep info about which nodes this message has been to
         pload.replace_route(message.route)
-        pload.update_source_peer(self.peer)
+        pload.update_source_peer(self._node_id)
         pload.remove_target_peer(client.peer)
         return pload
 
@@ -1412,7 +1415,7 @@ class HiveMindListenerProtocol:
         # Build our own responsive PING with the same flood_id
         own_ping_payload = {
             "flood_id": flood_id,
-            "peer": self.peer,
+            "peer": self._node_id,
             "site_id": self.identity.site_id,
             "timestamp": time.time(),
         }
@@ -1575,14 +1578,14 @@ class HiveMindListenerProtocol:
                 resp = Message("speak", {"utterance": chunk, "lang": lang},
                                {"query_id": query_id})
                 send_fn(self._build_query_response(
-                    msg_type, resp, query_id, originator_peer, self.peer,
+                    msg_type, resp, query_id, originator_peer, self._node_id,
                     route=route))
         except NotImplementedError:
             return False  # agent has no NL backend -> escalate
         if answered:
             send_fn(self._build_query_response(
                 msg_type, Message(QUERY_STREAM_END, {}), query_id,
-                originator_peer, self.peer, route=route))
+                originator_peer, self._node_id, route=route))
         return answered
 
     def _route_query_response(self, message: HiveMessage,
@@ -1688,7 +1691,7 @@ class HiveMindListenerProtocol:
                                 {"query_id": query_id, "error": "no_answer"})
             client.send(self._build_query_response(
                 HiveMessageType.QUERY, error_bus, query_id,
-                originator_peer, self.peer, route=message.route))
+                originator_peer, self._node_id, route=message.route))
 
     def cascade_from_master(self, message: HiveMessage) -> None:
         """Relay a CASCADE received from the upstream master.
@@ -1984,7 +1987,6 @@ class HiveMindListenerProtocol:
         # send client message to internal mycroft bus
         LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
-        message.context["source"] = client.peer
 
         try:
             bus = self.get_bus(client)
