@@ -15,6 +15,7 @@ from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
 from hivemind_plugin_manager import AgentProtocolFactory, NetworkProtocolFactory, BinaryDataHandlerProtocolFactory
 from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol
 
+
 def get_agent_protocol():
     config = get_server_config()["agent_protocol"]
     name = config["module"]
@@ -24,8 +25,8 @@ def get_agent_protocol():
 def get_binary_protocol():
     config = get_server_config()["binary_protocol"]
     name = config["module"]
-    if name is None: # binary protocol is optional
-        # dummy by default
+    if name is None:
+        # the binary protocol is optional; the base class is a no-op handler
         return BinaryDataHandlerProtocol, {}
     return BinaryDataHandlerProtocolFactory.get_class(name), config.get(name, {})
 
@@ -52,20 +53,11 @@ def on_stopping():
 
 @dataclasses.dataclass
 class HiveMindService:
-    """
-    A service that manages the HiveMind protocol, including agent communication,
-    database interactions, and network management.
+    """The hivemind-core server: agent protocol, client database, and the
+    network protocols that carry HiveMessages.
 
-    Attributes:
-        identity (NodeIdentity): The identity of the node in the HiveMind network.
-        db (ClientDatabase): The database used for storing client information.
-        hm_protocol (Type[HiveMindListenerProtocol]): The protocol for handling HiveMessages.
-        alive_hook (Callable[[None], None]): Hook called when the service is alive.
-        started_hook (Callable[[None], None]): Hook called when the service has started.
-        ready_hook (Callable[[None], None]): Hook called when the service is ready.
-        error_hook (Callable[[Exception], None]): Hook called when an error occurs.
-        stopping_hook (Callable[[None], None]): Hook called when the service is stopping.
-        _status (Optional[ProcessStatus]): The current status of the service.
+    The ``*_hook`` fields are the ovos-utils ProcessStatus callbacks; replace
+    them to report lifecycle transitions somewhere other than the log.
     """
     hm_protocol: Type[HiveMindListenerProtocol] = HiveMindListenerProtocol
 
@@ -82,10 +74,7 @@ class HiveMindService:
     _status: Optional[ProcessStatus] = None
 
     def __post_init__(self) -> None:
-        """
-        Initializes the service's status and presence objects after the dataclass
-        has been created.
-        """
+        self._presence = None
         self._status = self._status or ProcessStatus("HiveMind",
                                                      callback_map=StatusCallbackMap(
                                                          on_started=self.started_hook,
@@ -108,8 +97,10 @@ class HiveMindService:
         presence_cfg = cfg.get("presence", {})
         if not presence_cfg.get("enabled", True):
             return
+        # presence advertises a single endpoint, so the first configured
+        # network protocol (websocket, by default ordering) is the one announced
         net = cfg.get("network_protocol", {})
-        first = next(iter(net.values()), {}) if net else {}
+        first = next(iter(net.values()), {})
         self._presence = LocalPresence(
             port=first.get("port", 5678),
             ssl=first.get("ssl", False),
@@ -121,9 +112,8 @@ class HiveMindService:
         LOG.info("LocalPresence started")
 
     def _stop_presence(self) -> None:
-        presence = getattr(self, "_presence", None)
-        if presence is not None:
-            presence.stop()
+        if self._presence is not None:
+            self._presence.stop()
 
     def run(self):
         self._status.set_started()
@@ -155,7 +145,9 @@ class HiveMindService:
                 network_class = NetworkProtocolFactory.get_class(plug_name)
                 LOG.info(f"Network protocol: {network_class.__name__}")
                 protos.append(network_class(hm_protocol=hm_protocol, config=plug_conf))
-            except:
+            except Exception:
+                # one broken transport must not take down the others; the
+                # empty-protos check below still aborts startup if all fail
                 LOG.exception(f"Failed to load plugin '{plug_name}'")
 
         if not protos:
