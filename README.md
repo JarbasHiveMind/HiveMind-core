@@ -20,6 +20,7 @@ For more details and demonstrations, check the [YouTube channel](https://www.you
    * [Quick Start](#quick-start)
       + [Installation](#installation)
       + [Adding a Satellite](#adding-a-satellite)
+      + [Granting Message Types](#granting-message-types)
       + [Running the Server](#running-the-server)
    * [Commands Overview](#commands-overview)
    * [Plugins Overview](#plugins-overview)
@@ -100,7 +101,7 @@ The default configuration:
 }
 ```
 
-> **Default backend:** fresh installs use **SQLite** (transactional, concurrency-safe, stdlib). An existing JSON deployment (a `clients.json` already on disk) keeps using JSON, so upgrades never strand the credentials store. Move an existing store with `hivemind-core migrate-db --to sqlite` (also supports `--from`/`--to` for JSON ⇄ SQLite ⇄ Redis).
+> **Default backend:** fresh installs use **SQLite** (transactional, concurrency-safe, stdlib). An existing JSON deployment (a `clients.json` already on disk) keeps using JSON, so upgrades never strand the credentials store. Move an existing store with `hivemind-core migrate-db --from hivemind-json-db-plugin --to hivemind-sqlite-db-plugin`. Both flags take a database plugin entry-point name, so the same command moves a store between JSON, SQLite, and Redis.
 
 ### Policy Admission Chain
 
@@ -108,11 +109,11 @@ Every inbound message passes through an ordered **policy admission chain** befor
 
 **How it works:**
 
-1. `MessageTypeACLPolicy` is **always prepended** to the chain. Configuration cannot remove it. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. `Client.is_admin` is informational and gives no admission bypass. Admins follow the whitelist like any other client (`hivemind_core/policy.py:174`).
+1. `MessageTypeACLPolicy` is **always prepended** to the chain. Configuration cannot remove it. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. Binary payloads cross the same gate, so an empty whitelist denies binary too. A failed database lookup denies with `policy_error`. `Client.is_admin` is informational and gives no admission bypass. Admins follow the whitelist like any other client (`MessageTypeACLPolicy` in `hivemind_core/policy.py`).
 2. `DefaultSessionPolicy` is **always prepended** too, right after it. Configuration cannot remove it. It denies any non-admin client that puts the reserved `default` session id in `message.context["session"]`: that id addresses the host's own device-local session, so a peer must not write into it.
 3. Configured plugins in `policy.chain` run after the built-ins, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
-4. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator setting to override this (`hivemind_core/policy.py:36`).
-5. If the chain fails to build at startup, HiveMind installs a `DenyAllPolicy` fallback, which rejects every message with `code="policy_chain_unavailable"` until you fix the configuration (`hivemind_core/policy.py:151`).
+4. The chain is **fail-closed by default**. An unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)` (`PolicyChain.review` in `hivemind_core/policy.py`). Mark a single chain entry with `"optional": true` to make the chain log a warning and continue instead. The two built-in policies ignore that flag and stay mandatory.
+5. If the chain fails to build at startup, HiveMind installs a `DenyAllPolicy` fallback, which rejects every message with `code="policy_chain_unavailable"` until you fix the configuration (`DenyAllPolicy` in `hivemind_core/policy.py`).
 
 **Denied messages** get a `hive.policy.denied` BUS response with this payload:
 
@@ -125,11 +126,11 @@ Every inbound message passes through an ordered **policy admission chain** befor
 }
 ```
 
-`handle_inject_agent_msg` runs `policy_chain.review()` then `policy_chain.observe()` for every accepted message. `handle_binary_message` runs `policy_chain.review_binary()` (`hivemind_core/protocol.py:908`, `hivemind_core/protocol.py:457`).
+`handle_inject_agent_msg` runs `policy_chain.review()` then `policy_chain.observe()` for every accepted message. `handle_binary_message` runs `policy_chain.review_binary()` (both in `hivemind_core/protocol.py`).
 
 **ACL model: whitelist-only, deny-by-default**
 
-- `allowed_types` is the only ACL field on `HiveMindClientConnection`. There is no message blacklist (`hivemind_core/protocol.py:92`).
+- `allowed_types` is the only ACL field on `HiveMindClientConnection`. There is no message blacklist (`HiveMindClientConnection` in `hivemind_core/protocol.py`).
 - A freshly created client (via `add-client`) has an **empty** `allowed_types` list. HiveMind denies it all messages until the operator explicitly grants types with `allow-msg`. This applies to admin clients too. `Client.is_admin` is informational only and gives no admission bypass.
 
 To grant a message type:
@@ -179,7 +180,7 @@ pip install hivemind-core
 Add credentials for each satellite device:
 
 ```bash
-$ hivemind-core add-client --db-backend sqlite 
+$ hivemind-core add-client --name "HiveMind-Node-2"
 Database backend: SQLiteDB
 Credentials added to database!
 
@@ -192,6 +193,19 @@ WARNING: Encryption Key is deprecated, only use if your client does not support 
 ```
 
 **NOTE**: You must provide this information on the client devices so they can connect.
+
+### Granting Message Types
+
+A new client starts with an **empty** `allowed_types` whitelist. The server denies every
+message, and every binary payload, from that client until you grant the types it needs:
+
+```bash
+$ hivemind-core allow-msg "recognizer_loop:utterance" 3
+$ hivemind-core allow-msg "speak" 3
+```
+
+If you skip this step, the client connects and then gets a `hive.policy.denied` answer to
+each message.
 
 ### Running the Server
 
@@ -233,6 +247,11 @@ Commands:
   blacklist-intent     blacklist an intent for a client (OVOS-policy)
   blacklist-skill      blacklist a skill for a client (OVOS-policy)
   set-metadata         set arbitrary metadata on a client (read by policy plugins)
+  derive-psk           derive a pre-shared key from a site password and node id
+  export-clients       export clients and credentials to a CSV file
+  migrate-db           copy all clients from one database backend to another
+  policy               inspect the policy admission chain
+  print-config         print the server configuration
 ```
 
 For detailed help on each command, use `--help` (for example, `hivemind-core add-client --help`).

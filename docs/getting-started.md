@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - A running OVOS instance on `localhost:8181` (default agent backend), **or** a
   [Persona](https://github.com/OpenVoiceOS/ovos-persona) server if you want an LLM backend.
 - Satellite devices or clients that will connect (e.g. `hivemind-voice-sat`,
@@ -27,8 +27,9 @@ and the default database backend (SQLite) are pulled in automatically.
 hivemind-core listen
 ```
 
-The server starts on `0.0.0.0:5678` (WebSocket) and `0.0.0.0:5679` (HTTP) by default,
-connecting to the OVOS bus at `127.0.0.1:8181`.
+The server starts every network protocol plugin listed in `network_protocol` that is
+installed. With both default plugins present it listens on `0.0.0.0:5678` (WebSocket) and
+`0.0.0.0:5679` (HTTP), and connects to the OVOS bus at `127.0.0.1:8181`.
 
 ---
 
@@ -56,8 +57,8 @@ Provide the **Access Key** and **Password** to the satellite device's configurat
 
 ## Grant Message Types
 
-New clients have an empty `allowed_types` whitelist and are denied all messages until you
-grant access. For a typical voice satellite:
+New clients have an empty `allowed_types` whitelist. The server denies every message, and
+every binary payload, until you grant access. For a typical voice satellite:
 
 ```bash
 hivemind-core allow-msg "recognizer_loop:utterance" 1

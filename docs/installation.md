@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - At least one network protocol plugin (e.g. `hivemind-websocket-protocol`)
 - At least one agent protocol plugin (e.g. `hivemind-ovos-agent-plugin`)
 

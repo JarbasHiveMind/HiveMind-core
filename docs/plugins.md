@@ -54,7 +54,9 @@ Optional. Invoked when a `HiveMessageType.BINARY` message is received.
 |---|---|---|
 | `hivemind-audio-binary-protocol` | STT transcription and audio handling via `ovos-plugin-manager` | `pip install hivemind-audio-binary-protocol` |
 
-When no binary protocol is configured (`"module": null`), binary messages are silently ignored.
+Binary payloads cross the `allowed_types` gate first. A client with an empty whitelist
+cannot send binary at all. When no binary protocol is configured (`"module": null`), an
+admitted binary message reaches a no-op stub and nothing happens to it.
 
 Binary payload types dispatched to the plugin:
 
@@ -81,10 +83,14 @@ Configuration example:
 
 ```json
 "database": {
-  "module": "hivemind-sqlite-database",
-  "hivemind-sqlite-database": { "path": "~/.local/share/hivemind/clients.db" }
+  "module": "hivemind-sqlite-db-plugin",
+  "hivemind-sqlite-db-plugin": { "name": "clients", "subfolder": "hivemind-core" }
 }
 ```
+
+The key in `database` is the plugin entry-point name, not the package name. The three
+entry-point names are `hivemind-sqlite-db-plugin`, `hivemind-json-db-plugin`, and
+`hivemind-redis-db-plugin`.
 
 ---
 
@@ -104,6 +110,7 @@ The four base classes are:
 | `AgentProtocol` | `hivemind_plugin_manager.protocols` |
 | `BinaryDataHandlerProtocol` | `hivemind_plugin_manager.protocols` |
 | `AbstractDB` | `hivemind_plugin_manager.database` |
+| `PolicyPlugin` | `hivemind_plugin_manager.policy` |
 
 ---
 [← Policy Chain](policy.md) · [Home](README.md) · [Extending →](extending.md)

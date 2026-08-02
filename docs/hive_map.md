@@ -9,7 +9,7 @@ with the same `flood_id`, so all nodes in the network sync in one round. There i
 no separate PONG message. The `flood_id` stops infinite relay loops.
 
 For a conceptual overview of the discovery protocol, see
-[`HiveMind-community-docs: docs/20_network_discovery.md`](../../HiveMind-community-docs/docs/20_network_discovery.md).
+[HiveMind community docs: network discovery](https://github.com/JarbasHiveMind/HiveMind-community-docs/blob/master/docs/20_network_discovery.md).
 
 ---
 
@@ -257,8 +257,8 @@ print(mapper.to_json())
 ## Related Documents
 
 - [Protocol Internals](protocol.md): handler lifecycle and message routing.
-- [`HiveMind-community-docs: 20_network_discovery.md`](../../HiveMind-community-docs/docs/20_network_discovery.md): conceptual overview.
-- [`hivemind-websocket-client: docs/cli_guide.md`](../../hivemind-websocket-client/docs/cli_guide.md): the `hivemind-client ping` command.
+- [HiveMind community docs: network discovery](https://github.com/JarbasHiveMind/HiveMind-community-docs/blob/master/docs/20_network_discovery.md): conceptual overview.
+- [hivemind-websocket-client: CLI guide](https://github.com/JarbasHiveMind/hivemind-websocket-client/blob/dev/docs/cli_guide.md): the `hivemind-client ping` command.
 
 ---
 [← Plugin Development](plugin_development.md) · [Home](index.md) · [Ecosystem →](ecosystem.md)

@@ -16,6 +16,20 @@ The file is created with defaults on first run if absent.
   ],
   "allowed_ciphers": ["CHACHA20-POLY1305", "AES-GCM"],
 
+  "min_protocol_version": 2,
+
+  "min_password_bits": 40,
+  "runtime_password_strength_check": true,
+
+  "last_seen_update_interval": 0,
+
+  "presence": {
+    "enabled": true,
+    "name": "HiveMind-Node",
+    "zeroconf": true,
+    "upnp": false
+  },
+
   "agent_protocol": {
     "module": "hivemind-ovos-agent-plugin",
     "hivemind-ovos-agent-plugin": {
@@ -70,6 +84,18 @@ The file is created with defaults on first run if absent.
 | `binarize` | bool | `false` | Enable HiveMind binarization protocol (requires compatible client version) |
 | `allowed_encodings` | list | see above | Ordered list of accepted message encodings; first match wins during handshake |
 | `allowed_ciphers` | list | `["CHACHA20-POLY1305", "AES-GCM"]` | Accepted session ciphers; first match wins |
+| `min_protocol_version` | int | `2` | Lowest HiveMind protocol version a client may negotiate. The server rejects a client that completes the handshake below this version. It advertises the higher of this value and the version its crypto settings need |
+| `min_password_bits` | float | `40` | Lowest password entropy `add-client` accepts, and the handshake backstop rejects |
+| `runtime_password_strength_check` | bool | `true` | Re-check password strength at handshake time. Set to `false`, or set `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1`, to skip the backstop |
+| `last_seen_update_interval` | int | `0` | Seconds to debounce the `last_seen` write. `0` writes on every admitted message |
+| `presence` | dict | see above | Local-network advertisement through the optional `hivemind-presence` package. Keys: `enabled`, `name`, `zeroconf` (mDNS), `upnp` (SSDP) |
+
+> **`require_crypto` is not a config key.** It is an attribute of
+> `HiveMindListenerProtocol` and it defaults to `True`. While it is true, the server
+> drops an `INTERCOM` frame that carries no signed envelope: such a frame proves nothing
+> about its origin, so the server does not relay it or escalate it. To change the value,
+> subclass the protocol or set the attribute on the instance you pass to
+> `HiveMindService`.
 
 ---
 
@@ -154,8 +180,11 @@ Selects the client credential store. `module` is the entry-point name.
 JSON backend automatically. Migrate with:
 
 ```bash
-hivemind-core migrate-db --to sqlite
+hivemind-core migrate-db --from hivemind-json-db-plugin --to hivemind-sqlite-db-plugin
 ```
+
+`--from` and `--to` take database plugin entry-point names, not short aliases. The
+defaults are the two names shown above.
 
 Available backends:
 

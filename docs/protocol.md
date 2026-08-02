@@ -11,6 +11,11 @@ This document describes the server-side protocol classes that process HiveMind c
 | `2` | Binary serialisation support |
 | `3` | Noise handshake (XXpsk2/KKpsk0) with authenticated, forward-secret transport; falls back to v2 against older clients |
 
+The server admits a client only if the version it negotiates is at least
+`min_protocol_version` (default `2`) from `server.json`. The check runs when the handshake
+completes, not only when the server advertises the floor. The advertised floor is the
+higher of the configured value and the value the crypto settings need.
+
 ## Connection lifecycle
 
 ```
@@ -18,7 +23,9 @@ Client connects (network layer)
         │
         ▼
 HiveMindListenerProtocol.handle_new_client()
+  ├─ moves the connection off the reserved "default" session
   ├─ emits hive.client.connect on agent bus
+  ├─ computes min/max protocol version, drops the client if they do not overlap
   ├─ sends HELLO  (server pubkey + peer id)
   └─ sends HANDSHAKE  (capabilities, crypto requirements)
         │
@@ -27,6 +34,7 @@ Client sends HANDSHAKE (pubkey or password envelope)
         │
 HiveMindListenerProtocol.handle_handshake_message()
   ├─ derives session AES key
+  ├─ drops the client if the agreed version is below min_protocol_version
   └─ sends HANDSHAKE response (envelope + chosen cipher/encoding)
         │
         ▼
@@ -63,7 +71,7 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 | `db` | `ClientDatabase` | Credential storage |
 | `identity` | `NodeIdentity` | This node's RSA keypair / peer ID |
 | `clients` | `dict[str, HiveMindClientConnection]` | Currently connected clients keyed by peer ID |
-| `require_crypto` | `bool` | Reject connections without encryption (default `True`) |
+| `require_crypto` | `bool` | Require proof of origin (default `True`). While it is true, an `INTERCOM` frame with no signed envelope is dropped, not relayed and not escalated. This is an attribute, not a `server.json` key |
 | `handshake_enabled` | `bool` | Negotiate a per-session key when no pre-shared key exists |
 
 ### Message handlers
@@ -81,38 +89,38 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 | `handle_escalate_message(message, client)` | `HiveMessageType.ESCALATE` received |
 | `handle_intercom_message(message, client)` | `HiveMessageType.INTERCOM` received |
 | `handle_binary_message(message, client)` | `HiveMessageType.BINARY` received |
+| `handle_query_message(message, client)` | `HiveMessageType.QUERY` received |
+| `handle_cascade_message(message, client)` | `HiveMessageType.CASCADE` received |
 | `handle_ping_message(message, client)` | `HiveMessageType.PING` inner payload received (unwrapped from PROPAGATE) |
-| `handle_pong_message(message, client)` | `HiveMessageType.PONG` inner payload received (unwrapped from PROPAGATE) |
+| `handle_noise_handshake_message(message, client)` | A protocol v3 Noise handshake frame is received |
+| `handle_client_shared_bus(message, client)` | `HiveMessageType.SHARED_BUS` received |
+| `handle_invalid_key_connected(client)` | A client presents an access key that is not in the database |
+| `handle_invalid_protocol_version(client)` | A client negotiates below `min_protocol_version` |
+| `handle_unknown_message(message, client)` | The message type matches no handler |
 
-### PING / PONG handler behaviour
+### PING handler behaviour
 
 #### `handle_ping_message(message, client)`
 
 Called when a PROPAGATE message's inner payload is a PING.
 
-All nodes SHOULD relay the PING to all connected peers (except the sender) and MAY respond with a
-PONG. Whether to respond is a node-level policy decision. For example, a top-level node may be configured
-to act as a discovery boundary and silently drop the PING instead of relaying it further upstream.
+Discovery is PING-only. There is no PONG message. The handler feeds the PING into the
+local `HiveMapper`, emits `hive.ping.received` on the agent bus, then checks the
+`flood_id`. If the node has not seen that `flood_id` before, it builds its own PING with
+the same `flood_id` and sends it to every connected peer and upstream. If it has seen the
+`flood_id`, it stops. That check is what ends the flood.
 
 ```
 Receive PROPAGATE(PING)
-  ├─ relay PROPAGATE(PING) to all connected peers except sender   [SHOULD]
-  └─ build PROPAGATE(PONG) and send back toward originator        [MAY, node policy]
+  ├─ hive_mapper.on_ping(message)
+  ├─ emit hive.ping.received on the agent bus
+  └─ if flood_id is new: send PROPAGATE(PING) with the same flood_id
+       to all peers and upstream
 ```
 
-See [network discovery docs](../../HiveMind-community-docs/docs/20_network_discovery.md) for the
-full design rationale and wire format.
-
-#### `handle_pong_message(message, client)`
-
-Called when a PROPAGATE message's inner payload is a PONG.
-
-1. Feed the PONG into the local `HiveMapper` instance (`self.hive_mapper.on_pong(message)`).
-2. Emit `hive.pong.received` on the agent bus with the PONG payload.
-3. Relay the PONG onward via PROPAGATE (standard propagation semantics).
-
-The originating node collects PONGs until its timeout expires, then calls
-`HiveMapper.to_ascii()` / `to_dict()` to read the topology.
+The node that started the flood collects the answering PINGs until its timeout expires,
+then calls `HiveMapper.to_ascii()` or `to_dict()` to read the topology. See
+[Hive Map](hive_map.md) for the mapper API.
 
 ### Optional callbacks
 
@@ -142,17 +150,20 @@ from hivemind_core.protocol import HiveMindClientConnection
 | Attribute | Type | Description |
 |---|---|---|
 | `key` | `str` | API access key used to look up this client in the database |
-| `peer` | `str` | Unique identifier (`name::session_id`) used in message routing |
+| `peer` | `str` | Unique identifier (`name::session_id`) used in message routing. If another live connection already owns that string, the server appends a suffix to keep the two apart |
 | `sess` | `Session` | OVOS session associated with this client |
 | `crypto_key` | `str \| None` | AES session key (set after handshake) |
 | `is_admin` | `bool` | Whether this client has admin privileges |
 | `can_escalate` | `bool` | Client may send ESCALATE messages |
 | `can_propagate` | `bool` | Client may send PROPAGATE messages |
-| `msg_blacklist` | `list[str]` | OVOS message types never forwarded to this client |
-| `skill_blacklist` | `list[str]` | Skill IDs blocked for this client |
-| `intent_blacklist` | `list[str]` | Intent IDs blocked for this client |
-| `allowed_types` | `list[str]` | OVOS message types this client may inject |
+| `allowed_types` | `list[str]` | OVOS message types this client may inject. The only ACL field on the connection |
 | `binarize` | `bool` | Use binary serialisation with this client |
+| `site_id` | `str` | Site this client belongs to |
+| `noise_transport` | `NoiseTransport \| None` | Session layer on a protocol v3 connection. Replaces `crypto_key` |
+
+There is no message, skill, or intent blacklist on the connection. `allowed_types` is
+whitelist-only and deny-by-default. Skill and intent blacklists live in `Client.metadata`
+and `OVOSAgentPolicy` reads them.
 
 ### Key methods
 
@@ -160,7 +171,8 @@ from hivemind_core.protocol import HiveMindClientConnection
 |---|---|
 | `send(message)` | Encrypt and transmit a `HiveMessage` to this client |
 | `decode(payload)` | Decrypt and deserialise a received payload into a `HiveMessage` |
-| `authorize(message)` | Return `True` if this client is allowed to inject the given message |
+| `authorize(message)` | Subclass hook. Returns `True` by default. The `allowed_types` check moved to `MessageTypeACLPolicy` |
+| `resolve_user(db)` | Return the cached database row for this connection, refetching at most once per TTL window |
 
 ---
 
@@ -192,7 +204,7 @@ Thin wrapper around the configured database plugin.
 from hivemind_core.database import ClientDatabase
 
 with ClientDatabase() as db:
-    db.add_client("my-satellite", access_key="abc", password="xyz")
+    db.add_client("my-satellite", key="abc", password="xyz")
     client = db.get_client_by_api_key("abc")
     print(client.name, client.is_admin)
 ```
@@ -201,7 +213,9 @@ with ClientDatabase() as db:
 
 | Method | Description |
 |---|---|
-| `add_client(name, key, ...)` | Add or update a client record |
+| `add_client(name, key, ...)` | Add or update a client record. The access key is the `key` argument |
+| `get_client_by_id(client_id)` | Look up a `Client` by numeric node id |
+| `refresh(client_id)` | Refetch a `Client` row from the backend |
 | `get_client_by_api_key(key)` | Look up a `Client` by access key |
 | `get_clients_by_name(name)` | Find clients by name |
 | `delete_client(key)` | Delete a client by access key |
