@@ -108,6 +108,16 @@ def _non_negative_float(value, default: float) -> float:
     return parsed if parsed >= 0 else default
 
 
+def _configured_min_protocol_version() -> ProtocolVersion:
+    """The operator-configured protocol floor (HIVEMIND-WIRE-1 §2); default 2
+    refuses the oldest json-only / no-binary clients. An unparseable config
+    value falls back to that same default."""
+    try:
+        return ProtocolVersion(int(get_server_config().get("min_protocol_version", 2)))
+    except (TypeError, ValueError, KeyError):
+        return ProtocolVersion.TWO
+
+
 class UnencryptedMessageError(ValueError):
     """Raised when a cleartext frame arrives on a connection that requires crypto.
 
@@ -492,14 +502,9 @@ class HiveMindListenerProtocol:
             if client.crypto_key is None and self.require_crypto
             else ProtocolVersion.ZERO
         )
-        # deployment-configured protocol floor (HIVEMIND-WIRE-1 §2); default 2
-        # refuses the oldest json-only / no-binary clients. The advertised
-        # minimum is the stricter of the configured floor and the crypto-derived
-        # minimum.
-        try:
-            cfg_min = ProtocolVersion(int(get_server_config().get("min_protocol_version", 2)))
-        except (ValueError, KeyError):
-            cfg_min = ProtocolVersion.TWO
+        # The advertised minimum is the stricter of the configured floor and
+        # the crypto-derived minimum.
+        cfg_min = _configured_min_protocol_version()
         min_version = ProtocolVersion(max(int(cfg_min), int(crypto_min)))
 
         # protocol v3 (Noise handshake) needs the noise primitive and a shared
@@ -932,10 +937,7 @@ class HiveMindListenerProtocol:
         # handshake instead of Noise, silently ignoring a raised floor. Noise
         # ("noise" in payload) is handled above and always satisfies any
         # floor, so only the legacy branches below need the check.
-        try:
-            cfg_min = ProtocolVersion(int(get_server_config().get("min_protocol_version", 2)))
-        except (ValueError, KeyError):
-            cfg_min = ProtocolVersion.TWO
+        cfg_min = _configured_min_protocol_version()
         if "pubkey" in message.payload and client.handshake is not None:
             attempted_version = ProtocolVersion.ONE
         elif client.pswd_handshake is not None and "envelope" in message.payload:
