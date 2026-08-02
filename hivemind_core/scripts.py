@@ -220,6 +220,7 @@ def make_admin(node_id):
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
         if client is None:
+            print("Invalid Node ID!")
             return
         if client.is_admin:
             print(f"{client.name} is already an administrator!")
