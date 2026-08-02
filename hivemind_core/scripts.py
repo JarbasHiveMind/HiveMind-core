@@ -371,6 +371,49 @@ def toggle_capability(label: str, node_id, allow: bool) -> None:
             print(f"Blacklisted '{label}' messages for {client.name}")
 
 
+@hmcore_cmds.command(help="allow 'BROADCAST' messages to be sent from a client", name="allow-broadcast")
+@click.argument("node_id", required=False, type=int)
+def allow_broadcast(node_id):
+    """Grant a client permission to send 'BROADCAST' messages.
+
+    The client must also be an admin — broadcast is an admin privilege and
+    this grant only narrows it.
+    """
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id == int(node_id):
+                if client.can_broadcast:
+                    print(f"Client {client.name} already allowed to send 'BROADCAST' messages")
+                    exit()
+                client.can_broadcast = True
+                db.update_item(client)
+                print(f"Allowed 'BROADCAST' messages for {client.name}")
+                if not client.is_admin:
+                    print(f"NOTE: {client.name} is not an admin, so it still can not broadcast")
+                break
+        else:
+            print("Invalid Node ID!")
+
+
+@hmcore_cmds.command(help="blacklist 'BROADCAST' messages from being sent by a client", name="blacklist-broadcast")
+@click.argument("node_id", required=False, type=int)
+def blacklist_broadcast(node_id):
+    with ClientDatabase() as db:
+        node_id = node_id or prompt_node_id(db)
+        for client in db:
+            if client.client_id == int(node_id):
+                if client.can_broadcast:
+                    client.can_broadcast = False
+                    db.update_item(client)
+                    print(f"Blacklisted 'BROADCAST' messages for {client.name}")
+                    return
+                print(f"Client '{client.name}' 'BROADCAST' messages already blacklisted")
+                break
+        else:
+            print("Invalid Node ID!")
+
+
 @hmcore_cmds.command(help="Allow 'ESCALATE' messages to be sent from a client.", name="allow-escalate")
 @click.argument("node_id", required=False, type=int)
 def allow_escalate(node_id):

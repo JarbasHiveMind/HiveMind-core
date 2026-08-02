@@ -152,6 +152,7 @@ class HiveMindClientConnection:
     allowed_types: List[str] = field(default_factory=list)
     binarize: bool = False
     site_id: str = "unknown"
+    can_broadcast: bool = True
     can_escalate: bool = True
     can_propagate: bool = True
     is_admin: bool = False
@@ -1180,7 +1181,11 @@ class HiveMindListenerProtocol:
         """
         payload = self._unpack_message(message, client)
 
-        if not client.is_admin:
+        # BROADCAST stays an admin privilege, and ``can_broadcast`` narrows it:
+        # the DB column defaults to True, so an operator who revokes it on an
+        # admin client stops that client's broadcasts, while ordinary clients
+        # gain nothing from the default.
+        if not (client.is_admin and client.can_broadcast):
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
