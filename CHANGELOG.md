@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.8a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.7a1...4.10.8a1)
+
+**Merged pull requests:**
+
+- fix: preserve routing envelopes, isolate query responses, and bound relay floods [\#172](https://github.com/JarbasHiveMind/HiveMind-core/pull/172) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.7a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.6a1...4.10.7a1)
@@ -438,7 +446,6 @@
 **Merged pull requests:**
 
 - Release 3.2.0a1 [\#47](https://github.com/JarbasHiveMind/HiveMind-core/pull/47) ([github-actions[bot]](https://github.com/apps/github-actions))
-- feat:multiple\_net\_protos [\#46](https://github.com/JarbasHiveMind/HiveMind-core/pull/46) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [3.1.1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.1.1) (2025-01-03)
 
