@@ -1121,30 +1121,59 @@ class HiveMindListenerProtocol:
         pload.remove_target_peer(client.peer)
         return pload
 
+    @property
+    def _node_id(self) -> str:
+        """Stable, unique per-node identity used for HIVEMIND-MSG-1 §5 loop
+        detection.
+
+        This is the node's cryptographic public key
+        (:attr:`NodeIdentity.public_key`). It is the only identity that is
+        both **unique per node** and **stable across connections/sessions**,
+        and it is already how the mesh addresses individual nodes end-to-end
+        (INTERCOM ``target_public_key``; see :meth:`handle_intercom_message`).
+
+        It is deliberately **not** ``self.peer``: that field is a class default
+        ``"master:0.0.0.0"`` that ``service.py`` never overrides, so every
+        deployed node would share it — keying loop detection off it makes every
+        node treat every other node's hop as "me" and false-drops legitimate
+        multi-hop traffic at the second relay. It is also **not** ``site_id``:
+        several nodes may share one site.
+        """
+        return self.identity.public_key
+
     def _is_routing_loop(self, message: HiveMessage) -> bool:
         """HIVEMIND-MSG-1 §5 loop suppression.
 
-        A node MUST NOT forward a routing message (PROPAGATE, ESCALATE,
+        A node MUST NOT re-forward a routing message (PROPAGATE, ESCALATE,
         CASCADE, PING) whose ``route`` already contains a hop naming it.
-        Each hop is a structured entry keyed by ``source``; this node's
-        stable identity in a hop is ``self.peer`` (the same value appended
-        by :meth:`_append_self_hop`). Returns True when this node already
-        appears in the route, meaning the message has looped back and must
-        be dropped.
+        Loop-detection hops are keyed on :attr:`_node_id` (this node's public
+        key), appended by :meth:`_append_self_hop`. These coexist with the
+        connection-peer return-path hops that ``handle_message`` records
+        (``source == client.peer``): the two occupy disjoint value spaces
+        (public keys vs ``name::session_id`` ids), so this check never matches
+        a return-path hop, and the response walk-back in
+        :meth:`_route_query_response` (which resolves hops against
+        ``self.clients``, keyed by connection peers) never resolves a
+        node-identity hop. Returns True when this node already appears in the
+        route, meaning the message has looped back.
         """
-        return any(hop.get("source") == self.peer
+        return any(hop.get("source") == self._node_id
                    for hop in (message.route or []))
 
     def _append_self_hop(self, payload: HiveMessage) -> None:
-        """HIVEMIND-MSG-1 §5: append a hop naming this node before forwarding
-        a routing message, so downstream nodes can detect the loop too.
+        """HIVEMIND-MSG-1 §5: append a hop naming THIS node to ``route`` before
+        forwarding a routing message, so a downstream node (or this node, on a
+        cycle) can detect the loop.
 
-        ``_unpack_message`` already set ``payload``'s ``source_peer`` to
-        ``self.peer``; :meth:`HiveMessage.update_hop_data` appends a
-        ``{"source": self.peer, ...}`` hop only when the last hop is not
-        already this node, so this does not double-append.
+        The hop is keyed on :attr:`_node_id` (a stable, unique node identity),
+        not on the per-connection ``source_peer`` used by return-path hops. A
+        fresh route list is built per call so appending never mutates a route
+        object aliased by a sibling PROPAGATE/CASCADE branch (the same payload
+        object is fanned out to every peer).
         """
-        payload.update_hop_data()
+        hop = {"source": self._node_id,
+               "targets": list(payload.target_peers) or [self._node_id]}
+        payload.replace_route(list(payload.route) + [hop])
 
     def handle_propagate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -1156,16 +1185,7 @@ class HiveMindListenerProtocol:
         LOG.debug("PAYLOAD_TYPE: " + message.payload.msg_type)
         LOG.debug("PAYLOAD: " + str(message.payload.payload))
 
-        # HIVEMIND-MSG-1 §5: drop a routing message that already passed through
-        # this node instead of re-broadcasting it (prevents cyclic-topology flood)
-        if self._is_routing_loop(message):
-            LOG.debug(f"dropping PROPAGATE already routed through {self.peer} "
-                      f"(MSG-1 §5 loop suppression); route={message.route}")
-            return
-
         payload = self._unpack_message(message, client)
-        # MSG-1 §5: name ourselves in the route before forwarding
-        self._append_self_hop(payload)
 
         if not client.can_propagate:
             LOG.warning("Received propagate message from downstream, illegal action")
@@ -1175,6 +1195,16 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
+        # HIVEMIND-MSG-1 §5 gates *re-forwarding* of a looped message, not local
+        # handling. Detect the loop up front, but keep delivering locally below;
+        # only the peer fan-out + master-forward at the end are suppressed.
+        looped = self._is_routing_loop(message)
+        # MSG-1 §5: name ourselves in the route before forwarding (only when we
+        # will actually forward — a looped message is not re-stamped)
+        if not looped:
+            self._append_self_hop(payload)
+
+        # --- local delivery (runs even for a looped message) ---
         if self.propagate_callback:
             self.propagate_callback(payload)
 
@@ -1189,7 +1219,16 @@ class HiveMindListenerProtocol:
                 self.handle_bus_message(message.payload, client)
 
         if message.payload.msg_type == HiveMessageType.PING:
+            # PING is mapped and de-duplicated by its own flood_id mechanism
+            # (feeds the HiveMapper + emits hive.ping.received before that gate),
+            # so it must run on every arrival, looped or not.
             self.handle_ping_message(payload, client)
+
+        # --- forwarding (MSG-1 §5: suppressed for a looped message) ---
+        if looped:
+            LOG.debug("not re-forwarding PROPAGATE already routed through this "
+                      f"node {self._node_id} (MSG-1 §5); route={message.route}")
+            return
 
         # propagate message to other peers
         for peer in self.clients:
@@ -1515,21 +1554,19 @@ class HiveMindListenerProtocol:
             self._route_query_response(message, client)
             return
 
-        # HIVEMIND-MSG-1 §5: drop a routing message that already passed through
-        # this node instead of re-forwarding it (prevents cyclic-topology flood)
-        if self._is_routing_loop(message):
-            LOG.debug(f"dropping CASCADE already routed through {self.peer} "
-                      f"(MSG-1 §5 loop suppression); route={message.route}")
-            return
-
         payload = self._unpack_message(message, client)
-        # MSG-1 §5: name ourselves in the route before forwarding
-        self._append_self_hop(payload)
         if not client.can_propagate:
             if self.illegal_callback:
                 self.illegal_callback(payload)
             client.disconnect()
             return
+
+        # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
+        # handling; suppress only the fan-out + master-forward at the end.
+        looped = self._is_routing_loop(message)
+        # MSG-1 §5: name ourselves in the route before forwarding
+        if not looped:
+            self._append_self_hop(payload)
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
@@ -1538,9 +1575,16 @@ class HiveMindListenerProtocol:
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
 
+        # local delivery: this node answers the cascade (runs even when looped)
         self._answer_query_locally(
             message, client, query_id, originator_peer, HiveMessageType.CASCADE,
             message.route, lambda hm: self._route_query_response(hm, client))
+
+        # MSG-1 §5: do not re-forward a looped CASCADE
+        if looped:
+            LOG.debug("not re-forwarding CASCADE already routed through this "
+                      f"node {self._node_id} (MSG-1 §5); route={message.route}")
+            return
 
         cascade_fwd = HiveMessage(HiveMessageType.CASCADE, payload=payload,
                                   metadata=metadata)
@@ -1564,17 +1608,8 @@ class HiveMindListenerProtocol:
         LOG.debug("PAYLOAD_TYPE: " + message.payload.msg_type)
         LOG.debug("PAYLOAD: " + str(message.payload.payload))
 
-        # HIVEMIND-MSG-1 §5: drop a routing message that already passed through
-        # this node instead of re-forwarding it (prevents cyclic-topology flood)
-        if self._is_routing_loop(message):
-            LOG.debug(f"dropping ESCALATE already routed through {self.peer} "
-                      f"(MSG-1 §5 loop suppression); route={message.route}")
-            return
-
         # unpack message
         payload = self._unpack_message(message, client)
-        # MSG-1 §5: name ourselves in the route before forwarding
-        self._append_self_hop(payload)
 
         if not client.can_escalate:
             LOG.warning("Received escalate message from downstream, illegal action")
@@ -1584,6 +1619,14 @@ class HiveMindListenerProtocol:
             client.disconnect()
             return
 
+        # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
+        # handling; suppress only the upstream forward at the end.
+        looped = self._is_routing_loop(message)
+        # MSG-1 §5: name ourselves in the route before forwarding
+        if not looped:
+            self._append_self_hop(payload)
+
+        # --- local delivery (runs even for a looped message) ---
         if self.escalate_callback:
             self.escalate_callback(payload)
 
@@ -1596,6 +1639,12 @@ class HiveMindListenerProtocol:
             site = message.target_site_id
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
+
+        # --- forwarding (MSG-1 §5: suppressed for a looped message) ---
+        if looped:
+            LOG.debug("not re-forwarding ESCALATE already routed through this "
+                      f"node {self._node_id} (MSG-1 §5); route={message.route}")
+            return
 
         # escalate up the chain to the master this node relays to (no-op at top level)
         self.escalate_to_master(payload)
