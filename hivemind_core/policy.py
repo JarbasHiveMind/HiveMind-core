@@ -23,6 +23,11 @@ from ovos_utils.log import LOG
 if TYPE_CHECKING:
     from hivemind_core.protocol import HiveMindClientConnection
 
+#: Reported to the client when a message passed admission but the agent bus
+#: behind this node is unreachable, so nothing was forwarded. Not a policy
+#: decision — the message is lost and the client should retry.
+BACKEND_UNAVAILABLE = "backend_unavailable"
+
 
 @dataclass
 class PolicyChain:
@@ -226,6 +231,35 @@ class DenyAllPolicy(PolicyPlugin):
     def review_binary(self, payload: bytes,
                        client: "HiveMindClientConnection") -> Verdict:
         return Verdict.deny(DenyCodes.POLICY_CHAIN_UNAVAILABLE, self.REASON)
+
+
+class DefaultSessionPolicy(PolicyPlugin):
+    """Built-in admission policy protecting the reserved ``"default"``
+    session. Always present in the chain — non-removable.
+
+    Every OVOS message that carries ``session_id == "default"`` updates the
+    device-local default session of the host (OVOS-SESSION-2 §5), which the
+    orchestrator owns. HIVEMIND-BRIDGE-1 §4.1 requires the bridge to deny an
+    unauthorized peer the use of that id, so non-admin clients are denied
+    here. Admins are exempt.
+
+    ``OVOSAgentPolicy`` performs the same check, but operators remove it
+    whenever they run a non-OVOS backend. The reserved id is a property of
+    the bridge, not of one agent, so the gate belongs in core.
+    """
+
+    def review(self, message: Message,
+               client: "HiveMindClientConnection") -> Verdict:
+        if client.is_admin:
+            return Verdict.allow()
+        session = (message.context or {}).get("session") or {}
+        if isinstance(session, dict) and session.get("session_id") == "default":
+            return Verdict.deny(
+                DenyCodes.SESSION_ID_DEFAULT_FORBIDDEN,
+                "non-admin clients may not inject 'default' session payloads",
+                session_id="default",
+            )
+        return Verdict.allow()
 
 
 class MessageTypeACLPolicy(PolicyPlugin):

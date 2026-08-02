@@ -75,18 +75,22 @@ def _swap_chain(master, configured_entries):
     """Replace the in-memory policy chain on an already-built master.
 
     Mirrors ``HiveMindListenerProtocol.__post_init__`` semantics:
-    always prepends a ``MessageTypeACLPolicy`` to the configured chain so
-    the allowed_types whitelist is never bypassable.
+    always prepends the non-removable built-ins (MessageTypeACLPolicy,
+    DefaultSessionPolicy) to the configured chain, so the allowed_types
+    whitelist and the reserved-session gate are never bypassable.
     """
-    from hivemind_core.policy import MessageTypeACLPolicy, PolicyChain
+    from hivemind_core.policy import (DefaultSessionPolicy,
+                                      MessageTypeACLPolicy, PolicyChain)
     chain = PolicyChain.from_config(
         {"policy": {"chain": configured_entries}},
         hm_protocol=master.hm_protocol,
     )
-    configured = [p for p in chain.policies
-                  if not isinstance(p, MessageTypeACLPolicy)]
+    builtins = (MessageTypeACLPolicy, DefaultSessionPolicy)
+    configured = [p for p in chain.policies if not isinstance(p, builtins)]
     master.hm_protocol.policy_chain = PolicyChain(
-        policies=[MessageTypeACLPolicy(hm_protocol=master.hm_protocol), *configured],
+        policies=[MessageTypeACLPolicy(hm_protocol=master.hm_protocol),
+                  DefaultSessionPolicy(hm_protocol=master.hm_protocol),
+                  *configured],
     )
 
 

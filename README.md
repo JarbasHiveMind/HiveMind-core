@@ -109,9 +109,10 @@ Every inbound message passes through an ordered **policy admission chain** befor
 **How it works:**
 
 1. `MessageTypeACLPolicy` is **always prepended** to the chain. Configuration cannot remove it. It enforces the per-client `allowed_types` whitelist: if `message.msg_type` is not in the client's `allowed_types`, the message is denied. `Client.is_admin` is informational and gives no admission bypass. Admins follow the whitelist like any other client (`hivemind_core/policy.py:174`).
-2. Configured plugins in `policy.chain` run after `MessageTypeACLPolicy`, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
-3. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator setting to override this (`hivemind_core/policy.py:36`).
-4. If the chain fails to build at startup, HiveMind installs a `DenyAllPolicy` fallback, which rejects every message with `code="policy_chain_unavailable"` until you fix the configuration (`hivemind_core/policy.py:151`).
+2. `DefaultSessionPolicy` is **always prepended** too, right after it. Configuration cannot remove it. It denies any non-admin client that puts the reserved `default` session id in `message.context["session"]`: that id addresses the host's own device-local session, so a peer must not write into it.
+3. Configured plugins in `policy.chain` run after the built-ins, in order. Each plugin can deny the message or contribute mutations applied before the next plugin runs.
+4. The chain is **always fail-closed**. Any unhandled exception in a policy becomes `Verdict.deny("policy_error", ...)`. There is no operator setting to override this (`hivemind_core/policy.py:36`).
+5. If the chain fails to build at startup, HiveMind installs a `DenyAllPolicy` fallback, which rejects every message with `code="policy_chain_unavailable"` until you fix the configuration (`hivemind_core/policy.py:151`).
 
 **Denied messages** get a `hive.policy.denied` BUS response with this payload:
 

@@ -73,6 +73,11 @@ Mutation classes are agent-specific and live with the agent plugin
   payloads cross the same gate: a client with an empty whitelist is
   denied binary too. The whitelist holds message types only, so there
   is no per-`bin_type` granularity yet.
+- **`DefaultSessionPolicy`**: always present, non-removable, runs
+  second. It denies any message from a non-admin client whose
+  `context["session"]["session_id"]` is the reserved `default`. That id
+  addresses the host's own device-local session, so a peer must not be
+  able to write into it. Admins are exempt.
 - **`DenyAllPolicy`**: fail-closed fallback installed when
   `PolicyChain.from_config` raises. Denies every message and binary
   payload with `code="policy_chain_unavailable"`.
@@ -93,15 +98,16 @@ policy:
       optional: true
 ```
 
-`MessageTypeACLPolicy` is implicit and always first. Do not list it.
+`MessageTypeACLPolicy` and `DefaultSessionPolicy` are implicit and
+always first. Do not list them.
 
 ### `optional` flag
 
 Per-chain-entry `optional: true` marks the policy as non-load-bearing:
 if its `review` / `review_binary` raises, the chain logs a warning and
 treats the verdict as allow (no mutations, chain continues). The default
-is `false`, so exceptions fail closed with `policy_error`. The implicit
-`MessageTypeACLPolicy` is always mandatory and ignores this flag.
+is `false`, so exceptions fail closed with `policy_error`. The implicit built-in
+policies are always mandatory and ignore this flag.
 
 `allowed_types` is the canonical admission whitelist for a client.
 Grant message types with `hivemind-core allow-msg <msg_type> <node_id>`.
@@ -119,7 +125,8 @@ Codes returned by built-in policies and the chain runner:
 | `acl_disallowed_type` | `MessageTypeACLPolicy` | `msg_type` not in `allowed_types` |
 | `policy_error` | `PolicyChain` | A policy or mutation raised. Data carries `policy`, `error`, and optionally `mutation` |
 | `policy_chain_unavailable` | `DenyAllPolicy` | Chain construction failed at startup |
-| `session_id_default_forbidden` | `OVOSAgentPolicy` | Client tried to use the reserved `default` session id |
+| `session_id_default_forbidden` | `DefaultSessionPolicy` | Client tried to use the reserved `default` session id |
+| `backend_unavailable` | `HiveMindListenerProtocol` | The message passed admission, but the agent bus is unreachable, so nothing was forwarded. Not a policy decision — retry later |
 
 Plugin authors are free to mint their own `code` values. Reuse a
 built-in code only when the semantics match.
