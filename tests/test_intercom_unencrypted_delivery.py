@@ -19,6 +19,10 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 def _make_protocol():
     proto = object.__new__(HiveMindListenerProtocol)
     proto.identity = MagicMock(public_key="OUR_PUBKEY")
+    # Unencrypted INTERCOM carries no origin signature, so a node that
+    # requires crypto drops it (HIVEMIND-CRYPTO-1 §5). This feature is for
+    # deployments that opted out of crypto — say so explicitly.
+    proto.require_crypto = False
     proto.handle_bus_message = MagicMock()
     proto.handle_propagate_message = MagicMock()
     proto.handle_broadcast_message = MagicMock()
