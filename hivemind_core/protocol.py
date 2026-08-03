@@ -1311,10 +1311,11 @@ class HiveMindListenerProtocol:
 
         # broadcast message to other peers (NODE-1 §3.3: keep the envelope)
         fwd = self._rewrap(message, payload)
-        for peer in self.clients:
-            if peer == client.peer:
+        # snapshot: disconnects/reconnects mutate self.clients from other threads
+        for conn in list(self.clients.values()):
+            if conn.peer == client.peer:
                 continue
-            self.clients[peer].send(fwd)
+            conn.send(fwd)
 
     def _unpack_message(self, message: HiveMessage, client: HiveMindClientConnection):
         # propagate message to other peers
@@ -1460,10 +1461,10 @@ class HiveMindListenerProtocol:
         # propagate message to other peers (NODE-1 §3.3: keep the envelope, so a
         # peer receives a PROPAGATE it can fan out again instead of a bare BUS)
         fwd = self._rewrap(message, payload)
-        for peer in self.clients:
-            if peer == client.peer:
+        for conn in list(self.clients.values()):
+            if conn.peer == client.peer:
                 continue
-            self.clients[peer].send(fwd)
+            conn.send(fwd)
 
         # forward upstream to the master this node relays to (no-op at top level)
         self.propagate_to_master(fwd)
@@ -1526,7 +1527,7 @@ class HiveMindListenerProtocol:
 
         # NODE-1 §4: a PING fans out across the whole mesh — downstream peers
         # and upstream alike, so a master learns of nodes below a relay
-        for conn in self.clients.values():
+        for conn in list(self.clients.values()):
             conn.send(own_ping_outer)
         self.propagate_to_master(own_ping_outer)
 
@@ -1552,7 +1553,7 @@ class HiveMindListenerProtocol:
                       f"route={message.route}")
             return
         self._append_self_hop(message)
-        for conn in self.clients.values():
+        for conn in list(self.clients.values()):
             conn.send(message)
 
     def broadcast_from_master(self, message: HiveMessage) -> None:
@@ -1563,7 +1564,7 @@ class HiveMindListenerProtocol:
         directly connected downstream nodes, never re-broadcast by recipients.
         It only ever travels upstream-to-downstream, so it cannot cycle.
         """
-        for conn in self.clients.values():
+        for conn in list(self.clients.values()):
             conn.send(message)
 
     def propagate_from_master(self, message: HiveMessage) -> None:
@@ -1735,16 +1736,19 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception(f"cascade_select_callback error for query_id={query_id}")
             return
-        # Default routing: forward toward the originator
-        if originator_peer in self.clients:
-            self.clients[originator_peer].send(message)
+        # Default routing: forward toward the originator. get() + None-check
+        # instead of "in" + index: a disconnect between the two would KeyError.
+        conn = self.clients.get(originator_peer)
+        if conn is not None:
+            conn.send(message)
             return
         # route-aware return: send to the downstream hop on the path back to
         # the originator (from the request's recorded route) instead of flooding
         for hop in reversed(message.route or []):
             src = hop.get("source")
-            if src and src != sender and src in self.clients:
-                self.clients[src].send(message)
+            conn = self.clients.get(src) if src and src != sender else None
+            if conn is not None:
+                conn.send(message)
                 return
         # no return path: the originator is not ours and the route names no
         # peer we can reach. Fanning the response downstream would hand one
@@ -1866,10 +1870,10 @@ class HiveMindListenerProtocol:
             return
 
         cascade_fwd = self._rewrap(message, payload, metadata)
-        for peer in self.clients:
-            if peer == client.peer:
+        for conn in list(self.clients.values()):
+            if conn.peer == client.peer:
                 continue
-            self.clients[peer].send(cascade_fwd)
+            conn.send(cascade_fwd)
         self.cascade_to_master(cascade_fwd)
 
     def handle_escalate_message(
