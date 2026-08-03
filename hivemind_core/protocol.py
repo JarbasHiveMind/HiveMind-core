@@ -59,7 +59,7 @@ except ImportError:
     def start_noise_handshake(*args, **kwargs):  # pragma: no cover
         raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
 from hivemind_core.database import ClientDatabase
-from hivemind_bus_client.hive_map import HiveMapper
+from hivemind_bus_client.hive_map import FloodIdCache, HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from hivemind_plugin_manager.database import Client
 from hivemind_plugin_manager.policy import PolicyPlugin
@@ -438,7 +438,11 @@ class HiveMindListenerProtocol:
         # last for the lifetime of this listener (the Client DB model has no
         # pubkey column yet).
         self.trusted_pubkeys: dict = {}  # client.key -> PEM public key
-        self._seen_flood_ids: set = set()
+        # Already-answered PING floods (MSG-1 §4). Set-like, FIFO-evicting.
+        # bind_upstream hands this exact object to the upstream slave
+        # protocol so a node with an upstream keeps ONE flood cache, not one
+        # per protocol object.
+        self._seen_flood_ids: FloodIdCache = FloodIdCache()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self._last_seen_updates: dict = {}  # client.key -> last persisted timestamp
         self.last_seen_update_interval = _non_negative_float(
@@ -1417,21 +1421,25 @@ class HiveMindListenerProtocol:
             "timestamp": ping_payload.get("timestamp"),
         }))
 
-        # Flood-loop prevention: if we already responded to this flood_id, stop
+        # Flood-loop prevention (MSG-1 §4): answer a flood at most once.
+        # ``_seen_flood_ids`` is shared with the upstream slave protocol when
+        # this node has one (see bind_upstream), so the two halves of one
+        # node answer once between them, not once each.
         if not flood_id or flood_id in self._seen_flood_ids:
             return
-
-        # Evict oldest entries when cache is full (FIFO-ish)
-        while len(self._seen_flood_ids) >= 1000:
-            self._seen_flood_ids.pop()
         self._seen_flood_ids.add(flood_id)
 
-        # Build our own responsive PING with the same flood_id
+        # Build our own responsive PING with the same flood_id.
+        # ``peer`` is the map key; ``public_key`` is the node's stable
+        # identity, and the slave protocol's responsive PING carries it too.
+        # Sending both keeps one node from being mapped as two when a flood
+        # is answered by whichever half of the node saw it first.
         own_ping_payload = {
             "flood_id": flood_id,
             "peer": self._node_id,
             "site_id": self.identity.site_id,
             "timestamp": time.time(),
+            "public_key": self.identity.public_key,
         }
         own_ping_inner = HiveMessage(HiveMessageType.PING, own_ping_payload)
         own_ping_outer = HiveMessage(HiveMessageType.PROPAGATE, payload=own_ping_inner)
@@ -1449,8 +1457,20 @@ class HiveMindListenerProtocol:
         turning it into a relay: BROADCAST/PROPAGATE from the upstream master
         are fanned out to downstream clients, and downstream PROPAGATE/ESCALATE
         are forwarded upstream. ``slave`` must already be bound to a bus.
+
+        This is also where the node stops being two PING participants and
+        becomes one. Both protocol objects handle PING independently, so
+        with a flood cache each they both answer the same flood — under two
+        different identities, because the slave answers as its connection
+        peer and the listener as its public key. The flood's originator then
+        records two nodes where there is one. Sharing ``_seen_flood_ids``
+        makes the first half to see a ``flood_id`` suppress the other, which
+        is what HIVEMIND-NODE-1 §4 requires: the **node** takes part exactly
+        once. A node with no upstream never gets here and still answers
+        exactly once, through the listener.
         """
         self._upstream_hm = slave.hm
+        slave.bind_flood_cache(self._seen_flood_ids)
         slave.hm.on(HiveMessageType.BROADCAST, self.broadcast_from_master)
         slave.hm.on(HiveMessageType.PROPAGATE, self.propagate_from_master)
         slave.hm.on(HiveMessageType.QUERY, self.query_from_master)
