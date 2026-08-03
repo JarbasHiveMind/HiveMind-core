@@ -125,13 +125,13 @@ Central Server
 ## Horizontal Scaling Status
 
 A single `HiveMindListenerProtocol` instance is currently the authoritative runtime for
-one server process. The listener keeps live connection state in memory (`clients`,
+one server process. hivemind-core keeps live connection state in memory (`clients`,
 `hive_mapper`, pending cascade collectors, trusted public keys, query callbacks, and the
 agent bus binding). Running two pods behind the same load balancer is therefore safe only
 with sticky websocket routing and an external database. It is not yet active-active
 sharding.
 
-Before HiveMind can scale one logical server across several listener pods, these pieces need
+Before HiveMind can scale one logical server across several hivemind-core pods, these pieces need
 to move out of process-local memory:
 
 - **Client/session registry**: live peers, session ids, node type, capabilities, and
@@ -153,13 +153,13 @@ deployments.
 
 Production-style WSS benchmarks with many independent client identities showed a
 consistent pattern: one logical server can complete concurrent direct WSS requests, but high
-fan-in increases tail latency inside the listener before OVOS runtime CPU becomes the only
+fan-in increases tail latency inside hivemind-core before OVOS runtime CPU becomes the only
 pressure point.
 
 That pattern means adding OVOS replicas alone does not solve one-server concurrency. The
-first pressure point is the websocket/listener process: handshake admission, message
+first pressure point is the hivemind-core websocket process: handshake admission, message
 decode/logging, policy review, and agent-bus injection all pass through one process-local
-router. Runtime replicas help once messages leave the listener, but the listener must
+router. Runtime replicas help once messages leave hivemind-core, but hivemind-core must
 first drain inbound clients quickly enough.
 
 The control plane has its own burst cost: provisioning hundreds of disposable clients and
@@ -174,9 +174,9 @@ Near-term mitigations:
 - benchmark with independent client identities when measuring user concurrency;
 - shard load across more logical servers when interactive latency matters.
 
-Active-active listener scale needs a larger change: a shared connection/session registry,
-cross-listener message delivery, and deterministic ownership for query/cascade collectors.
-Without that, multiple listener pods behind one service can only safely work as sticky
+Active-active scale needs a larger change: a shared connection/session registry,
+cross-process message delivery, and deterministic ownership for query/cascade collectors.
+Without that, multiple hivemind-core pods behind one service can only safely work as sticky
 websocket replicas, not as a true shared server.
 
 ---
