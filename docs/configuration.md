@@ -180,7 +180,14 @@ no upstream is a top-level master, as before.
 | `self_signed` | bool | `true` | Accept a self-signed certificate from the master |
 
 Run `hivemind-core add-client` **on the master** to get the `key` and
-`password` for this node.
+`password` for this node. Set both: with either one empty the node logs an
+error and stays a top-level master, rather than refusing to start and taking
+its own clients offline with it.
+
+The upstream connection keeps its credentials in its own identity file,
+`~/.config/hivemind/_identity_upstream.json`. The node's own
+`_identity.json` — the identity it presents to its downstream clients — is
+never written to by the upstream link.
 
 The connection opens on a background thread and the client keeps retrying, so
 an unreachable master delays nothing at startup: the node comes up and serves

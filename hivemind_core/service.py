@@ -4,6 +4,8 @@
 import dataclasses
 from typing import Callable, Optional, Type
 
+from json_database import JsonConfigXDG
+
 from ovos_utils import create_daemon, wait_for_exit_signal
 from ovos_utils.log import LOG
 from ovos_utils.process_utils import ProcessStatus, StatusCallbackMap
@@ -32,6 +34,29 @@ def get_binary_protocol():
         # the binary protocol is optional; the base class is a no-op handler
         return BinaryDataHandlerProtocol, {}
     return BinaryDataHandlerProtocolFactory.get_class(name), config.get(name, {})
+
+
+def upstream_identity() -> NodeIdentity:
+    """Identity for the client this node uses to reach its upstream master,
+    kept in ``hivemind/_identity_upstream.json``.
+
+    It MUST NOT be the node's own ``_identity.json``. ``HiveMessageBusClient``
+    copies the credentials it is given onto the identity it holds, and the
+    first successful Noise handshake calls ``pin_noise_key``, which saves that
+    whole identity to disk. Handed the node's own identity, the client would
+    overwrite the node's ``password`` and ``access_key`` — the very values the
+    node presents to its own downstream clients — and every satellite would
+    then fail its handshake with "invalid api key".
+    """
+    identity_file = JsonConfigXDG("_identity_upstream", subfolder="hivemind")
+    if not identity_file:
+        # NodeIdentity does `identity_file or JsonConfigXDG("_identity", ...)`,
+        # and a JsonConfigXDG for a file that does not exist yet is an empty
+        # dict — which is falsy, so it would silently fall back to the node's
+        # own identity. Seed the file so the first run gets its own.
+        identity_file["name"] = "hivemind-core-upstream"
+        identity_file.store()
+    return NodeIdentity(identity_file=identity_file)
 
 
 def on_ready():
@@ -132,12 +157,24 @@ class HiveMindService:
         if not config["enabled"]:
             return None
 
+        if not config["key"] or not config["password"]:
+            # Serving the downstream clients matters more than reaching the
+            # master: come up as a top-level master and say so, loudly. Raising
+            # here would abort startup and take every satellite offline over a
+            # typo in one config key.
+            LOG.error("upstream is enabled but 'key' and 'password' are not "
+                      "both set in server.json — staying a top-level master. "
+                      "Run 'hivemind-core add-client' ON THE MASTER and copy "
+                      "the credentials it prints into the upstream block.")
+            return None
+
         scheme = "wss://" if config["ssl"] else "ws://"
         upstream = HiveMessageBusClient(key=config["key"],
                                         password=config["password"],
                                         host=scheme + config["host"],
                                         port=config["port"],
-                                        self_signed=config["self_signed"])
+                                        self_signed=config["self_signed"],
+                                        identity=upstream_identity())
         slave = HiveMindSlaveProtocol(hm=upstream)
         hm_protocol.bind_upstream(slave)
         LOG.info(f"Upstream master: {config['host']}:{config['port']}")
