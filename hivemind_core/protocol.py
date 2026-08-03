@@ -63,9 +63,25 @@ from hivemind_bus_client.hive_map import FloodIdCache, HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from hivemind_plugin_manager.database import Client
 from hivemind_plugin_manager.policy import PolicyPlugin
-from hivemind_core.policy import BACKEND_UNAVAILABLE, PolicyChain
+from hivemind_core.policy import (BACKEND_UNAVAILABLE, MALFORMED_PAYLOAD,
+                                  PolicyChain)
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
+from Cryptodome.PublicKey import RSA
+
+#: HIVEMIND-MSG-1 §4: the payload of these message types IS a nested
+#: ``HiveMessage``. Every other type carries a bus ``Message``, binary data or
+#: a plain dict.
+#:
+#: The list is documentation only — ``_payload_is_usable`` does NOT use it.
+#: Choosing the guarded types by spec section is what let the first version of
+#: the guard through with holes in it: ``SHARED_BUS`` rebuilds a bus
+#: ``Message`` from ``payload["type"]`` (``handle_client_shared_bus``) and is
+#: not in this list, and the wrapper handlers dereference the payload of the
+#: payload as well. Every type is checked instead — see ``_payload_is_usable``.
+WRAPPER_TYPES = (HiveMessageType.PROPAGATE, HiveMessageType.BROADCAST,
+                 HiveMessageType.ESCALATE, HiveMessageType.QUERY,
+                 HiveMessageType.CASCADE)
 
 
 class ProtocolVersion(IntEnum):
@@ -213,7 +229,19 @@ class HiveMindClientConnection:
         self._resolved_user_ts = 0.0
 
     def __post_init__(self):
-        self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
+        # Reuse the node's already-imported RSA key (loaded once in
+        # HiveMindListenerProtocol.__post_init__) instead of re-reading and
+        # re-validating the PEM file on every connection — PyCryptodome's
+        # validation of a 2048-bit key measured 35-58ms, and it used to run
+        # inline on the IOLoop thread serving every connected client. Only
+        # the immutable ``private_key`` is shared; the HandShake instance
+        # itself is fresh per connection, since ``target_key``/``secret``
+        # hold per-peer session state that must never leak between clients.
+        if not self.handshake:
+            self.handshake = HandShake.__new__(HandShake)
+            self.handshake.private_key = self.hm_protocol.identity_rsa_key
+            self.handshake.target_key = None
+            self.handshake.secret = None
 
     @property
     def peer(self) -> str:
@@ -430,6 +458,12 @@ class HiveMindListenerProtocol:
     default_lang = "en-US"
 
     def __post_init__(self):
+        # Cache for the node's RSA identity key (see identity_rsa_key below).
+        # Left unset here: constructing HiveMindListenerProtocol must stay
+        # cheap and must not touch the key file, since embedders and tests
+        # routinely build one with a placeholder ``identity`` and never open
+        # a connection.
+        self._identity_rsa_key = None
         self.clients = {}
         # TOFU pinning store for INTERCOM origin authentication
         # (HIVEMIND-CRYPTO-1 §5). Maps a client's access key to the PEM
@@ -473,6 +507,25 @@ class HiveMindListenerProtocol:
         # every chain is normalized, including one handed to the constructor
         # by an embedder \u2014 the builtin gates are not opt-out
         self.policy_chain = self._with_builtin_policies(self.policy_chain)
+
+    @property
+    def identity_rsa_key(self) -> RSA.RsaKey:
+        """The node's RSA identity key, imported from disk at most once.
+
+        Every HiveMindClientConnection shares this same immutable key object
+        instead of each re-reading and re-validating the PEM file itself —
+        PyCryptodome's validation of a 2048-bit key measured 35-58ms, and it
+        used to run inline on the IOLoop thread serving every connected
+        client. Only this key is shared; each connection still gets its own
+        fresh HandShake instance (see HiveMindClientConnection.__post_init__)
+        because target_key/secret are per-peer session state that must never
+        leak between connections. HandShake's own load-or-generate-if-missing
+        logic is reused as-is; we keep only the resulting key object, never
+        the bootstrap HandShake instance itself.
+        """
+        if self._identity_rsa_key is None:
+            self._identity_rsa_key = HandShake(self.identity.private_key).private_key
+        return self._identity_rsa_key
 
     def _with_builtin_policies(self, chain: PolicyChain) -> PolicyChain:
         """Return ``chain`` with the non-removable builtin policies first.
@@ -642,7 +695,7 @@ class HiveMindListenerProtocol:
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
-        update_interval = getattr(self, "last_seen_update_interval", 0)
+        update_interval = self.last_seen_update_interval
         mono_now = None
         if update_interval > 0:
             mono_now = time.monotonic()
@@ -750,6 +803,12 @@ class HiveMindListenerProtocol:
 
         Process message from client, decide what to do internally here
         """
+        # BEFORE the debug log below: rendering a HiveMessage calls as_json,
+        # which asserts the payload is a dict, so a frame with a payload of
+        # ``7`` or ``[1, 2]`` crashes on the log line, not in a handler.
+        if not self._payload_is_usable(message, client):
+            return
+
         LOG.debug(f"message: {message}")
         # update internal peer ID
         message.update_source_peer(client.peer)
@@ -786,6 +845,71 @@ class HiveMindListenerProtocol:
             self.handle_unknown_message(message, client)
 
         self.update_last_seen(client)
+
+    @staticmethod
+    def _probe_payload(message: HiveMessage) -> None:
+        """Do everything ``handle_message`` and its handlers will later do to
+        the payload of ``message``, so a payload that cannot be reconstructed
+        raises here instead of inside a handler. Raises whatever the
+        reconstruction raises.
+
+        Two things touch the payload of an incoming frame:
+
+        * ``as_json`` — the ``LOG.debug`` at the top of ``handle_message``
+          renders the message, and ``as_dict`` asserts the payload is a dict.
+        * ``HiveMessage.payload`` — it REBUILDS the payload for the types that
+          carry a nested envelope: a bus ``Message`` for ``BUS`` and
+          ``SHARED_BUS`` (``payload["type"]``), a ``HiveMessage`` for the five
+          wrapper types (``HiveMessage(**payload)``). Both raise on a payload
+          of the wrong shape. Every other type returns the payload as stored
+          and can never raise, so probing unconditionally is free for them —
+          and it removes the audit that the first version of this guard got
+          wrong.
+
+        The walk down the chain is what makes the guard deep enough. A wrapper
+        handler does not stop at ``message.payload``: it reads
+        ``message.payload.payload`` (``handle_propagate_message``,
+        ``handle_escalate_message``, ``_answer_query_locally``) and forwards
+        ``message.payload`` on to the next node, which will read a level deeper
+        again. So every level is rebuilt here, not one. The loop terminates
+        because each step descends one level of an already-parsed JSON object,
+        and json.loads has bounded the depth before this point.
+        """
+        if message.msg_type != HiveMessageType.BINARY:
+            message.as_dict  # what LOG.debug/__str__ does
+        node = message
+        while True:
+            payload = node.payload
+            if not isinstance(payload, HiveMessage):
+                return
+            node = payload
+
+    def _payload_is_usable(self, message: HiveMessage,
+                           client: HiveMindClientConnection) -> bool:
+        """Check the payload of ``message`` can be reconstructed, at every
+        level, before anything dereferences it.
+
+        A peer that sends a payload of the wrong shape — a bus ``Message`` dict
+        where HIVEMIND-MSG-1 §4 requires a nested ``HiveMessage``, a nested
+        envelope missing ``type``, a bare number — makes the reconstruction
+        raise, and the exception would escape the message handler and take the
+        connection down. The frame is the sender's bug, so refuse it with the
+        ``hive.policy.denied`` reply used for every other refused message and
+        keep the peer connected: it is misinformed, not misbehaving, and it
+        needs the reply to learn that.
+        """
+        try:
+            self._probe_payload(message)
+        except Exception as e:
+            LOG.warning(f"malformed '{message.msg_type}' from {client.peer}: "
+                        f"payload can not be reconstructed "
+                        f"({type(e).__name__}: {e})")
+            self._send_denied(
+                client, str(message.msg_type), MALFORMED_PAYLOAD,
+                f"'{message.msg_type}' payload can not be reconstructed "
+                f"(HIVEMIND-MSG-1 §4)", {})
+            return False
+        return True
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(
@@ -1229,10 +1353,11 @@ class HiveMindListenerProtocol:
 
         # broadcast message to other peers (NODE-1 §3.3: keep the envelope)
         fwd = self._rewrap(message, payload)
-        for peer in self.clients:
-            if peer == client.peer:
+        # snapshot: disconnects/reconnects mutate self.clients from other threads
+        for conn in list(self.clients.values()):
+            if conn.peer == client.peer:
                 continue
-            self.clients[peer].send(fwd)
+            conn.send(fwd)
 
     def _unpack_message(self, message: HiveMessage, client: HiveMindClientConnection):
         # propagate message to other peers
@@ -1378,10 +1503,10 @@ class HiveMindListenerProtocol:
         # propagate message to other peers (NODE-1 §3.3: keep the envelope, so a
         # peer receives a PROPAGATE it can fan out again instead of a bare BUS)
         fwd = self._rewrap(message, payload)
-        for peer in self.clients:
-            if peer == client.peer:
+        for conn in list(self.clients.values()):
+            if conn.peer == client.peer:
                 continue
-            self.clients[peer].send(fwd)
+            conn.send(fwd)
 
         # forward upstream to the master this node relays to (no-op at top level)
         self.propagate_to_master(fwd)
@@ -1448,7 +1573,7 @@ class HiveMindListenerProtocol:
 
         # NODE-1 §4: a PING fans out across the whole mesh — downstream peers
         # and upstream alike, so a master learns of nodes below a relay
-        for conn in self.clients.values():
+        for conn in list(self.clients.values()):
             conn.send(own_ping_outer)
         self.propagate_to_master(own_ping_outer)
 
@@ -1486,7 +1611,7 @@ class HiveMindListenerProtocol:
                       f"route={message.route}")
             return
         self._append_self_hop(message)
-        for conn in self.clients.values():
+        for conn in list(self.clients.values()):
             conn.send(message)
 
     def broadcast_from_master(self, message: HiveMessage) -> None:
@@ -1497,7 +1622,7 @@ class HiveMindListenerProtocol:
         directly connected downstream nodes, never re-broadcast by recipients.
         It only ever travels upstream-to-downstream, so it cannot cycle.
         """
-        for conn in self.clients.values():
+        for conn in list(self.clients.values()):
             conn.send(message)
 
     def propagate_from_master(self, message: HiveMessage) -> None:
@@ -1669,16 +1794,19 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception(f"cascade_select_callback error for query_id={query_id}")
             return
-        # Default routing: forward toward the originator
-        if originator_peer in self.clients:
-            self.clients[originator_peer].send(message)
+        # Default routing: forward toward the originator. get() + None-check
+        # instead of "in" + index: a disconnect between the two would KeyError.
+        conn = self.clients.get(originator_peer)
+        if conn is not None:
+            conn.send(message)
             return
         # route-aware return: send to the downstream hop on the path back to
         # the originator (from the request's recorded route) instead of flooding
         for hop in reversed(message.route or []):
             src = hop.get("source")
-            if src and src != sender and src in self.clients:
-                self.clients[src].send(message)
+            conn = self.clients.get(src) if src and src != sender else None
+            if conn is not None:
+                conn.send(message)
                 return
         # no return path: the originator is not ours and the route names no
         # peer we can reach. Fanning the response downstream would hand one
@@ -1800,10 +1928,10 @@ class HiveMindListenerProtocol:
             return
 
         cascade_fwd = self._rewrap(message, payload, metadata)
-        for peer in self.clients:
-            if peer == client.peer:
+        for conn in list(self.clients.values()):
+            if conn.peer == client.peer:
                 continue
-            self.clients[peer].send(cascade_fwd)
+            conn.send(cascade_fwd)
         self.cascade_to_master(cascade_fwd)
 
     def handle_escalate_message(

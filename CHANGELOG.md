@@ -1,5 +1,43 @@
 # Changelog
 
+## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
+
+**Merged pull requests:**
+
+- perf: import the RSA identity key once per node [\#205](https://github.com/JarbasHiveMind/HiveMind-core/pull/205) ([JarbasAl](https://github.com/JarbasAl))
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+
+## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+
+**Merged pull requests:**
+
+- docs: recommend redis for large deployments [\#203](https://github.com/JarbasHiveMind/HiveMind-core/pull/203) ([JarbasAl](https://github.com/JarbasAl))
+- fix: throttle last\_seen writes by default [\#202](https://github.com/JarbasHiveMind/HiveMind-core/pull/202) ([JarbasAl](https://github.com/JarbasAl))
+- fix: iterate a snapshot of clients during fan-out [\#201](https://github.com/JarbasHiveMind/HiveMind-core/pull/201) ([JarbasAl](https://github.com/JarbasAl))
+
+## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.16a1...4.11.0a1)
+
+**Merged pull requests:**
+
+- feat: let a node be given an upstream in server.json [\#194](https://github.com/JarbasHiveMind/HiveMind-core/pull/194) ([JarbasAl](https://github.com/JarbasAl))
+
+## [4.10.16a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.16a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.15a1...4.10.16a1)
+
+**Merged pull requests:**
+
+- fix: reject malformed wrapper payloads instead of crashing [\#193](https://github.com/JarbasHiveMind/HiveMind-core/pull/193) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.15a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.14a1...4.10.15a1)
@@ -26,19 +64,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
-
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 **Merged pull requests:**
 
@@ -414,23 +452,14 @@
 **Merged pull requests:**
 
 - chore\(deps\): update actions/setup-python action to v6 [\#69](https://github.com/JarbasHiveMind/HiveMind-core/pull/69) ([renovate[bot]](https://github.com/apps/renovate))
-- chore\(deps\): update actions/checkout action to v6 [\#66](https://github.com/JarbasHiveMind/HiveMind-core/pull/66) ([renovate[bot]](https://github.com/apps/renovate))
 
 ## [3.4.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a2) (2025-12-18)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a1...3.4.1a2)
 
-**Merged pull requests:**
-
-- chore: Configure Renovate [\#64](https://github.com/JarbasHiveMind/HiveMind-core/pull/64) ([renovate[bot]](https://github.com/apps/renovate))
-
 ## [3.4.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a1) (2025-04-26)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.0...3.4.1a1)
-
-**Merged pull requests:**
-
-- refactor: allow "default" session for clients [\#60](https://github.com/JarbasHiveMind/HiveMind-core/pull/60) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [3.4.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0) (2025-04-12)
 

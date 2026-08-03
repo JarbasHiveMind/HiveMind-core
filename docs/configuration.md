@@ -42,6 +42,16 @@ The file is created with defaults on first run if absent.
     "module": null
   },
 
+  "upstream": {
+    "enabled": false,
+    "host": "127.0.0.1",
+    "port": 5678,
+    "key": "",
+    "password": "",
+    "ssl": false,
+    "self_signed": true
+  },
+
   "network_protocol": {
     "hivemind-websocket-plugin": {
       "host": "0.0.0.0",
@@ -89,6 +99,7 @@ The file is created with defaults on first run if absent.
 | `runtime_password_strength_check` | bool | `true` | Re-check password strength at handshake time. Set to `false`, or set `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1`, to skip the backstop |
 | `last_seen_update_interval` | int | `0` | Seconds to debounce the `last_seen` write. `0` writes on every admitted message |
 | `presence` | dict | see above | Local-network advertisement through the optional `hivemind-presence` package. Keys: `enabled`, `name`, `zeroconf` (mDNS), `upnp` (SSDP) |
+| `upstream` | dict | see above | Connection to a master above this node. Disabled by default |
 
 > **`require_crypto` is not a config key.** It is an attribute of
 > `HiveMindListenerProtocol` and it defaults to `True`. While it is true, the server
@@ -135,6 +146,63 @@ Optional server-side audio/image handler. Set `module` to `null` to use the no-o
 The `hivemind-audio-binary-protocol` plugin enables server-side STT and TTS, used by
 lightweight satellites (voice relay, mic satellite) that stream raw audio instead of
 running a local speech stack.
+
+---
+
+## `upstream`
+
+Connects this node to a master above it. The node keeps serving its own
+downstream clients, and it also forwards downstream `PROPAGATE` and `ESCALATE`
+up to that master, and fans `BROADCAST` and `PROPAGATE` from the master back
+down (HIVEMIND-NODE-1 §3.3 and §4). It is disabled by default, so a node with
+no upstream is a top-level master, as before.
+
+```json
+"upstream": {
+  "enabled": true,
+  "host": "master.example.com",
+  "port": 5678,
+  "key": "the-access-key",
+  "password": "the-password",
+  "ssl": true,
+  "self_signed": false
+}
+```
+
+| Key | Type | Default | Purpose |
+|---|---|---|---|
+| `enabled` | bool | `false` | Connect upstream. When `false`, this node is a top-level master |
+| `host` | str | `127.0.0.1` | Hostname or IP of the master. Write it without a scheme; `ssl` picks `ws://` or `wss://` |
+| `port` | int | `5678` | Port the master listens on |
+| `key` | str | `""` | Access key the master issued to this node |
+| `password` | str | `""` | Password the master issued to this node |
+| `ssl` | bool | `false` | Connect with `wss://` |
+| `self_signed` | bool | `true` | Accept a self-signed certificate from the master |
+
+Run `hivemind-core add-client` **on the master** to get the `key` and
+`password` for this node. Set both: with either one empty the node logs an
+error and stays a top-level master, rather than refusing to start and taking
+its own clients offline with it.
+
+The upstream connection keeps its credentials in its own identity file,
+`~/.config/hivemind/_identity_upstream.json`. The node's own
+`_identity.json` — the identity it presents to its downstream clients — is
+never written to by the upstream link.
+
+The connection opens on a background thread and the client keeps retrying, so
+an unreachable master delays nothing at startup: the node comes up and serves
+its downstream clients while it waits.
+
+You do not have to write the whole block. Any key you leave out keeps its
+default from the table above, and a block that is not a block at all (`null`,
+say) is replaced by the defaults with a warning. Nothing in the `upstream`
+block can keep the node from starting.
+
+Point `upstream` at the master **above** this node, never at this node. An
+upstream aimed at one of this node's own listeners is refused at startup, with
+an error in the log: the link would connect, be rejected, and reconnect every
+few seconds forever. `127.0.0.1` and `0.0.0.0` name the same listener here, so
+both are refused.
 
 ---
 
@@ -204,10 +272,18 @@ Available backends:
     "subfolder": "hivemind-core",
     "host": "192.168.1.10",
     "port": 6379,
-    "password": "s3cr3t"
+    "password": "s3cr3t",
+    "max_connections": 50
   }
 }
 ```
+
+**Use Redis for large deployments.** Redis looks up a client by API key with a single
+key read and writes one record at a time. SQLite reads through an `api_key` index and
+writes one row. JSON scans every client and rewrites the whole file on each write.
+
+`max_connections` sets the Redis connection pool size. It defaults to 5. Raise it above
+the number of clients that handshake at the same time, or the server queues on the pool.
 
 ---
 
