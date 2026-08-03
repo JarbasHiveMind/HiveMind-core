@@ -77,7 +77,7 @@ Binary payload types dispatched to the plugin:
 |---|---|---|
 | `hivemind-sqlite-database` | SQLite storage (default for fresh installs) | bundled |
 | `hivemind-json-db-plugin` | JSON flat-file storage (kept for existing JSON deployments) | bundled |
-| `hivemind-redis-database` | Redis storage for distributed deployments | `pip install hivemind-redis-database` |
+| `hivemind-redis-database` | Redis storage. Recommended for large deployments | `pip install hivemind-redis-database` |
 
 Configuration example:
 

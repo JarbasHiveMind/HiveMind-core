@@ -272,10 +272,18 @@ Available backends:
     "subfolder": "hivemind-core",
     "host": "192.168.1.10",
     "port": 6379,
-    "password": "s3cr3t"
+    "password": "s3cr3t",
+    "max_connections": 50
   }
 }
 ```
+
+**Use Redis for large deployments.** Redis looks up a client by API key with a single
+key read and writes one record at a time. SQLite reads through an `api_key` index and
+writes one row. JSON scans every client and rewrites the whole file on each write.
+
+`max_connections` sets the Redis connection pool size. It defaults to 5. Raise it above
+the number of clients that handshake at the same time, or the server queues on the pool.
 
 ---
 
