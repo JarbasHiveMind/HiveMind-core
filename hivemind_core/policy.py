@@ -24,10 +24,12 @@ if TYPE_CHECKING:
 #: decision — the message is lost and the client should retry.
 BACKEND_UNAVAILABLE = "backend_unavailable"
 
-#: Reported to the client when a wrapper message (QUERY, BROADCAST, PROPAGATE,
-#: ESCALATE, CASCADE) does not carry a nested ``HiveMessage`` payload, as
-#: HIVEMIND-MSG-1 §4 requires. Not a policy decision — the frame is unusable
-#: and the sender must fix how it builds it.
+#: Reported to the client when the payload of a message can not be
+#: reconstructed — a wrapper message (QUERY, BROADCAST, PROPAGATE, ESCALATE,
+#: CASCADE) that does not carry a nested ``HiveMessage`` as HIVEMIND-MSG-1 §4
+#: requires, a BUS or SHARED_BUS whose payload is not a bus ``Message``, or any
+#: payload that is not a dict at all. Not a policy decision — the frame is
+#: unusable and the sender must fix how it builds it.
 MALFORMED_PAYLOAD = "malformed_payload"
 
 
