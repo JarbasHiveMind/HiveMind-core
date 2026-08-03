@@ -29,11 +29,13 @@ dependencies = [
     # 0.11.0a2 adds FloodIdCache and HiveMindSlaveProtocol.bind_flood_cache,
     # which bind_upstream calls so a node with an upstream answers a PING
     # flood exactly once (HIVEMIND-NODE-1 §4) — an in-process API, not wire
-    # compatibility. 1.0.0a1 raises the floor further because protocol.py
-    # also calls bind_flood_cache post-THIRDPRTY-removal (wire code 11 was
-    # dropped in the same release). The server still degrades gracefully to
-    # the legacy handshake against older clients on the wire.
-    "hivemind_bus_client>=1.0.0a1,<2.0.0",
+    # compatibility. 1.0.3a1 raises the floor further: it adds the
+    # keyword-only ``psk`` argument to start_noise_handshake, which lets this
+    # node derive each Noise PSK once per (password, node_id) instead of once
+    # per connection (argon2id, ~217ms and 64 MiB each time). The server still
+    # degrades gracefully to the legacy handshake against older clients on the
+    # wire.
+    "hivemind_bus_client>=1.0.3a1,<2.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
     # 0.9.0a1 added AbstractDB.get_client_by_api_key, which ClientDatabase calls
