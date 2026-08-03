@@ -2,7 +2,9 @@
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
-from typing import Callable, Optional, Type
+import ipaddress
+import socket
+from typing import Callable, Mapping, Optional, Type
 
 from json_database import JsonConfigXDG
 
@@ -14,7 +16,7 @@ from hivemind_bus_client.client import HiveMessageBusClient
 from hivemind_bus_client.fakebus import FakeBus
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.protocol import HiveMindSlaveProtocol
-from hivemind_core.config import get_server_config
+from hivemind_core.config import get_server_config, upstream_config
 from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
 from hivemind_plugin_manager import AgentProtocolFactory, NetworkProtocolFactory, BinaryDataHandlerProtocolFactory
@@ -36,6 +38,56 @@ def get_binary_protocol():
     return BinaryDataHandlerProtocolFactory.get_class(name), config.get(name, {})
 
 
+#: hosts that mean "this machine" to a listener or a client
+_LOOPBACK = {"127.0.0.1", "::1", "localhost", "localhost.localdomain"}
+#: hosts a listener binds to mean "every interface on this machine"
+_WILDCARD = {"", "0.0.0.0", "::", "*"}
+
+
+def _is_this_machine(host: str) -> bool:
+    """Whether ``host`` names the machine this node runs on."""
+    host = str(host).strip().lower().strip("[]")
+    for scheme in ("ws://", "wss://", "http://", "https://"):
+        if host.startswith(scheme):
+            host = host[len(scheme):]
+    host = host.rstrip("/")
+    if host in _LOOPBACK or host in _WILDCARD:
+        return True
+    if host == socket.gethostname().lower():
+        return True
+    try:
+        return ipaddress.ip_address(socket.gethostbyname(host)).is_loopback
+    except (socket.gaierror, ValueError, UnicodeError):
+        return False
+
+
+def own_listener_for(host: str, port: int, network_protocol: Mapping) -> Optional[str]:
+    """The name of this node's own listener that ``host:port`` points at, or
+    None when the endpoint belongs to some other node.
+
+    An upstream aimed at this node's own listener connects, gets rejected,
+    reconnects five seconds later and does that forever, emitting a
+    ``hive.client.connection.error`` on the bus every time — the reconnect
+    counter never backs off, because each attempt does connect. Better to
+    refuse the loop at startup.
+
+    A listener bound to ``0.0.0.0`` answers on every address of this machine,
+    so ``127.0.0.1`` reaches it just as ``0.0.0.0`` would: the comparison is
+    "same machine and same port", not "same host string".
+    """
+    if not _is_this_machine(host):
+        return None
+    for name, conf in network_protocol.items():
+        if not isinstance(conf, Mapping) or conf.get("port") is None:
+            continue
+        if int(conf["port"]) != int(port):
+            continue
+        listener_host = str(conf.get("host", "")).strip().lower()
+        if listener_host in _WILDCARD or _is_this_machine(listener_host):
+            return name
+    return None
+
+
 def upstream_identity() -> NodeIdentity:
     """Identity for the client this node uses to reach its upstream master,
     kept in ``hivemind/_identity_upstream.json``.
@@ -53,7 +105,9 @@ def upstream_identity() -> NodeIdentity:
         # NodeIdentity does `identity_file or JsonConfigXDG("_identity", ...)`,
         # and a JsonConfigXDG for a file that does not exist yet is an empty
         # dict — which is falsy, so it would silently fall back to the node's
-        # own identity. Seed the file so the first run gets its own.
+        # own identity. Write one key so the file exists and is TRUTHY; the
+        # value is never read. HiveMessageBusClient overwrites `name` with the
+        # name the master knows this node by, so do not read anything into it.
         identity_file["name"] = "hivemind-core-upstream"
         identity_file.store()
     return NodeIdentity(identity_file=identity_file)
@@ -153,7 +207,8 @@ class HiveMindService:
         as long as the master is unreachable. The client owns its own reconnect
         loop, so once started it keeps retrying on its own.
         """
-        config = get_server_config()["upstream"]
+        server_config = get_server_config()
+        config = upstream_config(server_config)
         if not config["enabled"]:
             return None
 
@@ -166,6 +221,17 @@ class HiveMindService:
                       "both set in server.json — staying a top-level master. "
                       "Run 'hivemind-core add-client' ON THE MASTER and copy "
                       "the credentials it prints into the upstream block.")
+            return None
+
+        own = own_listener_for(config["host"], config["port"],
+                               server_config.get("network_protocol") or {})
+        if own is not None:
+            LOG.error(f"upstream points at this node's own '{own}' listener "
+                      f"({config['host']}:{config['port']}) — staying a "
+                      f"top-level master. A node can not be its own master: "
+                      f"the link would connect, be rejected and reconnect "
+                      f"every few seconds forever. Point 'upstream' at the "
+                      f"master above this node.")
             return None
 
         scheme = "wss://" if config["ssl"] else "ws://"

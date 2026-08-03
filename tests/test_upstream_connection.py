@@ -6,14 +6,19 @@ master. The ``upstream`` config block gives an operator that one bit.
 
 Absent or disabled, the node stays exactly a top-level master.
 """
+import json
+import os
+import socket
 import tempfile
+import threading
 import unittest
 from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from json_database import JsonConfigXDG
 
-from hivemind_core.config import _DEFAULT
+from hivemind_bus_client.client import HiveMessageBusClient
+from hivemind_core.config import _DEFAULT, get_server_config, upstream_config
 from hivemind_core.service import HiveMindService
 
 UPSTREAM = {
@@ -177,6 +182,162 @@ class TestUpstreamConfigured(unittest.TestCase):
 
         self.assertEqual(len(started), 1)
         started[0]()  # the worker must swallow the failure, not raise
+
+
+#: hand-edited `upstream` blocks an operator can realistically leave behind.
+#: Every one of them used to raise out of `_connect_upstream`, which runs
+#: BEFORE the network protocols start, so the whole node never came up.
+PARTIAL_BLOCKS = {
+    "no ssl/self_signed": {"enabled": True, "host": "h", "port": 1,
+                           "key": "k", "password": "p"},
+    "only enabled/host/port": {"enabled": True, "host": "h", "port": 1},
+    "only enabled": {"enabled": True},
+    "empty block": {},
+    "null": None,
+}
+
+
+class TestPartialUpstreamBlock(unittest.TestCase):
+    """A partial block must not take the node offline.
+
+    ``upstream_config`` deep-merges the block against the defaults, the way
+    the ``policy`` block is deep-merged, so every sub-key the use site indexes
+    is always there.
+    """
+
+    def test_every_partial_block_is_completed_with_the_defaults(self):
+        for label, block in PARTIAL_BLOCKS.items():
+            with self.subTest(block=label):
+                merged = upstream_config({"upstream": block})
+                self.assertEqual(set(merged), set(_DEFAULT["upstream"]))
+                for key, default in _DEFAULT["upstream"].items():
+                    if not isinstance(block, dict) or key not in block:
+                        self.assertEqual(merged[key], default)
+
+    def test_a_missing_block_gives_the_defaults(self):
+        self.assertEqual(upstream_config({}), _DEFAULT["upstream"])
+
+    def test_a_set_sub_key_survives_the_merge(self):
+        merged = upstream_config({"upstream": {"enabled": True, "port": 9}})
+        self.assertTrue(merged["enabled"])
+        self.assertEqual(merged["port"], 9)
+        self.assertEqual(merged["ssl"], _DEFAULT["upstream"]["ssl"])
+
+    def test_get_server_config_merges_the_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = os.path.join(tmp, "hivemind-core")
+            os.makedirs(folder)
+            with open(os.path.join(folder, "server.json"), "w") as f:
+                json.dump({"upstream": {"enabled": True, "host": "10.0.0.1"}}, f)
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp}):
+                upstream = get_server_config()["upstream"]
+        self.assertEqual(set(upstream), set(_DEFAULT["upstream"]))
+        self.assertTrue(upstream["enabled"])
+        self.assertEqual(upstream["host"], "10.0.0.1")
+        self.assertEqual(upstream["port"], _DEFAULT["upstream"]["port"])
+
+    def test_no_partial_block_aborts_startup(self):
+        for label, block in PARTIAL_BLOCKS.items():
+            with self.subTest(block=label):
+                service = _make_service()
+                with scratch_config_home(), \
+                        patch("hivemind_core.service.get_server_config",
+                              return_value={**_DEFAULT, "upstream": block}), \
+                        patch("hivemind_core.service.HiveMessageBusClient"), \
+                        patch("hivemind_core.service.create_daemon"):
+                    service._connect_upstream(MagicMock())  # must not raise
+
+
+class TestUpstreamIsNotThisNode(unittest.TestCase):
+    """An upstream aimed at this node's own listener connects, is rejected,
+    and reconnects every five seconds forever, putting a
+    ``hive.client.connection.error`` on the bus each time. Refuse at startup.
+    """
+
+    LISTENERS = {"hivemind-websocket-plugin": {"host": "0.0.0.0", "port": 5678},
+                 "hivemind-http-plugin": {"host": "127.0.0.1", "port": 5679}}
+
+    def _connect(self, host, port):
+        service = _make_service()
+        hm_protocol = MagicMock()
+        config = {**_DEFAULT,
+                  "network_protocol": self.LISTENERS,
+                  "upstream": {**UPSTREAM, "host": host, "port": port}}
+        with scratch_config_home(), \
+                patch("hivemind_core.service.get_server_config",
+                      return_value=config), \
+                patch("hivemind_core.service.HiveMessageBusClient") as client, \
+                patch("hivemind_core.service.create_daemon"):
+            result = service._connect_upstream(hm_protocol)
+        return result, client, hm_protocol
+
+    def test_loopback_matches_a_listener_bound_to_all_interfaces(self):
+        """The listener is on 0.0.0.0 and the upstream says 127.0.0.1 — the
+        same socket, so comparing the host strings is not enough."""
+        result, client, hm_protocol = self._connect("127.0.0.1", 5678)
+        self.assertIsNone(result)
+        client.assert_not_called()
+        hm_protocol.bind_upstream.assert_not_called()
+
+    def test_every_way_of_naming_this_node_is_refused(self):
+        for host in ("127.0.0.1", "localhost", "0.0.0.0", socket.gethostname()):
+            for port in (5678, 5679):
+                with self.subTest(host=host, port=port):
+                    self.assertIsNone(self._connect(host, port)[0])
+
+    def test_a_loopback_port_nothing_listens_on_is_allowed(self):
+        """Only this node's OWN listeners are refused; another hive node on
+        the same machine is a legitimate master."""
+        result, client, _ = self._connect("127.0.0.1", 5999)
+        self.assertIsNotNone(result)
+        client.assert_called_once()
+
+    def test_a_remote_master_on_the_same_port_is_allowed(self):
+        result, client, _ = self._connect("10.0.0.1", 5678)
+        self.assertIsNotNone(result)
+        client.assert_called_once()
+
+
+class TestAgainstTheRealClient(unittest.TestCase):
+    """Every other test in this file mocks ``HiveMessageBusClient``, so a
+    config block of the wrong SHAPE never reached the code that reads it. One
+    test builds the real client, against an endpoint nothing listens on."""
+
+    UNREACHABLE_PORT = 45999
+
+    def _server_config(self, upstream):
+        return {**_DEFAULT,
+                "network_protocol": {"hivemind-websocket-plugin":
+                                     {"host": "0.0.0.0", "port": 5678}},
+                "upstream": upstream}
+
+    def test_a_real_client_is_built_and_the_node_stays_up(self):
+        service = _make_service()
+        hm_protocol = MagicMock()
+        workers = []
+        upstream = {"enabled": True, "host": "127.0.0.1",
+                    "port": self.UNREACHABLE_PORT,
+                    "key": "an-access-key", "password": "a-password"}
+
+        with scratch_config_home(), \
+                patch("hivemind_core.service.get_server_config",
+                      return_value=self._server_config(upstream)), \
+                patch("hivemind_core.service.create_daemon",
+                      side_effect=workers.append):
+            slave = service._connect_upstream(hm_protocol)
+
+            # the block above has no `ssl` and no `self_signed`: reading it
+            # raised KeyError here before the deep merge, aborting startup
+            self.assertIsNotNone(slave)
+            self.assertIsInstance(slave.hm, HiveMessageBusClient)
+            hm_protocol.bind_upstream.assert_called_once_with(slave)
+
+            # and the worker really tries to reach a dead endpoint without
+            # raising into the caller
+            self.assertEqual(len(workers), 1)
+            worker = threading.Thread(target=workers[0], daemon=True)
+            worker.start()
+            worker.join(timeout=10)
 
 
 if __name__ == "__main__":

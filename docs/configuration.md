@@ -193,6 +193,17 @@ The connection opens on a background thread and the client keeps retrying, so
 an unreachable master delays nothing at startup: the node comes up and serves
 its downstream clients while it waits.
 
+You do not have to write the whole block. Any key you leave out keeps its
+default from the table above, and a block that is not a block at all (`null`,
+say) is replaced by the defaults with a warning. Nothing in the `upstream`
+block can keep the node from starting.
+
+Point `upstream` at the master **above** this node, never at this node. An
+upstream aimed at one of this node's own listeners is refused at startup, with
+an error in the log: the link would connect, be rejected, and reconnect every
+few seconds forever. `127.0.0.1` and `0.0.0.0` name the same listener here, so
+both are refused.
+
 ---
 
 ## `network_protocol`
