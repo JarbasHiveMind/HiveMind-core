@@ -127,6 +127,7 @@ Codes returned by built-in policies and the chain runner:
 | `policy_chain_unavailable` | `DenyAllPolicy` | Chain construction failed at startup |
 | `session_id_default_forbidden` | `DefaultSessionPolicy` | Client tried to use the reserved `default` session id |
 | `backend_unavailable` | `HiveMindListenerProtocol` | The message passed admission, but the agent bus is unreachable, so nothing was forwarded. Not a policy decision — retry later |
+| `malformed_payload` | `HiveMindListenerProtocol` | A QUERY, BROADCAST, PROPAGATE, ESCALATE or CASCADE did not carry a nested `HiveMessage` payload, as HIVEMIND-MSG-1 §4 requires. Not a policy decision — the frame is unusable and the sender must fix it |
 
 Plugin authors are free to mint their own `code` values. Reuse a
 built-in code only when the semantics match.

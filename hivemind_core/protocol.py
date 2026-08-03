@@ -63,9 +63,17 @@ from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from hivemind_plugin_manager.database import Client
 from hivemind_plugin_manager.policy import PolicyPlugin
-from hivemind_core.policy import BACKEND_UNAVAILABLE, PolicyChain
+from hivemind_core.policy import (BACKEND_UNAVAILABLE, MALFORMED_PAYLOAD,
+                                  PolicyChain)
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
+
+#: HIVEMIND-MSG-1 §4: the payload of these message types IS a nested
+#: ``HiveMessage``. Every other type carries a bus ``Message``, binary data or
+#: a plain dict.
+WRAPPER_TYPES = (HiveMessageType.PROPAGATE, HiveMessageType.BROADCAST,
+                 HiveMessageType.ESCALATE, HiveMessageType.QUERY,
+                 HiveMessageType.CASCADE)
 
 
 class ProtocolVersion(IntEnum):
@@ -752,6 +760,9 @@ class HiveMindListenerProtocol:
 
         message.update_hop_data()
 
+        if message.msg_type in WRAPPER_TYPES and not self._has_nested_payload(message, client):
+            return
+
         if message.msg_type == HiveMessageType.HANDSHAKE:
             self.handle_handshake_message(message, client)
         elif message.msg_type == HiveMessageType.HELLO:
@@ -782,6 +793,31 @@ class HiveMindListenerProtocol:
             self.handle_unknown_message(message, client)
 
         self.update_last_seen(client)
+
+    def _has_nested_payload(self, message: HiveMessage,
+                            client: HiveMindClientConnection) -> bool:
+        """Check that a wrapper message carries the nested ``HiveMessage`` that
+        HIVEMIND-MSG-1 §4 requires.
+
+        A peer that nests something else — a bus ``Message`` dict is the common
+        mistake — makes ``HiveMessage.payload`` raise while it rebuilds the
+        nested envelope, and that exception would escape the handler and take
+        the connection down. The frame is the sender's bug, so refuse it with
+        the ``hive.policy.denied`` reply used for every other refused message
+        and keep the peer connected: it is misinformed, not misbehaving, and it
+        needs the reply to learn that.
+        """
+        try:
+            message.payload
+        except Exception as e:
+            LOG.warning(f"malformed '{message.msg_type}' from {client.peer}: "
+                        f"payload is not a HiveMessage ({e})")
+            self._send_denied(
+                client, str(message.msg_type), MALFORMED_PAYLOAD,
+                f"'{message.msg_type}' payload must be a nested HiveMessage "
+                f"(HIVEMIND-MSG-1 §4)", {})
+            return False
+        return True
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(
