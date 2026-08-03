@@ -96,11 +96,13 @@ _DEFAULT = {
         ],
     },
 
-    # Optional debounce for the synchronous client-db last_seen write.
-    # The default preserves the old per-message update behavior. Set to a
-    # positive number of seconds only when the downstream runtime can absorb
-    # the extra admission rate.
-    "last_seen_update_interval": 0,
+    # Debounce for the synchronous client-db last_seen write. update_last_seen
+    # runs on every inbound message, inline on the tornado IOLoop thread; the
+    # JSON backend's commit() rewrites the entire client store on each call.
+    # 60 seconds is coarse enough that "when did we last hear from this
+    # client" stays accurate while cutting that write rate drastically. Set
+    # to 0 to write on every message (disables throttling entirely).
+    "last_seen_update_interval": 60,
 }
 
 

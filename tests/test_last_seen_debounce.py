@@ -90,6 +90,22 @@ def test_zero_last_seen_interval_preserves_per_message_updates():
     monotonic.assert_not_called()
 
 
+def test_default_config_throttles_last_seen_writes():
+    user = SimpleNamespace(last_seen=0)
+    db = FakeClientDatabase(user)
+    proto = _protocol(db)
+
+    with (
+        patch("hivemind_core.protocol.time.monotonic", side_effect=[100.0, 101.0]),
+        patch("hivemind_core.protocol.time.time", side_effect=[1000.0]),
+    ):
+        proto.update_last_seen(_client())
+        proto.update_last_seen(_client())
+
+    assert db.updates == 1
+    assert user.last_seen == 1000.0
+
+
 def test_disconnect_keeps_debounce_cache_for_shared_key_sibling():
     proto = _protocol(FakeClientDatabase(SimpleNamespace(last_seen=0)))
     disconnected = _client(peer="peer-1")
