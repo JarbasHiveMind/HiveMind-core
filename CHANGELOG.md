@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.15a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.14a1...4.10.15a1)
+
+**Merged pull requests:**
+
+- fix: key collected CASCADE responses by responder [\#190](https://github.com/JarbasHiveMind/HiveMind-core/pull/190) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.14a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.13a1...4.10.14a1)
@@ -18,19 +26,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
-
 ## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+
+## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
 
 **Merged pull requests:**
 
@@ -427,10 +435,6 @@
 ## [3.4.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0) (2025-04-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.0a1...3.4.0)
-
-**Merged pull requests:**
-
-- Release 3.4.0a1 [\#59](https://github.com/JarbasHiveMind/HiveMind-core/pull/59) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0a1) (2025-04-12)
 
