@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.11.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.2a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a3...4.11.2a1)
+
+**Merged pull requests:**
+
+- fix: a node answers a PING flood exactly once [\#196](https://github.com/JarbasHiveMind/HiveMind-core/pull/196) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
@@ -64,19 +72,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
-
 ## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+
+## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
 
 **Merged pull requests:**
 
