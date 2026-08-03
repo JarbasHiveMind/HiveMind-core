@@ -1590,11 +1590,14 @@ class HiveMindListenerProtocol:
 
     def _route_query_response(self, message: HiveMessage,
                               client: Optional[HiveMindClientConnection]):
-        """Route a QUERY response downstream toward its originator (direct
-        client if connected here, else fan to downstream peers).
+        """Route a QUERY response downstream toward its originator: the direct
+        client if it is connected here, else the downstream hop the request
+        arrived on (from the recorded route). A response that resolves to
+        neither is dropped — see the end of this method.
 
-        ``client`` is the connection the response arrived on, excluded from the
-        last-resort fan-out. It is None when the response came from upstream.
+        ``client`` is the connection the response arrived on; it is never a
+        return path for its own response. It is None when the response came
+        from upstream.
         """
         sender = client.peer if client else None
         metadata = message.metadata or {}
@@ -1640,11 +1643,12 @@ class HiveMindListenerProtocol:
             if src and src != sender and src in self.clients:
                 self.clients[src].send(message)
                 return
-        # unknown return path: fan downstream (excluding the sender) as a last resort
-        for peer in self.clients:
-            if peer == sender:
-                continue
-            self.clients[peer].send(message)
+        # no return path: the originator is not ours and the route names no
+        # peer we can reach. Fanning the response downstream would hand one
+        # peer's answer to its siblings (NODE-1 §5.2, AGENT-1 §3.2), so drop it.
+        LOG.warning(f"dropping {message.msg_type} response with no return path: "
+                    f"query_id={metadata.get('query_id', '')} "
+                    f"originator_peer={originator_peer}")
 
     def handle_query_message(self, message: HiveMessage,
                              client: HiveMindClientConnection):
