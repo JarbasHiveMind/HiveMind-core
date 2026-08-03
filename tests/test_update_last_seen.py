@@ -15,6 +15,7 @@ def _make_protocol(db):
     proto = object.__new__(HiveMindListenerProtocol)
     proto.db = db
     proto._last_seen_updates = {}
+    proto.last_seen_update_interval = 0
     return proto
 
 
