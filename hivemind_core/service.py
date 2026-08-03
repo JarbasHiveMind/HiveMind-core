@@ -8,7 +8,10 @@ from ovos_utils import create_daemon, wait_for_exit_signal
 from ovos_utils.log import LOG
 from ovos_utils.process_utils import ProcessStatus, StatusCallbackMap
 
+from hivemind_bus_client.client import HiveMessageBusClient
+from hivemind_bus_client.fakebus import FakeBus
 from hivemind_bus_client.identity import NodeIdentity
+from hivemind_bus_client.protocol import HiveMindSlaveProtocol
 from hivemind_core.config import get_server_config
 from hivemind_core.database import ClientDatabase
 from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
@@ -75,6 +78,7 @@ class HiveMindService:
 
     def __post_init__(self) -> None:
         self._presence = None
+        self._upstream = None
         self._status = self._status or ProcessStatus("HiveMind",
                                                      callback_map=StatusCallbackMap(
                                                          on_started=self.started_hook,
@@ -111,6 +115,51 @@ class HiveMindService:
         create_daemon(self._presence.start)
         LOG.info("LocalPresence started")
 
+    def _connect_upstream(self, hm_protocol: HiveMindListenerProtocol
+                          ) -> Optional[HiveMindSlaveProtocol]:
+        """Optionally connect this node to a master above it
+        (HIVEMIND-NODE-1 §3.3/§4).
+
+        Returns the bound ``HiveMindSlaveProtocol``, or None when no upstream
+        is configured — then the node is a top-level master, as before.
+
+        The websocket is opened on a daemon thread. ``connect`` blocks until
+        the handshake completes, so doing it inline would hold up startup for
+        as long as the master is unreachable. The client owns its own reconnect
+        loop, so once started it keeps retrying on its own.
+        """
+        config = get_server_config()["upstream"]
+        if not config["enabled"]:
+            return None
+
+        scheme = "wss://" if config["ssl"] else "ws://"
+        upstream = HiveMessageBusClient(key=config["key"],
+                                        password=config["password"],
+                                        host=scheme + config["host"],
+                                        port=config["port"],
+                                        self_signed=config["self_signed"])
+        slave = HiveMindSlaveProtocol(hm=upstream)
+        hm_protocol.bind_upstream(slave)
+        LOG.info(f"Upstream master: {config['host']}:{config['port']}")
+
+        def connect():
+            try:
+                # `connect` binds the slave to the bus before opening the
+                # socket; the upstream link shares no local OVOS bus
+                upstream.connect(bus=FakeBus(), protocol=slave,
+                                 site_id=self.identity.site_id)
+            except Exception:
+                LOG.exception("Failed to connect to the upstream master, "
+                              "retrying in the background")
+
+        create_daemon(connect)
+        self._upstream = slave
+        return slave
+
+    def _stop_upstream(self) -> None:
+        if self._upstream is not None:
+            self._upstream.hm.close()
+
     def _stop_presence(self) -> None:
         if self._presence is not None:
             self._presence.stop()
@@ -138,6 +187,9 @@ class HiveMindService:
                                        binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
 
+        # optionally connect this node to a master above it
+        self._connect_upstream(hm_protocol)
+
         # start network protocols that will carry HiveMessages
         protos = []
         for plug_name, plug_conf in get_server_config()["network_protocol"].items():
@@ -164,4 +216,5 @@ class HiveMindService:
         wait_for_exit_signal()  # block until ctrl+c
 
         self._stop_presence()
+        self._stop_upstream()
         self._status.set_stopping()

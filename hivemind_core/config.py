@@ -46,6 +46,21 @@ _DEFAULT = {
         "zeroconf": True,   # mDNS (optional zeroconf)
         "upnp": False,      # UPnP/SSDP (optional upnpclient)
     },
+    # optional connection to a master above this node — HIVEMIND-NODE-1
+    # §3.3/§4. Disabled by default: the node is a top-level master. Enable it
+    # and the node also holds one connection upstream.
+    # `key` and `password` are the credentials that master issued to this node
+    # with `hivemind-core add-client`. `ssl` picks ws:// or wss:// for `host`,
+    # and `self_signed` accepts a self-signed certificate from the master.
+    "upstream": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 5678,
+        "key": "",
+        "password": "",
+        "ssl": False,
+        "self_signed": True,
+    },
     "network_protocol": {"hivemind-websocket-plugin": {
                              "host": "0.0.0.0",
                              "port": 5678,
