@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Union, List, Optional, Callable, Literal
+from typing import Union, List, Dict, Optional, Callable, Literal
 
 import pybase64
 from ovos_bus_client import MessageBusClient
@@ -363,24 +363,38 @@ class CascadeResponse:
 
 @dataclass
 class CascadeCollector:
-    """Collects CASCADE responses for a given query_id at the originator."""
+    """Collects CASCADE responses for a given query_id at the originator.
+
+    HIVEMIND-AGENT-1 §4.3: collected responses are keyed by query identifier
+    **and responder**. The query identifier is this collector; the responder is
+    :attr:`_by_responder`. Every node answering a CASCADE streams its own chunk
+    sequence, so one responder's chunks accumulate into one
+    :class:`CascadeResponse` and two responders never share an entry.
+    """
     query_id: str
     originator_peer: str
     responses: List[CascadeResponse] = field(default_factory=list)
+    # responder_peer -> its entry in ``responses``; ``responses`` stays a list
+    # so a select callback sees responders in order of first arrival.
+    _by_responder: Dict[str, CascadeResponse] = field(default_factory=dict)
 
     def add_response(self, message: HiveMessage) -> 'CascadeResponse':
         meta = message.metadata or {}
-        resp = CascadeResponse(
-            responder_peer=meta.get("responder_peer", "unknown"),
-            responder_site_id=meta.get("responder_site_id", ""),
-            metadata=meta,
-        )
+        responder = meta.get("responder_peer", "unknown")
+        resp = self._by_responder.get(responder)
+        if resp is None:
+            resp = CascadeResponse(
+                responder_peer=responder,
+                responder_site_id=meta.get("responder_site_id", ""),
+                metadata=meta,
+            )
+            self._by_responder[responder] = resp
+            self.responses.append(resp)
         inner = message.payload
         if isinstance(inner, HiveMessage) and inner.msg_type == HiveMessageType.BUS:
             bus_msg = inner.payload
             if isinstance(bus_msg, Message):
                 resp.messages.append(bus_msg)
-        self.responses.append(resp)
         return resp
 
 
@@ -1606,7 +1620,10 @@ class HiveMindListenerProtocol:
                 and originator_peer in self.clients):
             query_id = metadata.get("query_id", "")
             if query_id not in self._pending_cascades:
-                while len(self._pending_cascades) >= 256:  # bound the collector map
+                # AGENT-1 §4.3: bound the collector map. It counts concurrent
+                # queries — a collector holds one entry per responder, so the
+                # per-query state is bounded by the mesh, not by chunk count.
+                while len(self._pending_cascades) >= 256:
                     self._pending_cascades.pop(next(iter(self._pending_cascades)))
                 self._pending_cascades[query_id] = CascadeCollector(
                     query_id=query_id, originator_peer=originator_peer)
