@@ -47,7 +47,8 @@ HiveMind supports multiple database plugins for storing client credentials:
 
 - **SQLite** (default for fresh installs): `hivemind_sqlite_database.SQLiteDB`.
 - **JSON** (kept for existing JSON deployments): `json_database.hpm.JsonDB`.
-- **Redis**: `hivemind_redis_database.RedisDB`.
+- **Redis**: `hivemind_redis_database.RedisDB`. Recommended for large deployments — see
+  [configuration.md](configuration.md#database).
 
 ---
 [Home](index.md) · [Installation →](installation.md)
