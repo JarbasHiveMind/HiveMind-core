@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
 import os.path
+from typing import Mapping, Optional
 
 from json_database import JsonStorageXDG
 from ovos_utils.log import LOG
@@ -45,6 +46,21 @@ _DEFAULT = {
         "name": "HiveMind-Node",
         "zeroconf": True,   # mDNS (optional zeroconf)
         "upnp": False,      # UPnP/SSDP (optional upnpclient)
+    },
+    # optional connection to a master above this node — HIVEMIND-NODE-1
+    # §3.3/§4. Disabled by default: the node is a top-level master. Enable it
+    # and the node also holds one connection upstream.
+    # `key` and `password` are the credentials that master issued to this node
+    # with `hivemind-core add-client`. `ssl` picks ws:// or wss:// for `host`,
+    # and `self_signed` accepts a self-signed certificate from the master.
+    "upstream": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 5678,
+        "key": "",
+        "password": "",
+        "ssl": False,
+        "self_signed": True,
     },
     "network_protocol": {"hivemind-websocket-plugin": {
                              "host": "0.0.0.0",
@@ -137,7 +153,36 @@ def get_server_config() -> JsonStorageXDG:
     if "chain" not in policy_cfg:
         policy_cfg["chain"] = list(_DEFAULT["policy"]["chain"])
     db["policy"] = policy_cfg
+    # the `upstream` block is indexed sub-key by sub-key at the use site
+    # (`HiveMindService._connect_upstream`), and that runs BEFORE the network
+    # protocols start. A hand-edited block holding only some of the keys — or
+    # `null` — raised KeyError/TypeError there and took the whole node offline,
+    # satellites included. Deep-merge it against the defaults, like the policy
+    # block above, so every sub-key is always present.
+    db["upstream"] = upstream_config(db)
     return db
+
+
+def upstream_config(server_config: Optional[Mapping] = None) -> dict:
+    """The ``upstream`` block, every sub-key present.
+
+    ``get_server_config`` calls this, so a config read the normal way is
+    already complete. It is also called at the read site
+    (``HiveMindService._connect_upstream``) because that is the code that
+    would take the node offline if a sub-key were ever missing, and merging
+    an already-merged block changes nothing.
+    """
+    if server_config is None:
+        server_config = get_server_config()
+    upstream = server_config.get("upstream")
+    if not isinstance(upstream, dict):
+        if "upstream" in server_config:
+            LOG.warning(
+                f"server.json 'upstream' is {type(upstream).__name__}, not a "
+                f"block of settings — using the defaults (upstream disabled)."
+            )
+        upstream = {}
+    return {**_DEFAULT["upstream"], **upstream}
 
 
 def runtime_password_min_bits() -> float:
