@@ -63,9 +63,24 @@ from hivemind_bus_client.hive_map import HiveMapper
 from hivemind_plugin_manager.protocols import AgentProtocol, BinaryDataHandlerProtocol, ClientCallbacks
 from hivemind_plugin_manager.database import Client
 from hivemind_plugin_manager.policy import PolicyPlugin
-from hivemind_core.policy import BACKEND_UNAVAILABLE, PolicyChain
+from hivemind_core.policy import (BACKEND_UNAVAILABLE, MALFORMED_PAYLOAD,
+                                  PolicyChain)
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
+
+#: HIVEMIND-MSG-1 §4: the payload of these message types IS a nested
+#: ``HiveMessage``. Every other type carries a bus ``Message``, binary data or
+#: a plain dict.
+#:
+#: The list is documentation only — ``_payload_is_usable`` does NOT use it.
+#: Choosing the guarded types by spec section is what let the first version of
+#: the guard through with holes in it: ``SHARED_BUS`` rebuilds a bus
+#: ``Message`` from ``payload["type"]`` (``handle_client_shared_bus``) and is
+#: not in this list, and the wrapper handlers dereference the payload of the
+#: payload as well. Every type is checked instead — see ``_payload_is_usable``.
+WRAPPER_TYPES = (HiveMessageType.PROPAGATE, HiveMessageType.BROADCAST,
+                 HiveMessageType.ESCALATE, HiveMessageType.QUERY,
+                 HiveMessageType.CASCADE)
 
 
 class ProtocolVersion(IntEnum):
@@ -746,6 +761,12 @@ class HiveMindListenerProtocol:
 
         Process message from client, decide what to do internally here
         """
+        # BEFORE the debug log below: rendering a HiveMessage calls as_json,
+        # which asserts the payload is a dict, so a frame with a payload of
+        # ``7`` or ``[1, 2]`` crashes on the log line, not in a handler.
+        if not self._payload_is_usable(message, client):
+            return
+
         LOG.debug(f"message: {message}")
         # update internal peer ID
         message.update_source_peer(client.peer)
@@ -782,6 +803,71 @@ class HiveMindListenerProtocol:
             self.handle_unknown_message(message, client)
 
         self.update_last_seen(client)
+
+    @staticmethod
+    def _probe_payload(message: HiveMessage) -> None:
+        """Do everything ``handle_message`` and its handlers will later do to
+        the payload of ``message``, so a payload that cannot be reconstructed
+        raises here instead of inside a handler. Raises whatever the
+        reconstruction raises.
+
+        Two things touch the payload of an incoming frame:
+
+        * ``as_json`` — the ``LOG.debug`` at the top of ``handle_message``
+          renders the message, and ``as_dict`` asserts the payload is a dict.
+        * ``HiveMessage.payload`` — it REBUILDS the payload for the types that
+          carry a nested envelope: a bus ``Message`` for ``BUS`` and
+          ``SHARED_BUS`` (``payload["type"]``), a ``HiveMessage`` for the five
+          wrapper types (``HiveMessage(**payload)``). Both raise on a payload
+          of the wrong shape. Every other type returns the payload as stored
+          and can never raise, so probing unconditionally is free for them —
+          and it removes the audit that the first version of this guard got
+          wrong.
+
+        The walk down the chain is what makes the guard deep enough. A wrapper
+        handler does not stop at ``message.payload``: it reads
+        ``message.payload.payload`` (``handle_propagate_message``,
+        ``handle_escalate_message``, ``_answer_query_locally``) and forwards
+        ``message.payload`` on to the next node, which will read a level deeper
+        again. So every level is rebuilt here, not one. The loop terminates
+        because each step descends one level of an already-parsed JSON object,
+        and json.loads has bounded the depth before this point.
+        """
+        if message.msg_type != HiveMessageType.BINARY:
+            message.as_dict  # what LOG.debug/__str__ does
+        node = message
+        while True:
+            payload = node.payload
+            if not isinstance(payload, HiveMessage):
+                return
+            node = payload
+
+    def _payload_is_usable(self, message: HiveMessage,
+                           client: HiveMindClientConnection) -> bool:
+        """Check the payload of ``message`` can be reconstructed, at every
+        level, before anything dereferences it.
+
+        A peer that sends a payload of the wrong shape — a bus ``Message`` dict
+        where HIVEMIND-MSG-1 §4 requires a nested ``HiveMessage``, a nested
+        envelope missing ``type``, a bare number — makes the reconstruction
+        raise, and the exception would escape the message handler and take the
+        connection down. The frame is the sender's bug, so refuse it with the
+        ``hive.policy.denied`` reply used for every other refused message and
+        keep the peer connected: it is misinformed, not misbehaving, and it
+        needs the reply to learn that.
+        """
+        try:
+            self._probe_payload(message)
+        except Exception as e:
+            LOG.warning(f"malformed '{message.msg_type}' from {client.peer}: "
+                        f"payload can not be reconstructed "
+                        f"({type(e).__name__}: {e})")
+            self._send_denied(
+                client, str(message.msg_type), MALFORMED_PAYLOAD,
+                f"'{message.msg_type}' payload can not be reconstructed "
+                f"(HIVEMIND-MSG-1 §4)", {})
+            return False
+        return True
 
     # HiveMind protocol messages -  from slave -> master
     def handle_unknown_message(
