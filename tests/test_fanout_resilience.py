@@ -73,12 +73,27 @@ def test_fanout_serializes_once_not_once_per_peer():
     proto.clients = {originator.peer: originator,
                      **{p.peer: p for p in peers}}
 
-    with patch.object(HiveMessage, "serialize",
-                      wraps=HiveMessage.serialize, autospec=True) as spy:
+    # NOTE: deliberately NOT using patch.object(..., autospec=True, wraps=...)
+    # here. On Python 3.10, autospec's signature-checking wrapper around a
+    # `wraps`-forwarded call returns a MagicMock instead of the real
+    # function's return value (fixed upstream in 3.11), which made
+    # HiveMessage.serialize() appear to return a non-str object. That was a
+    # mocking-library gotcha, not a fan-out behavior difference -- so we
+    # count calls with a plain forwarding function instead, which is
+    # version-independent.
+    original_serialize = HiveMessage.serialize
+    call_count = 0
+
+    def _counting_serialize(self):
+        nonlocal call_count
+        call_count += 1
+        return original_serialize(self)
+
+    with patch.object(HiveMessage, "serialize", _counting_serialize):
         proto.handle_broadcast_message(_broadcast(), originator)
 
-    assert spy.call_count == 1, \
-        f"expected message.serialize() once per fan-out, called {spy.call_count} times"
+    assert call_count == 1, \
+        f"expected message.serialize() once per fan-out, called {call_count} times"
 
     for p in peers:
         p.send.assert_called_once()
