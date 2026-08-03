@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.16a1...4.11.0a1)
+
+**Merged pull requests:**
+
+- feat: let a node be given an upstream in server.json [\#194](https://github.com/JarbasHiveMind/HiveMind-core/pull/194) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.16a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.16a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.15a1...4.10.16a1)
