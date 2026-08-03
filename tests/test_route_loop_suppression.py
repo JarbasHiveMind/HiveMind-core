@@ -75,7 +75,7 @@ def test_propagate_appends_self_hop_keyed_on_public_key():
     node = _make_node("pubkey-A")
     sent = []
     conn = MagicMock()
-    conn.send = lambda m: sent.append(m)
+    conn.send = lambda m, *a: sent.append(m)
     node.clients = {"downstream::9": conn}
 
     msg = _propagate("hi")
@@ -108,7 +108,7 @@ def test_multirelay_chain_delivers_under_shared_default_peer():
     delivered = {}
 
     def wire(src_node, dst_node, edge):
-        def send(payload):
+        def send(payload, *a):
             outer = HiveMessage(HiveMessageType.PROPAGATE, payload=payload)
             outer.replace_route(payload.route)
             queue.append((dst_node, outer, edge))
@@ -146,7 +146,7 @@ def test_looped_propagate_delivers_locally_but_is_not_reforwarded():
     node = _make_node("pubkey-A")
     sent = []
     conn = MagicMock()
-    conn.send = lambda m: sent.append(m)
+    conn.send = lambda m, *a: sent.append(m)
     node.clients = {"downstream::9": conn}
 
     msg = _propagate("loop")
@@ -173,7 +173,7 @@ def test_propagate_ring_terminates():
     forwards = {"pubkey-A": 0, "pubkey-B": 0, "pubkey-C": 0}
 
     def wire(src_node, dst_node, edge):
-        def send(payload):
+        def send(payload, *a):
             forwards[src_node.identity.public_key] += 1
             outer = HiveMessage(HiveMessageType.PROPAGATE, payload=payload)
             outer.replace_route(payload.route)
@@ -261,7 +261,7 @@ def test_cascade_appends_self_hop_and_drops_on_loop():
     node = _cascade_node("pubkey-K")
     sent, upstream = [], []
     conn = MagicMock()
-    conn.send = lambda m: sent.append(m)
+    conn.send = lambda m, *a: sent.append(m)
     node.clients = {"downstream::9": conn}
     node._upstream_hm = MagicMock()
     node._upstream_hm.emit = lambda m: upstream.append(m)
@@ -282,7 +282,7 @@ def test_cascade_appends_self_hop_and_drops_on_loop():
     node2 = _cascade_node("pubkey-K")
     sent2, upstream2 = [], []
     conn2 = MagicMock()
-    conn2.send = lambda m: sent2.append(m)
+    conn2.send = lambda m, *a: sent2.append(m)
     node2.clients = {"downstream::9": conn2}
     node2._upstream_hm = MagicMock()
     node2._upstream_hm.emit = lambda m: upstream2.append(m)

@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
 import json
+import logging
 import os
 import time
 import uuid
@@ -72,6 +73,15 @@ from hivemind_core.policy import (BACKEND_UNAVAILABLE, MALFORMED_PAYLOAD,
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
 from Cryptodome.PublicKey import RSA
+
+#: Stdlib logger used ONLY in ``HiveMindClientConnection.send()``'s per-peer hot
+#: path. ``ovos_utils.log.LOG.debug`` is a classmethod that calls
+#: ``inspect.stack()`` before checking the log level, so a *suppressed* call
+#: still costs 3+ orders of magnitude more than stdlib, which checks the level
+#: first. Measured at ~570ms of ~816ms in a 1000-peer fan-out. Everywhere else
+#: in this file keeps using ovos ``LOG`` on purpose, so it routes into OVOS's
+#: logging setup — do not "fix" this one back to match.
+_log = logging.getLogger(__name__)
 
 #: HIVEMIND-MSG-1 §4: the payload of these message types IS a nested
 #: ``HiveMessage``. Every other type carries a bus ``Message``, binary data or
@@ -253,15 +263,23 @@ class HiveMindClientConnection:
         # this is how ovos refers to connected nodes in message.context
         return f"{self.name}::{self.sess.session_id}{self._peer_suffix}"
 
-    def send(self, message: HiveMessage):
+    def send(self, message: HiveMessage, plaintext: Optional[str] = None):
+        """Send ``message`` to this peer.
+
+        ``plaintext`` lets a fan-out caller pass a pre-serialized
+        ``message.serialize()`` result, computed once for the whole fan-out
+        instead of once per peer (serialization is not cheap and does not
+        depend on the peer). Encryption still happens per peer below, since
+        each connection has its own crypto state.
+        """
         is_bin = message.msg_type == HiveMessageType.BINARY
         if not is_bin and message.msg_type == HiveMessageType.BUS:
             _payload_type = (message.payload.get("type")
                              if isinstance(message.payload, dict)
                              else message.payload.msg_type)
-            LOG.debug(f"mycroft_type {_payload_type}")
+            _log.debug("mycroft_type %s", _payload_type)
 
-        LOG.debug(f"sending to {self.peer}: {message.msg_type}")
+        _log.debug("sending to %s: %s", self.peer, message.msg_type)
 
         if self.noise_transport is not None:
             # protocol v3: every message (HELLO/HANDSHAKE included) is a Noise
@@ -272,7 +290,7 @@ class HiveMindClientConnection:
                                         hivemeta=message.metadata,
                                         binary_type=message.bin_type).bytes
             else:
-                payload = message.serialize()
+                payload = plaintext if plaintext is not None else message.serialize()
             self.send_msg(self.noise_transport.encrypt_frame(payload), True)
             return
 
@@ -285,20 +303,20 @@ class HiveMindClientConnection:
                                         payload=message.payload,
                                         hivemeta=message.metadata,
                                         binary_type=message.bin_type).bytes
-                LOG.debug(f"unencrypted binary payload size: {len(payload)} bytes")
+                _log.debug("unencrypted binary payload size: %d bytes", len(payload))
                 payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
                 is_bin = True
             else:
-                plaintext = message.serialize()
-                LOG.debug(f"unencrypted payload size: {len(plaintext)} bytes")
+                plaintext = plaintext if plaintext is not None else message.serialize()
+                _log.debug("unencrypted payload size: %d bytes", len(plaintext))
                 payload = encrypt_as_json(
                     key=self.crypto_key, plaintext=plaintext,
                     cipher=self.cipher, encoding=self.encoding
                 )  # json string
-            LOG.debug(f"encrypted payload size: {len(payload)} bytes")
+            _log.debug("encrypted payload size: %d bytes", len(payload))
         else:
-            payload = message.serialize()
-            LOG.debug(f"sent unencrypted!")
+            payload = plaintext if plaintext is not None else message.serialize()
+            _log.debug("sent unencrypted!")
 
         self.send_msg(payload, is_bin)
 
@@ -1412,10 +1430,14 @@ class HiveMindListenerProtocol:
         # broadcast message to other peers (NODE-1 §3.3: keep the envelope)
         fwd = self._rewrap(message, payload)
         # snapshot: disconnects/reconnects mutate self.clients from other threads
+        plaintext = fwd.serialize()
         for conn in list(self.clients.values()):
             if conn.peer == client.peer:
                 continue
-            conn.send(fwd)
+            try:
+                conn.send(fwd, plaintext)
+            except Exception:
+                LOG.exception(f"failed to forward to {conn.peer}")
 
     def _unpack_message(self, message: HiveMessage, client: HiveMindClientConnection):
         # propagate message to other peers
@@ -1561,10 +1583,14 @@ class HiveMindListenerProtocol:
         # propagate message to other peers (NODE-1 §3.3: keep the envelope, so a
         # peer receives a PROPAGATE it can fan out again instead of a bare BUS)
         fwd = self._rewrap(message, payload)
+        plaintext = fwd.serialize()
         for conn in list(self.clients.values()):
             if conn.peer == client.peer:
                 continue
-            conn.send(fwd)
+            try:
+                conn.send(fwd, plaintext)
+            except Exception:
+                LOG.exception(f"failed to forward to {conn.peer}")
 
         # forward upstream to the master this node relays to (no-op at top level)
         self.propagate_to_master(fwd)
@@ -1693,8 +1719,17 @@ class HiveMindListenerProtocol:
         # NODE-1 §4: a PING fans out across the whole mesh — downstream peers
         # and upstream alike, so a master learns of nodes below a relay and a
         # satellite still sees the relay it is attached to.
+        #
+        # The envelope is serialized once and handed to every peer: the
+        # plaintext is identical for all of them, only the per-connection
+        # encryption differs. One peer failing to send must not cost the
+        # others their PING, so each send is isolated.
+        plaintext = own_ping_outer.serialize()
         for conn in list(self.clients.values()):
-            conn.send(own_ping_outer)
+            try:
+                conn.send(own_ping_outer, plaintext)
+            except Exception:
+                LOG.exception(f"failed to send PING to {conn.peer}")
         if owes_upstream:
             self.propagate_to_master(own_ping_outer)
 
@@ -1737,8 +1772,12 @@ class HiveMindListenerProtocol:
                       f"route={message.route}")
             return
         self._append_self_hop(message)
+        plaintext = message.serialize()
         for conn in list(self.clients.values()):
-            conn.send(message)
+            try:
+                conn.send(message, plaintext)
+            except Exception:
+                LOG.exception(f"failed to relay to {conn.peer}")
 
     def broadcast_from_master(self, message: HiveMessage) -> None:
         """Fan a BROADCAST received from the upstream master out to all
@@ -1748,8 +1787,12 @@ class HiveMindListenerProtocol:
         directly connected downstream nodes, never re-broadcast by recipients.
         It only ever travels upstream-to-downstream, so it cannot cycle.
         """
+        plaintext = message.serialize()
         for conn in list(self.clients.values()):
-            conn.send(message)
+            try:
+                conn.send(message, plaintext)
+            except Exception:
+                LOG.exception(f"failed to broadcast to {conn.peer}")
 
     def propagate_from_master(self, message: HiveMessage) -> None:
         """Fan a PROPAGATE received from the upstream master out to all
@@ -2058,10 +2101,14 @@ class HiveMindListenerProtocol:
             return
 
         cascade_fwd = self._rewrap(message, payload, metadata)
+        plaintext = cascade_fwd.serialize()
         for conn in list(self.clients.values()):
             if conn.peer == client.peer:
                 continue
-            conn.send(cascade_fwd)
+            try:
+                conn.send(cascade_fwd, plaintext)
+            except Exception:
+                LOG.exception(f"failed to forward to {conn.peer}")
         self.cascade_to_master(cascade_fwd)
 
     def handle_escalate_message(

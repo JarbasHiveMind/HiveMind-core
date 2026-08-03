@@ -64,7 +64,7 @@ def test_responsive_ping_announces_the_node_key():
     node = _make_node()
     sent = []
     conn = _client()
-    conn.send = sent.append
+    conn.send = lambda m, *a: sent.append(m)
     node.clients = {conn.peer: conn}
     node.propagate_to_master = lambda msg: None
 
