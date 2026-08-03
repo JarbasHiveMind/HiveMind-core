@@ -448,6 +448,15 @@ class HiveMindListenerProtocol:
     hive_mapper: HiveMapper = dataclasses.field(default_factory=HiveMapper)
     policy_chain: Optional[PolicyChain] = None
 
+    # Throttle state for the mesh-wide responsive PING flood. Both are
+    # declared as fields with plain (immutable) defaults, not just assigned in
+    # __post_init__, so that a test fixture built with ``object.__new__``
+    # finds working values instead of raising AttributeError on the ping path.
+    # __post_init__ still overwrites ping_flood_interval from config, so
+    # operator config keeps winning.
+    _last_ping_flood: float = field(default=0.0, init=False, repr=False)
+    ping_flood_interval: float = field(default=30.0, init=False)
+
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
@@ -479,13 +488,15 @@ class HiveMindListenerProtocol:
         # last for the lifetime of this listener (the Client DB model has no
         # pubkey column yet).
         self.trusted_pubkeys: dict = {}  # client.key -> PEM public key
-        # Already-answered PING floods (MSG-1 §4). Set-like, FIFO-evicting.
+        # Already-answered PING floods (MSG-1 §4). Set-like, FIFO-evicting:
+        # a dedup miss re-triggers a whole flood, so an eviction that drops a
+        # live flood_id amplifies the very traffic this cache exists to stop.
         # bind_upstream hands this exact object to the upstream slave
         # protocol so a node with an upstream keeps ONE flood cache, not one
         # per protocol object.
         self._seen_flood_ids: FloodIdCache = FloodIdCache()
-        # Floods this listener half has already fanned out downstream. Private
-        # to this half, unlike ``_seen_flood_ids`` above: see
+        # Floods this listener half has already decided how to answer.
+        # Private to this half, unlike ``_seen_flood_ids`` above: see
         # ``handle_ping_message`` for why the node needs both records.
         self._answered_floods: FloodIdCache = FloodIdCache()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
@@ -493,6 +504,10 @@ class HiveMindListenerProtocol:
         self.last_seen_update_interval = _non_negative_float(
             get_server_config().get("last_seen_update_interval", 0),
             0.0,
+        )
+        self.ping_flood_interval = _non_negative_float(
+            get_server_config().get("ping_flood_interval", 30),
+            30.0,
         )
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
@@ -1560,9 +1575,11 @@ class HiveMindListenerProtocol:
         """Handle an inner PING message received inside a PROPAGATE wrapper.
 
         Feeds the PING into the local ``HiveMapper``, emits ``hive.ping.received``
-        on the agent bus, then — if this ``flood_id`` has not been seen before —
-        builds and sends this node's own responsive PING (same ``flood_id``) to
-        all peers and upstream.
+        on the agent bus for each newly observed peer, then — if this
+        ``flood_id`` has not been seen before — answers with this node's own
+        PING carrying the same ``flood_id``. That answer fans out to all peers
+        and upstream at most once per ``ping_flood_interval`` seconds; inside
+        the window it goes to the asking peer alone.
 
         Args:
             message: Inner PING HiveMessage (route already transferred from outer
@@ -1576,18 +1593,26 @@ class HiveMindListenerProtocol:
 
         flood_id = ping_payload.get("flood_id", "")
 
-        # Always feed mapper (register sender info)
-        self.hive_mapper.on_ping(message, received_at=time.time())
+        # The mapper is the topology view, so it must see arrivals the dedup
+        # gate below drops: each one names a different peer and carries a
+        # different route. It keeps its own (flood_id, peer) index and answers
+        # False for an arrival it has already folded in.
+        new_to_map = self.hive_mapper.on_ping(message, received_at=time.time())
 
-        # Surface every observed PING on the agent bus (discovery/telemetry).
-        # Fires for satellite-originated and flood-cycle pings alike, before the
-        # dedup gate below.
-        self.agent_protocol.bus.emit(Message("hive.ping.received", {
-            "flood_id": flood_id,
-            "peer": ping_payload.get("peer"),
-            "site_id": ping_payload.get("site_id"),
-            "timestamp": ping_payload.get("timestamp"),
-        }))
+        # Surface observed PINGs on the agent bus (discovery/telemetry), gated
+        # on the mapper's novelty answer so one send goes out per (flood_id,
+        # peer) instead of one per arrival. A peer that reaches us over several
+        # mesh paths is the same observation each time, and repeating it puts
+        # the mesh's fan-out factor onto the agent bus. Still ahead of the
+        # dedup gate: a flood we already answered keeps carrying peers we have
+        # never seen, and those are the discoveries.
+        if new_to_map:
+            self.agent_protocol.bus.emit(Message("hive.ping.received", {
+                "flood_id": flood_id,
+                "peer": ping_payload.get("peer"),
+                "site_id": ping_payload.get("site_id"),
+                "timestamp": ping_payload.get("timestamp"),
+            }))
 
         # Flood-loop prevention (MSG-1 §4): answer a flood at most once.
         #
@@ -1602,14 +1627,17 @@ class HiveMindListenerProtocol:
         #   * ``_seen_flood_ids`` — shared with the upstream slave protocol
         #     (see bind_upstream). It says "a half of this node already sent
         #     the answer upstream", so the master never sees two.
-        #   * ``_answered_floods`` — private to this half. It says "the
-        #     downstream fan-out already happened", so repeat arrivals from
-        #     several clients do not re-flood.
-        if not flood_id or self._answered_floods.check(flood_id):
+        #   * ``_answered_floods`` — private to this half. It says "this half
+        #     already decided how to answer this flood", so repeat arrivals
+        #     from several clients neither re-flood nor re-answer.
+        #
+        # Both caches grow with the client count, because every connected peer
+        # can start a flood of its own. A fixed 1000 thrashes on a large mesh,
+        # and each eviction of a live flood_id buys a duplicate flood.
+        flood_cache_size = max(1000, len(self.clients) * 100)
+        if not flood_id or self._answered_floods.check(flood_id,
+                                                       max_size=flood_cache_size):
             return
-        # atomic across both halves: whoever wins owes upstream the answer,
-        # the loser already has one in flight from its other half
-        owes_upstream = not self._seen_flood_ids.check(flood_id)
 
         # Build our own responsive PING with the same flood_id.
         # ``peer`` is the map key; ``public_key`` is the node's stable
@@ -1625,6 +1653,40 @@ class HiveMindListenerProtocol:
         }
         own_ping_inner = HiveMessage(HiveMessageType.PING, own_ping_payload)
         own_ping_outer = HiveMessage(HiveMessageType.PROPAGATE, payload=own_ping_inner)
+
+        # Every satellite floods on its own schedule, and each flood costs this
+        # node one send per peer, so unthrottled the node's work per round grows
+        # with the square of the mesh size — the point where a large site stops
+        # completing rounds at all. At most one mesh-wide fan-out per
+        # ping_flood_interval seconds; the peers that ask inside that window are
+        # answered directly instead, one send each.
+        #
+        # This check comes BEFORE the ``_seen_flood_ids`` claim below, and the
+        # order is load-bearing. That claim means "this node owes the master an
+        # answer for this flood, and the other half must not send a second
+        # one". Claiming it and then returning here would leave the answer owed
+        # by nobody: the throttled half never sends it, and the slave half is
+        # suppressed because the claim is shared. The master would silently
+        # stop seeing this node. Taking the throttle first leaves the claim
+        # untouched, so nothing is promised that is not then sent.
+        #
+        # The accepted cost is that a throttled flood carries no answer of ours
+        # upstream at all. That is the point of the throttle, and the next
+        # unthrottled flood re-announces this node.
+        now = time.time()
+        if now - self._last_ping_flood < self.ping_flood_interval:
+            LOG.debug(f"answering PING flood_id={flood_id} to {client.peer} only; "
+                      f"next mesh-wide flood in "
+                      f"{self.ping_flood_interval - (now - self._last_ping_flood):.1f}s")
+            client.send(own_ping_outer)
+            return
+        self._last_ping_flood = now
+
+        # Past the throttle, so this really is a mesh-wide answer. Atomic
+        # across both halves: whoever wins owes upstream the answer, the loser
+        # already has one in flight from its other half.
+        owes_upstream = not self._seen_flood_ids.check(flood_id,
+                                                       max_size=flood_cache_size)
 
         LOG.debug(f"Sending responsive PING for flood_id={flood_id}")
 

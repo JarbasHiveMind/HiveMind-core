@@ -96,6 +96,15 @@ _DEFAULT = {
         ],
     },
 
+    # Minimum seconds between two responsive PING floods emitted by this node.
+    # Answering a flood costs one send per connected peer, and every satellite
+    # floods on its own schedule, so with no floor here the node's fan-out work
+    # grows with the square of the mesh size. Inside the window the node still
+    # answers the peer that pinged it — directly, one send — so that peer's map
+    # is never wrong; only the mesh-wide fan-out waits. Keep this well under the
+    # satellites' own ping period, or a node's entry in remote maps goes stale.
+    "ping_flood_interval": 30,
+
     # Debounce for the synchronous client-db last_seen write. update_last_seen
     # runs on every inbound message, inline on the tornado IOLoop thread; the
     # JSON backend's commit() rewrites the entire client store on each call.
