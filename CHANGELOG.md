@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.10.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.14a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.13a1...4.10.14a1)
+
+**Merged pull requests:**
+
+- fix: drop QUERY/CASCADE responses with no return path [\#189](https://github.com/JarbasHiveMind/HiveMind-core/pull/189) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.10.13a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.13a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.12a1...4.10.13a1)
@@ -427,10 +435,6 @@
 ## [3.4.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.0a1) (2025-04-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.3.0a1...3.4.0a1)
-
-**Merged pull requests:**
-
-- feat: print-config cli util [\#58](https://github.com/JarbasHiveMind/HiveMind-core/pull/58) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [3.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.3.0a1) (2025-02-16)
 
