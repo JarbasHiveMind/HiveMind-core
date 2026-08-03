@@ -67,6 +67,7 @@ from hivemind_core.policy import (BACKEND_UNAVAILABLE, MALFORMED_PAYLOAD,
                                   PolicyChain)
 from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
+from Cryptodome.PublicKey import RSA
 
 #: HIVEMIND-MSG-1 §4: the payload of these message types IS a nested
 #: ``HiveMessage``. Every other type carries a bus ``Message``, binary data or
@@ -228,7 +229,19 @@ class HiveMindClientConnection:
         self._resolved_user_ts = 0.0
 
     def __post_init__(self):
-        self.handshake = self.handshake or HandShake(self.hm_protocol.identity.private_key)
+        # Reuse the node's already-imported RSA key (loaded once in
+        # HiveMindListenerProtocol.__post_init__) instead of re-reading and
+        # re-validating the PEM file on every connection — PyCryptodome's
+        # validation of a 2048-bit key measured 35-58ms, and it used to run
+        # inline on the IOLoop thread serving every connected client. Only
+        # the immutable ``private_key`` is shared; the HandShake instance
+        # itself is fresh per connection, since ``target_key``/``secret``
+        # hold per-peer session state that must never leak between clients.
+        if not self.handshake:
+            self.handshake = HandShake.__new__(HandShake)
+            self.handshake.private_key = self.hm_protocol.identity_rsa_key
+            self.handshake.target_key = None
+            self.handshake.secret = None
 
     @property
     def peer(self) -> str:
@@ -445,6 +458,12 @@ class HiveMindListenerProtocol:
     default_lang = "en-US"
 
     def __post_init__(self):
+        # Cache for the node's RSA identity key (see identity_rsa_key below).
+        # Left unset here: constructing HiveMindListenerProtocol must stay
+        # cheap and must not touch the key file, since embedders and tests
+        # routinely build one with a placeholder ``identity`` and never open
+        # a connection.
+        self._identity_rsa_key = None
         self.clients = {}
         # TOFU pinning store for INTERCOM origin authentication
         # (HIVEMIND-CRYPTO-1 §5). Maps a client's access key to the PEM
@@ -484,6 +503,25 @@ class HiveMindListenerProtocol:
         # every chain is normalized, including one handed to the constructor
         # by an embedder \u2014 the builtin gates are not opt-out
         self.policy_chain = self._with_builtin_policies(self.policy_chain)
+
+    @property
+    def identity_rsa_key(self) -> RSA.RsaKey:
+        """The node's RSA identity key, imported from disk at most once.
+
+        Every HiveMindClientConnection shares this same immutable key object
+        instead of each re-reading and re-validating the PEM file itself —
+        PyCryptodome's validation of a 2048-bit key measured 35-58ms, and it
+        used to run inline on the IOLoop thread serving every connected
+        client. Only this key is shared; each connection still gets its own
+        fresh HandShake instance (see HiveMindClientConnection.__post_init__)
+        because target_key/secret are per-peer session state that must never
+        leak between connections. HandShake's own load-or-generate-if-missing
+        logic is reused as-is; we keep only the resulting key object, never
+        the bootstrap HandShake instance itself.
+        """
+        if self._identity_rsa_key is None:
+            self._identity_rsa_key = HandShake(self.identity.private_key).private_key
+        return self._identity_rsa_key
 
     def _with_builtin_policies(self, chain: PolicyChain) -> PolicyChain:
         """Return ``chain`` with the non-removable builtin policies first.
