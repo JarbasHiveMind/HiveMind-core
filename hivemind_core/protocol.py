@@ -484,6 +484,10 @@ class HiveMindListenerProtocol:
         # protocol so a node with an upstream keeps ONE flood cache, not one
         # per protocol object.
         self._seen_flood_ids: FloodIdCache = FloodIdCache()
+        # Floods this listener half has already fanned out downstream. Private
+        # to this half, unlike ``_seen_flood_ids`` above: see
+        # ``handle_ping_message`` for why the node needs both records.
+        self._answered_floods: FloodIdCache = FloodIdCache()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         self._last_seen_updates: dict = {}  # client.key -> last persisted timestamp
         self.last_seen_update_interval = _non_negative_float(
@@ -769,9 +773,9 @@ class HiveMindListenerProtocol:
         except:
             LOG.exception("error on disconnect agent callback")
 
-        if client.peer in self.clients:
-            self.clients.pop(client.peer)
-        if not any(conn.key == client.key for conn in self.clients.values()):
+        self.clients.pop(client.peer, None)
+        # snapshot: a reconnect on another thread can insert while we iterate
+        if not any(conn.key == client.key for conn in list(self.clients.values())):
             self._last_seen_updates.pop(client.key, None)
         client.disconnect()
         context = {"source": client.peer}
@@ -1586,12 +1590,26 @@ class HiveMindListenerProtocol:
         }))
 
         # Flood-loop prevention (MSG-1 §4): answer a flood at most once.
-        # ``_seen_flood_ids`` is shared with the upstream slave protocol when
-        # this node has one (see bind_upstream), so the two halves of one
-        # node answer once between them, not once each.
-        if not flood_id or flood_id in self._seen_flood_ids:
+        #
+        # "Once" is once per node, not once per direction. NODE-1 §4 says a
+        # responsive PING is itself PROPAGATE-wrapped and fans out across the
+        # mesh, so the node's single answer must reach downstream clients AND
+        # upstream. Suppressing this whole half because the slave half already
+        # answered upstream leaves the relay missing from the hive map of the
+        # very clients attached to it.
+        #
+        # So the node keeps two records:
+        #   * ``_seen_flood_ids`` — shared with the upstream slave protocol
+        #     (see bind_upstream). It says "a half of this node already sent
+        #     the answer upstream", so the master never sees two.
+        #   * ``_answered_floods`` — private to this half. It says "the
+        #     downstream fan-out already happened", so repeat arrivals from
+        #     several clients do not re-flood.
+        if not flood_id or self._answered_floods.check(flood_id):
             return
-        self._seen_flood_ids.add(flood_id)
+        # atomic across both halves: whoever wins owes upstream the answer,
+        # the loser already has one in flight from its other half
+        owes_upstream = not self._seen_flood_ids.check(flood_id)
 
         # Build our own responsive PING with the same flood_id.
         # ``peer`` is the map key; ``public_key`` is the node's stable
@@ -1611,10 +1629,12 @@ class HiveMindListenerProtocol:
         LOG.debug(f"Sending responsive PING for flood_id={flood_id}")
 
         # NODE-1 §4: a PING fans out across the whole mesh — downstream peers
-        # and upstream alike, so a master learns of nodes below a relay
+        # and upstream alike, so a master learns of nodes below a relay and a
+        # satellite still sees the relay it is attached to.
         for conn in list(self.clients.values()):
             conn.send(own_ping_outer)
-        self.propagate_to_master(own_ping_outer)
+        if owes_upstream:
+            self.propagate_to_master(own_ping_outer)
 
     def bind_upstream(self, slave) -> None:
         """Bind a ``HiveMindSlaveProtocol`` as this node's upstream connection,
@@ -1628,10 +1648,15 @@ class HiveMindListenerProtocol:
         different identities, because the slave answers as its connection
         peer and the listener as its public key. The flood's originator then
         records two nodes where there is one. Sharing ``_seen_flood_ids``
-        makes the first half to see a ``flood_id`` suppress the other, which
-        is what HIVEMIND-NODE-1 §4 requires: the **node** takes part exactly
-        once. A node with no upstream never gets here and still answers
-        exactly once, through the listener.
+        makes the first half to see a ``flood_id`` claim the upstream answer
+        and suppress the other, which is what HIVEMIND-NODE-1 §4 requires:
+        the **node** takes part exactly once. A node with no upstream never
+        gets here and still answers exactly once, through the listener.
+
+        Sharing the cache settles the *upstream* answer only. The downstream
+        fan-out stays with the listener either way — see
+        ``handle_ping_message`` — because a relay must appear in the hive map
+        of its own clients, not only in its master's.
         """
         self._upstream_hm = slave.hm
         slave.bind_flood_cache(self._seen_flood_ids)
@@ -1800,11 +1825,16 @@ class HiveMindListenerProtocol:
         sender = client.peer if client else None
         metadata = message.metadata or {}
         originator_peer = metadata.get("originator_peer", "")
+        # One lookup serves both the CASCADE gate below and the default route
+        # at the end. An "in" check followed by an index would KeyError if the
+        # originator disconnected between the two, and that KeyError travels up
+        # to the websocket handler and drops the *responder's* connection.
+        originator_conn = self.clients.get(originator_peer)
         # CASCADE disambiguation: collect responses for a select callback at
         # the originating node, letting it pick a winner progressively.
         if (message.msg_type == HiveMessageType.CASCADE
                 and self.cascade_select_callback is not None
-                and originator_peer in self.clients):
+                and originator_conn is not None):
             query_id = metadata.get("query_id", "")
             if query_id not in self._pending_cascades:
                 # AGENT-1 §4.3: bound the collector map. It counts concurrent
@@ -1817,7 +1847,7 @@ class HiveMindListenerProtocol:
             collector = self._pending_cascades[query_id]
             collector.add_response(message)
             try:
-                bus = self.get_bus(self.clients[originator_peer])
+                bus = self.get_bus(originator_conn)
             except ConnectionError as e:
                 # keep the collector: the responses stay queued and the next
                 # one retries once the agent bus is back
@@ -1833,9 +1863,8 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception(f"cascade_select_callback error for query_id={query_id}")
             return
-        # Default routing: forward toward the originator. get() + None-check
-        # instead of "in" + index: a disconnect between the two would KeyError.
-        conn = self.clients.get(originator_peer)
+        # Default routing: forward toward the originator.
+        conn = originator_conn
         if conn is not None:
             conn.send(message)
             return

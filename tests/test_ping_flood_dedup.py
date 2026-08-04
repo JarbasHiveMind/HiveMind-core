@@ -12,6 +12,12 @@ key. Every relay therefore added a phantom node to the originator's hive map.
 
 ``bind_upstream`` is where the two halves are already wired together, so that
 is where they are given one shared flood cache.
+
+Sharing settles the *upstream* answer only. A node answers a flood once, but
+"once" is one responsive PING that reaches both directions — NODE-1 §4 makes
+the answer a PROPAGATE that fans out across the mesh. The listener half
+therefore always fans the answer downstream, or a relay would be missing from
+the hive map of the clients attached to it.
 """
 from unittest.mock import MagicMock
 
@@ -33,6 +39,7 @@ def _listener() -> HiveMindListenerProtocol:
     node.hive_mapper = HiveMapper()
     node.agent_protocol = MagicMock()
     node._seen_flood_ids = FloodIdCache()
+    node._answered_floods = FloodIdCache()
     node._upstream_hm = None
     return node
 
@@ -69,26 +76,60 @@ class TestBindUpstreamSharesTheFloodCache:
         assert slave.hive_mapper._seen_flood_ids is node._seen_flood_ids, (
             "the two halves of one node must share one flood cache")
 
-    def test_listener_suppressed_after_the_slave_answered(self):
-        """The upstream half saw the flood first; the listener must stay quiet.
+    def test_listener_does_not_repeat_the_upstream_answer(self):
+        """The upstream half saw the flood first; only it answers upstream.
 
         This is the real relay path: the flood arrives from upstream, the
         slave answers it, then the downstream answers come back through the
-        listener carrying the same flood_id.
+        listener carrying the same flood_id. A second answer upstream would
+        map one node as two (NODE-1 §4).
+        """
+        node, slave = _listener(), _slave()
+        node.bind_upstream(slave)
+        node.clients = {"satellite::1": MagicMock()}
+
+        slave.handle_ping(_ping("f1"))
+        assert slave._emit.call_count == 1, "the node must answer upstream once"
+
+        node.handle_ping_message(_ping("f1"), _client())
+
+        assert slave.hm.emit.call_count == 0, (
+            "the upstream answer for flood f1 is already in flight")
+
+    def test_relay_still_announces_itself_downstream(self):
+        """A relay must appear in the hive map of its own clients.
+
+        S -> R -> M, flood from M: R's slave answers upstream, but R still
+        owes its downstream client S a responsive PING. Without it S maps M
+        and never maps R, the node it is directly attached to.
         """
         node, slave = _listener(), _slave()
         node.bind_upstream(slave)
         conn = MagicMock()
         node.clients = {"satellite::1": conn}
 
+        slave.handle_ping(_ping("f1"))          # R answers M
+        node.handle_ping_message(_ping("f1"), _client())   # S's answer arrives
+
+        assert conn.send.call_count == 1, (
+            "the relay must fan its own responsive PING downstream, or it is "
+            "absent from its client's hive map")
+        payload = conn.send.call_args[0][0].payload.payload
+        assert payload["flood_id"] == "f1"
+        assert payload["public_key"] == NODE_KEY
+
+    def test_downstream_fan_out_happens_only_once(self):
+        """Repeat arrivals of one flood must not re-flood the clients."""
+        node, slave = _listener(), _slave()
+        node.bind_upstream(slave)
+        conn = MagicMock()
+        node.clients = {"satellite::1": conn}
+
         slave.handle_ping(_ping("f1"))
-        assert slave._emit.call_count == 1, "the node must answer once"
+        for _ in range(3):
+            node.handle_ping_message(_ping("f1"), _client())
 
-        node.handle_ping_message(_ping("f1"), _client())
-
-        assert conn.send.call_count == 0, (
-            "this node already took part in flood f1 through its upstream "
-            "half; answering again maps one node as two (NODE-1 §4)")
+        assert conn.send.call_count == 1
 
     def test_slave_suppressed_after_the_listener_answered(self):
         """Same rule in the other direction: a downstream-originated flood."""
@@ -166,3 +207,4 @@ class TestResponsivePingIdentity:
         for i in range(1100):
             node.handle_ping_message(_ping(f"f{i}"), _client())
         assert len(node._seen_flood_ids) <= 1000
+        assert len(node._answered_floods) <= 1000
