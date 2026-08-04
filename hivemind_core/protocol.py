@@ -25,7 +25,7 @@ from ovos_utils.log import LOG
 from hivemind_core.config import get_server_config
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
-from hivemind_bus_client.serialization import decode_bitstring, get_bitstring
+from hivemind_bus_client.serialization import BINARY_ENCODABLE_TYPES, decode_bitstring, get_bitstring
 from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers,
                                             decrypt_from_json, encrypt_as_json,
                                             decrypt_bin, encrypt_bin,
@@ -303,10 +303,16 @@ class HiveMindClientConnection:
 
             _log.debug("sending to %s: %s", self.peer, message.msg_type)
 
+            # WIRE-1 §4.3: a type with no assigned 5-bit code (INTERCOM) travels
+            # as a text frame even on a connection that negotiated binarize. The
+            # receiver accepts both forms on the same connection.
+            binarize = ((self.binarize or is_bin)
+                        and message.msg_type in BINARY_ENCODABLE_TYPES)
+
             if self.noise_transport is not None:
                 # protocol v3: every message (HELLO/HANDSHAKE included) is a Noise
                 # transport message — there is no cleartext v3 session (§3.4.5)
-                if self.binarize or is_bin:
+                if binarize:
                     payload = get_bitstring(hive_type=message.msg_type,
                                             payload=message.payload,
                                             hivemeta=message.metadata,
@@ -320,7 +326,7 @@ class HiveMindClientConnection:
                 HiveMessageType.HANDSHAKE,
                 HiveMessageType.HELLO,
             ]:
-                if self.binarize or is_bin:
+                if binarize:
                     payload = get_bitstring(hive_type=message.msg_type,
                                             payload=message.payload,
                                             hivemeta=message.metadata,
