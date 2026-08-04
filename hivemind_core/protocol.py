@@ -6,6 +6,7 @@ import json
 import os
 import time
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Dict, Optional, Callable, Literal
@@ -29,7 +30,7 @@ try:
                                            NOISE_PATTERN_KK, NoiseTransport,
                                            NoiseHandshakeFailed, NoiseTransportFailed,
                                            build_prologue, noise_protocol_name,
-                                           start_noise_handshake)
+                                           start_noise_handshake, derive_psk)
 except ImportError:
     # hivemind_bus_client without the protocol v3 noise module: the server
     # degrades gracefully to the legacy (v2 and below) handshake and never
@@ -57,6 +58,9 @@ except ImportError:
         raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
 
     def start_noise_handshake(*args, **kwargs):  # pragma: no cover
+        raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
+
+    def derive_psk(*args, **kwargs):  # pragma: no cover
         raise NoiseHandshakeFailed("protocol v3 (Noise) support unavailable")
 from hivemind_core.database import ClientDatabase
 from hivemind_bus_client.hive_map import FloodIdCache, HiveMapper
@@ -464,6 +468,9 @@ class HiveMindListenerProtocol:
         # routinely build one with a placeholder ``identity`` and never open
         # a connection.
         self._identity_rsa_key = None
+        # Derived Noise PSKs, keyed by the client password (see noise_psk
+        # below). Never logged and never exposed on any wire or error path.
+        self._noise_psks: "OrderedDict[tuple, bytes]" = OrderedDict()
         self.clients = {}
         # TOFU pinning store for INTERCOM origin authentication
         # (HIVEMIND-CRYPTO-1 §5). Maps a client's access key to the PEM
@@ -526,6 +533,37 @@ class HiveMindListenerProtocol:
         if self._identity_rsa_key is None:
             self._identity_rsa_key = HandShake(self.identity.private_key).private_key
         return self._identity_rsa_key
+
+    # how many distinct passwords keep a derived PSK in memory at once
+    NOISE_PSK_CACHE_SIZE = 256
+
+    def noise_psk(self, password: Union[str, bytes]) -> bytes:
+        """The Noise pre-shared key for ``password``, derived at most once.
+
+        derive_psk runs argon2id (time_cost=3, 64 MiB) and measured
+        152-333ms per call on the single IOLoop thread that serves every
+        connected client. It is cacheable because its salt is
+        SHA-256(node_id): the result depends only on the password and this
+        node's id, both constant for the life of the node, so the same pair
+        always yields the same key.
+
+        Keyed on the password (and this node's id) rather than on the node
+        id alone: Client rows carry their own password, so two clients may
+        legitimately present different ones, and handing a client another
+        client's PSK would silently break its handshake.
+        """
+        if isinstance(password, str):
+            password = password.encode("utf-8")
+        key = (password, self._node_id)
+        psk = self._noise_psks.get(key)
+        if psk is None:
+            psk = derive_psk(password, node_id=self._node_id)
+            self._noise_psks[key] = psk
+            while len(self._noise_psks) > self.NOISE_PSK_CACHE_SIZE:
+                self._noise_psks.popitem(last=False)
+        else:
+            self._noise_psks.move_to_end(key)
+        return psk
 
     def _with_builtin_policies(self, chain: PolicyChain) -> PolicyChain:
         """Return ``chain`` with the non-removable builtin policies first.
@@ -1060,7 +1098,8 @@ class HiveMindListenerProtocol:
             try:
                 client.noise_handshake = start_noise_handshake(
                     initiator=False, pattern=pattern, suite=suite,
-                    password=client.pswd_handshake.password,
+                    psk=self.noise_psk(client.pswd_handshake.password),
+                    password=None,
                     node_id=self._node_id, prologue=prologue,
                     key_path=self.identity.noise_key,
                     remote_pubkey=pinned if pattern == NOISE_PATTERN_KK else None)

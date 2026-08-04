@@ -11,6 +11,7 @@ End-to-end over a real websocket, real master + real client:
 """
 
 import time
+from unittest.mock import patch
 
 import pytest
 from ovos_bus_client.message import Message
@@ -241,5 +242,66 @@ def test_replayed_v3_transport_message_is_rejected():
         time.sleep(0.5)
         assert len(seen) == 1, "replayed message was delivered twice"
         client.close()
+    finally:
+        b.stop_all()
+
+
+# ──────────────────────────────────────── cached Noise PSK ──
+
+
+def test_v3_handshake_derives_the_psk_once_across_reconnects():
+    """The server derives one PSK for a password, then reuses it verbatim."""
+    b, m = _master()
+    try:
+        b.start_all()
+        with patch.object(server_protocol, "derive_psk",
+                          wraps=server_protocol.derive_psk) as spy:
+            for _ in range(3):
+                client = _make_client(m.network_protocol.url,
+                                      "matrix-key", "matrix-pwd")
+                client.connect(site_id="matrix-site")
+                client.wait_for_handshake(timeout=10)
+                assert client.noise_transport is not None
+                _assert_round_trip(client, m)
+                client.close()
+                assert _wait_for(lambda: not m.connected_peers())
+
+        assert spy.call_count == 1, "the PSK was re-derived per connection"
+    finally:
+        b.stop_all()
+
+
+def test_two_passwords_get_two_psks_and_both_handshakes_succeed():
+    """The cache is keyed per password, so neither client gets the other's."""
+    b = TopologyBuilder()
+    m = b.add_master("M0", use_loopback=True)
+    m.register_satellite("alice-key", password="alice-pwd",
+                         allowed_types=["recognizer_loop:utterance"])
+    m.register_satellite("bob-key", password="bob-pwd",
+                         allowed_types=["recognizer_loop:utterance"])
+    try:
+        b.start_all()
+        alice = _make_client(m.network_protocol.url, "alice-key", "alice-pwd",
+                             name="alice")
+        alice.connect(site_id="matrix-site")
+        alice.wait_for_handshake(timeout=10)
+        assert alice.noise_transport is not None
+
+        bob = _make_client(m.network_protocol.url, "bob-key", "bob-pwd",
+                           name="bob")
+        bob.connect(site_id="matrix-site")
+        bob.wait_for_handshake(timeout=10)
+        assert bob.noise_transport is not None
+
+        psks = list(m.hm_protocol._noise_psks.values())
+        assert len(psks) == 2
+        assert psks[0] != psks[1]
+
+        # both sessions really work; round-trip one of them with the other
+        # gone so _assert_round_trip addresses an unambiguous peer
+        alice.close()
+        assert _wait_for(lambda: len(m.connected_peers()) == 1)
+        _assert_round_trip(bob, m)
+        bob.close()
     finally:
         b.stop_all()
