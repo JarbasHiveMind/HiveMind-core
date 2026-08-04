@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.11.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.3a1) (2026-08-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.2a1...4.11.3a1)
+
+**Merged pull requests:**
+
+- fix: correct the misleading admin-bypass note in add-client output [\#213](https://github.com/JarbasHiveMind/HiveMind-core/pull/213) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.11.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.2a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a3...4.11.2a1)
@@ -456,10 +464,6 @@
 ## [3.4.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a3) (2026-01-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a2...3.4.1a3)
-
-**Merged pull requests:**
-
-- chore\(deps\): update actions/setup-python action to v6 [\#69](https://github.com/JarbasHiveMind/HiveMind-core/pull/69) ([renovate[bot]](https://github.com/apps/renovate))
 
 ## [3.4.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a2) (2025-12-18)
 
