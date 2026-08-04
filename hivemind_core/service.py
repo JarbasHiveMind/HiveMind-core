@@ -312,10 +312,14 @@ class HiveMindService:
                           "longer accepts clients")
                 self._status.set_error("all network protocols stopped")
 
+        # ready first: set_ready and set_error are plain assignments, so a
+        # transport that fails the moment it starts (port already bound,
+        # unreadable certificate) would set_error before this line ran and
+        # the node would end up READY with nothing listening
+        self._status.set_ready()
+
         for network_protocol in protos:
             create_daemon(run, (network_protocol,))
-
-        self._status.set_ready()
 
     def _stop_upstream(self) -> None:
         if self._upstream is not None:

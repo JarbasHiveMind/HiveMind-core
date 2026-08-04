@@ -106,19 +106,55 @@ class TestAgentBackendUnavailableAtBoot:
         assert len(attempts) == 3
 
 
+class RecordingStatus:
+    """Stands in for ProcessStatus, which writes ``state`` as a plain
+    assignment: whichever transition happens last is what the node reports,
+    so the order matters as much as the calls."""
+
+    def __init__(self):
+        self.transitions = []
+
+    def set_ready(self):
+        self.transitions.append("ready")
+
+    def set_error(self, err=""):
+        self.transitions.append("error")
+
+    @property
+    def state(self):
+        return self.transitions[-1] if self.transitions else None
+
+
 class TestDeadListenerThreads:
     def test_a_dead_protocol_does_not_leave_the_node_reporting_ready(self):
         """Port already in use, unreadable certificate: the thread dies and
         the node has no transport left, so it must report an error."""
         svc = _service()
-        svc._status = mock.MagicMock()
+        svc._status = RecordingStatus()
         proto = mock.MagicMock()
         proto.run.side_effect = OSError("address already in use")
 
         svc._run_network_protocols([proto])
 
-        assert _wait_for(lambda: svc._status.set_error.called), \
-            "a node with no live transport still reported itself healthy"
+        assert _wait_for(lambda: svc._status.state == "error"), \
+            f"a node with no live transport reported {svc._status.transitions}"
+
+    def test_a_transport_that_fails_instantly_still_ends_in_error(self, monkeypatch):
+        """The only transport can die before the main thread gets to
+        set_ready — a port already bound, a certificate that will not read.
+        Running the thread body inline reproduces that ordering exactly. The
+        node must not overwrite the error with a ready it no longer means."""
+        svc = _service()
+        svc._status = RecordingStatus()
+        monkeypatch.setattr("hivemind_core.service.create_daemon",
+                            lambda target, args=(): target(*args))
+        proto = mock.MagicMock()
+        proto.run.side_effect = OSError("address already in use")
+
+        svc._run_network_protocols([proto])
+
+        assert svc._status.transitions == ["ready", "error"]
+        assert svc._status.state == "error"
 
     def test_one_dead_protocol_does_not_condemn_the_others(self):
         svc = _service()
