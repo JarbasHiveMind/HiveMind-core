@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.11.4a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.4a2) (2026-08-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.4a1...4.11.4a2)
+
+**Merged pull requests:**
+
+- perf: derive the noise PSK once per password and node [\#215](https://github.com/JarbasHiveMind/HiveMind-core/pull/215) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.11.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.4a1) (2026-08-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.3a1...4.11.4a1)
@@ -26,19 +34,19 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 **Merged pull requests:**
 
 - perf: import the RSA identity key once per node [\#205](https://github.com/JarbasHiveMind/HiveMind-core/pull/205) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
-
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 **Merged pull requests:**
 
@@ -456,10 +464,6 @@
 ## [4.0.0](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.0.0) (2026-01-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/3.4.1a4...4.0.0)
-
-**Merged pull requests:**
-
-- Release 3.4.1a4 [\#71](https://github.com/JarbasHiveMind/HiveMind-core/pull/71) ([github-actions[bot]](https://github.com/apps/github-actions))
 
 ## [3.4.1a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/3.4.1a4) (2026-01-13)
 
