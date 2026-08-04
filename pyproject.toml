@@ -26,14 +26,14 @@ dependencies = [
     "rich",
     "pycryptodomex",
     "poorman-handshake>=2.0.0a1,<3.0.0",
-    # protocol v3 (Noise) needs hivemind_bus_client.noise, shipped since
-    # 0.10.1a1; the server still degrades gracefully to the legacy handshake
-    # against older clients on the wire.
     # 0.11.0a2 adds FloodIdCache and HiveMindSlaveProtocol.bind_flood_cache,
     # which bind_upstream calls so a node with an upstream answers a PING
-    # flood exactly once (HIVEMIND-NODE-1 §4). This one is a hard floor: it
-    # is an in-process API, not wire compatibility.
-    "hivemind_bus_client>=0.11.0a2,<1.0.0",
+    # flood exactly once (HIVEMIND-NODE-1 §4) — an in-process API, not wire
+    # compatibility. 1.0.0a1 raises the floor further because protocol.py
+    # also calls bind_flood_cache post-THIRDPRTY-removal (wire code 11 was
+    # dropped in the same release). The server still degrades gracefully to
+    # the legacy handshake against older clients on the wire.
+    "hivemind_bus_client>=1.0.0a1,<2.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
     # 0.9.0a1 added AbstractDB.get_client_by_api_key, which ClientDatabase calls
@@ -53,7 +53,7 @@ test = [
     "pytest",
     "pytest-cov",
     "hivescope>=0.5.0a2",
-    # client-side Noise (hivemind_bus_client>=0.10.1a1) comes from the runtime
+    # client-side Noise (hivemind_bus_client>=1.0.0a1) comes from the runtime
     # dependency above — no git ref, so the wheel stays PyPI-publishable.
 ]
 integration = [
