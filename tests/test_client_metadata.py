@@ -357,3 +357,17 @@ def test_cli_blacklist_skill_writes_metadata_without_deprecation():
     assert result.exit_code == 0, result.output
     assert "eprecat" not in result.output
     assert fake_db.get_client_by_api_key("ak").metadata["skill_blacklist"] == ["skill-weather"]
+
+
+def test_cli_add_client_warns_on_empty_allowed_types_even_for_admin():
+    runner = CliRunner()
+    fake_db = make_client_db()
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
+        result = runner.invoke(
+            add_client,
+            ["--name", "satellite", "--access-key", "k", "--password", "pw",
+             "--allow-weak-password", "--admin", "true"],
+        )
+    assert result.exit_code == 0, result.output
+    assert "will be DENIED on every message" in result.output
+    assert "admin status does not exempt" in result.output
