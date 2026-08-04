@@ -5,6 +5,7 @@ import dataclasses
 import json
 import logging
 import os
+import threading
 import time
 import uuid
 from collections import OrderedDict
@@ -217,6 +218,18 @@ class HiveMindClientConnection:
     # ``name::session_id`` string. See ``handle_hello_message``.
     _peer_suffix: str = field(default="", init=False, repr=False)
 
+    # Serialises ``send``. The IOLoop thread, the ovos messagebus thread and
+    # the upstream slave thread all send on the same connection, and a v3
+    # Noise frame is only decryptable in the order its nonce was assigned, so
+    # encryption and enqueueing must happen as one atomic step.
+    #
+    # Re-entrant because a synchronous in-process transport (the hivescope
+    # loopback) delivers to the peer from inside ``send_msg`` and the peer
+    # answers on the same thread. That nested send always encrypts after the
+    # outer frame was handed over, so it cannot invert the nonce sequence.
+    _send_lock: threading.RLock = field(default_factory=threading.RLock,
+                                        init=False, repr=False)
+
     def resolve_user(self, db, ttl: float = 5.0,
                      force: bool = False) -> Optional[Client]:
         """Return the cached DB row for this connection, refetching at
@@ -274,54 +287,60 @@ class HiveMindClientConnection:
         instead of once per peer (serialization is not cheap and does not
         depend on the peer). Encryption still happens per peer below, since
         each connection has its own crypto state.
+
+        The lock is held across encrypt *and* enqueue. The Noise transport and
+        the AES counters are per-connection mutable state, so releasing it
+        between the two would let a second thread encrypt against the same
+        counter and interleave frames on the wire.
         """
-        is_bin = message.msg_type == HiveMessageType.BINARY
-        if not is_bin and message.msg_type == HiveMessageType.BUS:
-            _payload_type = (message.payload.get("type")
-                             if isinstance(message.payload, dict)
-                             else message.payload.msg_type)
-            _log.debug("mycroft_type %s", _payload_type)
+        with self._send_lock:
+            is_bin = message.msg_type == HiveMessageType.BINARY
+            if not is_bin and message.msg_type == HiveMessageType.BUS:
+                _payload_type = (message.payload.get("type")
+                                 if isinstance(message.payload, dict)
+                                 else message.payload.msg_type)
+                _log.debug("mycroft_type %s", _payload_type)
 
-        _log.debug("sending to %s: %s", self.peer, message.msg_type)
+            _log.debug("sending to %s: %s", self.peer, message.msg_type)
 
-        if self.noise_transport is not None:
-            # protocol v3: every message (HELLO/HANDSHAKE included) is a Noise
-            # transport message — there is no cleartext v3 session (§3.4.5)
-            if self.binarize or is_bin:
-                payload = get_bitstring(hive_type=message.msg_type,
-                                        payload=message.payload,
-                                        hivemeta=message.metadata,
-                                        binary_type=message.bin_type).bytes
+            if self.noise_transport is not None:
+                # protocol v3: every message (HELLO/HANDSHAKE included) is a Noise
+                # transport message — there is no cleartext v3 session (§3.4.5)
+                if self.binarize or is_bin:
+                    payload = get_bitstring(hive_type=message.msg_type,
+                                            payload=message.payload,
+                                            hivemeta=message.metadata,
+                                            binary_type=message.bin_type).bytes
+                else:
+                    payload = plaintext if plaintext is not None else message.serialize()
+                self.send_msg(self.noise_transport.encrypt_frame(payload), True)
+                return
+
+            if self.crypto_key and message.msg_type not in [
+                HiveMessageType.HANDSHAKE,
+                HiveMessageType.HELLO,
+            ]:
+                if self.binarize or is_bin:
+                    payload = get_bitstring(hive_type=message.msg_type,
+                                            payload=message.payload,
+                                            hivemeta=message.metadata,
+                                            binary_type=message.bin_type).bytes
+                    _log.debug("unencrypted binary payload size: %d bytes", len(payload))
+                    payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
+                    is_bin = True
+                else:
+                    plaintext = plaintext if plaintext is not None else message.serialize()
+                    _log.debug("unencrypted payload size: %d bytes", len(plaintext))
+                    payload = encrypt_as_json(
+                        key=self.crypto_key, plaintext=plaintext,
+                        cipher=self.cipher, encoding=self.encoding
+                    )  # json string
+                _log.debug("encrypted payload size: %d bytes", len(payload))
             else:
                 payload = plaintext if plaintext is not None else message.serialize()
-            self.send_msg(self.noise_transport.encrypt_frame(payload), True)
-            return
+                _log.debug("sent unencrypted!")
 
-        if self.crypto_key and message.msg_type not in [
-            HiveMessageType.HANDSHAKE,
-            HiveMessageType.HELLO,
-        ]:
-            if self.binarize or is_bin:
-                payload = get_bitstring(hive_type=message.msg_type,
-                                        payload=message.payload,
-                                        hivemeta=message.metadata,
-                                        binary_type=message.bin_type).bytes
-                _log.debug("unencrypted binary payload size: %d bytes", len(payload))
-                payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
-                is_bin = True
-            else:
-                plaintext = plaintext if plaintext is not None else message.serialize()
-                _log.debug("unencrypted payload size: %d bytes", len(plaintext))
-                payload = encrypt_as_json(
-                    key=self.crypto_key, plaintext=plaintext,
-                    cipher=self.cipher, encoding=self.encoding
-                )  # json string
-            _log.debug("encrypted payload size: %d bytes", len(payload))
-        else:
-            payload = plaintext if plaintext is not None else message.serialize()
-            _log.debug("sent unencrypted!")
-
-        self.send_msg(payload, is_bin)
+            self.send_msg(payload, is_bin)
 
     @property
     def crypto_required(self) -> bool:
