@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+
+**Merged pull requests:**
+
+- fix: hold the send lock across encrypt and enqueue [\#217](https://github.com/JarbasHiveMind/HiveMind-core/pull/217) ([JarbasAl](https://github.com/JarbasAl))
+- fix: cascade thread races and TOFU pin leak [\#211](https://github.com/JarbasHiveMind/HiveMind-core/pull/211) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.0a1...4.12.1a1)
