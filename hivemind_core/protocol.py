@@ -515,6 +515,27 @@ class HiveMindListenerProtocol:
     metadata_transformers: Optional[MetadataTransformersService] = None
     dialog_transformers: Optional[DialogTransformersService] = None
 
+    # Interval (seconds) between persisted last-seen updates for the same
+    # client, read from config in __post_init__ (which always wins over this
+    # default). Declared as a field — not just a __post_init__ assignment —
+    # so a test fixture built with ``object.__new__`` still finds a working
+    # value here instead of raising AttributeError.
+    last_seen_update_interval: float = field(default=0.0, init=False)
+    # Cache for the node's RSA identity key (see identity_rsa_key property).
+    # Stays None here: constructing HiveMindListenerProtocol must stay cheap
+    # and must not touch the key file, since embedders and tests routinely
+    # build one with a placeholder ``identity`` and never open a connection.
+    # A dataclass field so the default is a real class attribute, present
+    # even on an instance built with ``object.__new__``.
+    _identity_rsa_key: Optional[RSA.RsaKey] = field(default=None, init=False, repr=False)
+    # Backing store for the ``_seen_flood_ids`` property below. Must stay a
+    # field (not a plain __post_init__ assignment) so its ``None`` default is
+    # a class attribute visible to instances built with ``object.__new__``.
+    # It cannot be the ``FloodIdCache`` itself as a class-level default —
+    # that would share one flood cache across every node — so the property
+    # lazily creates one FloodIdCache per instance on first access instead.
+    _flood_id_cache: Optional[FloodIdCache] = field(default=None, init=False, repr=False)
+
     # below are optional callbacks to handle payloads
     # receives the payload + HiveMindClient that sent it
     escalate_callback = None  # slave asked to escalate payload
@@ -529,12 +550,6 @@ class HiveMindListenerProtocol:
     default_lang = "en-US"
 
     def __post_init__(self):
-        # Cache for the node's RSA identity key (see identity_rsa_key below).
-        # Left unset here: constructing HiveMindListenerProtocol must stay
-        # cheap and must not touch the key file, since embedders and tests
-        # routinely build one with a placeholder ``identity`` and never open
-        # a connection.
-        self._identity_rsa_key = None
         # Derived Noise PSKs, keyed by the client password (see noise_psk
         # below). Never logged and never exposed on any wire or error path.
         self._noise_psks: "OrderedDict[tuple, bytes]" = OrderedDict()
@@ -639,6 +654,22 @@ class HiveMindListenerProtocol:
         if self._cascades_lock is None:
             self._cascades_lock = threading.Lock()
         return self._cascades_lock
+
+    @property
+    def _seen_flood_ids(self) -> FloodIdCache:
+        """Already-answered PING floods (MSG-1 §4), created lazily so the
+        ``_flood_id_cache`` dataclass field can default to ``None`` — a class
+        attribute a bypass-constructed instance still sees — without every
+        node sharing one cache. See ``bind_upstream`` for why one node's two
+        halves must share this same instance.
+        """
+        if self._flood_id_cache is None:
+            self._flood_id_cache = FloodIdCache()
+        return self._flood_id_cache
+
+    @_seen_flood_ids.setter
+    def _seen_flood_ids(self, value: FloodIdCache) -> None:
+        self._flood_id_cache = value
 
     @property
     def identity_rsa_key(self) -> RSA.RsaKey:
