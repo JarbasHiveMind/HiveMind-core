@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.11.6a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.6a2) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.6a1...4.11.6a2)
+
+**Merged pull requests:**
+
+- perf: cut per-peer cost in message fan-out [\#204](https://github.com/JarbasHiveMind/HiveMind-core/pull/204) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.11.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.6a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.5a1...4.11.6a1)
@@ -50,19 +58,19 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 **Merged pull requests:**
 
 - perf: import the RSA identity key once per node [\#205](https://github.com/JarbasHiveMind/HiveMind-core/pull/205) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
-
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 **Merged pull requests:**
 
