@@ -33,7 +33,7 @@ def _wire_peers(node, *peers):
     sent = {p: [] for p in peers}
     for p in peers:
         conn = MagicMock()
-        conn.send = lambda m, box=sent[p]: box.append(m)
+        conn.send = lambda m, *a, box=sent[p]: box.append(m)
         node.clients[p] = conn
     return sent
 

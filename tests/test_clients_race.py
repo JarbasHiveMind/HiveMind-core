@@ -55,7 +55,9 @@ def test_fan_out_survives_concurrent_client_mutation():
         peer = f"sat-{i}"
         conn = MagicMock()
         conn.peer = peer
-        conn.send = lambda m, box=sent.setdefault(peer, []): box.append(m)
+        # send() takes an optional pre-serialized plaintext from the fan-out
+        # caller; swallow it here so the stub keeps recording just the message.
+        conn.send = lambda m, _plaintext=None, box=sent.setdefault(peer, []): box.append(m)
         node.clients[peer] = conn
     pre_existing_peers = set(node.clients)
 
@@ -73,7 +75,7 @@ def test_fan_out_survives_concurrent_client_mutation():
             node.clients.pop(peer, None)
             conn = MagicMock()
             conn.peer = peer
-            conn.send = lambda m: None
+            conn.send = lambda m, _plaintext=None: None
             node.clients[peer] = conn
 
     # lower the GIL switch interval so the mutator threads interleave with
