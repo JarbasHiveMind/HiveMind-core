@@ -1,3 +1,4 @@
+import pytest
 """Shared pytest hooks for the hivemind-core test suite."""
 
 
@@ -20,3 +21,15 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     )
     for rep in xpassed:
         terminalreporter.write_line(f"  XPASS  {rep.nodeid}")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_xdg_config(tmp_path_factory, monkeypatch):
+    """Keep the developer's real config out of the tests.
+
+    ``get_server_config`` reads ``$XDG_CONFIG_HOME/hivemind-core/server.json``.
+    On a machine that actually runs a hub that file exists, so tests asserting
+    on "the default config" silently read local settings and fail only for the
+    person who has a deployment. CI never saw it.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg")))
