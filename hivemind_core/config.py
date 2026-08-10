@@ -159,12 +159,17 @@ def get_server_config() -> JsonStorageXDG:
     for k, v in defaults.items():
         if k not in db:
             db[k] = v
-        elif isinstance(v, dict) and isinstance(db[k], dict):
-            # ...and that a partially specified block keeps the rest of its
-            # defaults. Overriding one plugin setting is the common case:
-            #     {"network_protocol": {"hivemind-websocket-plugin": {...}}}
+        elif isinstance(v, dict) and isinstance(db[k], dict) and "module" in v:
+            # ...and that a partially specified single-plugin block keeps the
+            # rest of its defaults. Overriding one setting is the common case:
+            #     {"agent_protocol": {"hivemind-ovos-agent-plugin": {...}}}
             # Without this the block loses "module" and the service dies at
             # startup with a bare KeyError.
+            #
+            # Only blocks that name a "module" are filled. In a multi-transport
+            # block like `network_protocol` the sub-keys ARE the set of enabled
+            # transports, so backfilling them would start a transport the
+            # operator never asked for.
             for subk, subv in v.items():
                 if subk not in db[k]:
                     db[k][subk] = subv
