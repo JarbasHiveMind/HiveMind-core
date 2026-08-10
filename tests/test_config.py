@@ -101,15 +101,20 @@ class TestPartiallySpecifiedBlocksKeepTheirDefaults:
         })
         assert cfg["agent_protocol"]["module"] == "my-plugin"
 
-    def test_a_partial_network_block_keeps_the_other_transports(
+    def test_naming_one_transport_does_not_enable_the_others(
             self, tmp_path, monkeypatch):
-        """network_protocol is multi-transport and has no ``module``; naming
-        one transport must not silently drop the others' defaults."""
+        """`network_protocol` sub-keys are the set of *enabled* transports.
+
+        service.run() starts one transport per key, so backfilling this block
+        would start a listener the operator never asked for (and log a
+        traceback when its plugin is not installed).
+        """
         cfg = self._config(tmp_path, monkeypatch, {
             "network_protocol": {"hivemind-websocket-plugin": {"port": 9999}},
         })
         assert cfg["network_protocol"]["hivemind-websocket-plugin"]["port"] == 9999
-        assert "hivemind-http-plugin" in cfg["network_protocol"]
+        assert list(cfg["network_protocol"]) == ["hivemind-websocket-plugin"], \
+            "only the transports the operator configured may be present"
 
     def test_a_config_missing_a_whole_block_still_starts(self, tmp_path, monkeypatch):
         cfg = self._config(tmp_path, monkeypatch, {"min_protocol_version": 2})
