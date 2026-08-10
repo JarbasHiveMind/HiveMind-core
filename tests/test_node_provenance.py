@@ -16,6 +16,7 @@ distinct public keys — and pin every one of those fields to the public key.
 from unittest.mock import MagicMock
 
 from ovos_bus_client.message import Message
+from hivemind_bus_client.hive_map import FloodIdCache
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
 from hivemind_core.protocol import HiveMindListenerProtocol
@@ -31,7 +32,8 @@ def _make_node() -> HiveMindListenerProtocol:
     node.clients = {}
     node.hive_mapper = MagicMock()
     node.agent_protocol = MagicMock()
-    node._seen_flood_ids = set()
+    node._seen_flood_ids = FloodIdCache()
+    node._answered_floods = FloodIdCache()
     node._upstream_hm = None
     return node
 
