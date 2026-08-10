@@ -35,6 +35,15 @@ def _make_node() -> HiveMindListenerProtocol:
     node.agent_protocol = MagicMock()
     node._seen_flood_ids = FloodIdCache()
     node._answered_floods = FloodIdCache()
+    # _answer_query_locally runs the utterance/dialog pipelines. __post_init__
+    # builds them for a real node; a bypass-built one has the None default, so
+    # give it empty (no-op) services rather than letting the query path raise.
+    from ovos_plugin_manager.transformer_services import (
+        DialogTransformersService, MetadataTransformersService,
+        UtteranceTransformersService)
+    node.utterance_transformers = UtteranceTransformersService(config={})
+    node.metadata_transformers = MetadataTransformersService(config={})
+    node.dialog_transformers = DialogTransformersService(config={})
     node._last_ping_flood = 0.0
     node.ping_flood_interval = 0.0
     node._upstream_hm = None
