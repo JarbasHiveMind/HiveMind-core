@@ -29,6 +29,7 @@ from hivemind_bus_client.serialization import BINARY_ENCODABLE_TYPES, decode_bit
 from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers,
                                             decrypt_from_json, encrypt_as_json,
                                             decrypt_bin, encrypt_bin,
+                                            hybrid_decrypt,
                                             _norm_encoding, _norm_cipher)
 try:
     from hivemind_bus_client.noise import (NOISE_SUPPORTED, NOISE_PATTERNS, NOISE_SUITES,
@@ -2469,7 +2470,25 @@ class HiveMindListenerProtocol:
 
                 private_key = load_RSA_key(self.identity.private_key)
 
-                decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
+                # Two envelope shapes reach this point.
+                #
+                # Hybrid (``encrypted_key`` present) is what
+                # ``HiveMessageBusClient.emit_intercom`` produces: a random
+                # AES-256-GCM key encrypts the payload and RSA encrypts only
+                # that key. Plain RSA over the whole body is the older shape,
+                # still accepted so an existing peer keeps working.
+                #
+                # Only hybrid can carry a real message. Raw RSA is capped at
+                # one block - about 214 bytes with a 2048-bit key - which a
+                # serialized BUS envelope barely fits, so a node that only
+                # spoke plain RSA could not receive anything substantial.
+                #
+                # The signature is computed over ``ciphertext`` in both
+                # shapes, so the verification above applies unchanged.
+                if "encrypted_key" in pload:
+                    decrypted: str = hybrid_decrypt(private_key, pload).decode("utf-8")
+                else:
+                    decrypted: str = decrypt_RSA(private_key, ciphertext).decode("utf-8")
                 inner = HiveMessage.deserialize(decrypted)
             except:
                 if k:
