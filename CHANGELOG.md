@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.0a1...4.12.1a1)
+
+**Merged pull requests:**
+
+- fix: keep the node up when the agent backend or a listener fails [\#214](https://github.com/JarbasHiveMind/HiveMind-core/pull/214) ([JarbasAl](https://github.com/JarbasAl))
+- docs: drop misleading listener terminology [\#200](https://github.com/JarbasHiveMind/HiveMind-core/pull/200) ([JarbasAl](https://github.com/JarbasAl))
+- docs: remove THIRDPRTY from the message-type table [\#195](https://github.com/JarbasHiveMind/HiveMind-core/pull/195) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.12.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.0a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.6a2...4.12.0a1)
@@ -128,19 +138,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
-
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 **Merged pull requests:**
 
@@ -472,10 +482,6 @@
 ## [4.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.1.0a1) (2026-05-07)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.0.1a1...4.1.0a1)
-
-**Merged pull requests:**
-
-- feat\(tests\): hivescope e2e skeleton [\#80](https://github.com/JarbasHiveMind/HiveMind-core/pull/80) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.0.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.0.1a1) (2026-03-23)
 
