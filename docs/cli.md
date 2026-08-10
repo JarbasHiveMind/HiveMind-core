@@ -187,6 +187,15 @@ hivemind-core allow-propagate [NODE_ID]
 hivemind-core blacklist-propagate [NODE_ID]
 ```
 
+### `allow-broadcast` / `blacklist-broadcast`
+
+Control whether a client may send `BROADCAST` messages (fanned out to all peers below this node).
+
+```bash
+hivemind-core allow-broadcast [NODE_ID]
+hivemind-core blacklist-broadcast [NODE_ID]
+```
+
 ---
 
 ## Skill & intent permissions

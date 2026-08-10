@@ -20,6 +20,8 @@ Commands:
   blacklist-escalate  Deny ESCALATE messages from a client
   allow-propagate     Allow PROPAGATE messages from a client
   blacklist-propagate Deny PROPAGATE messages from a client
+  allow-broadcast     Allow BROADCAST messages from a client
+  blacklist-broadcast Deny BROADCAST messages from a client
   blacklist-skill     Add a skill to OVOSAgentPolicy's skill_blacklist (via metadata)
   allow-skill         Remove a skill from OVOSAgentPolicy's skill_blacklist (via metadata)
   blacklist-intent    Add an intent to OVOSAgentPolicy's intent_blacklist (via metadata)
@@ -91,7 +93,7 @@ hivemind-core list-clients
 ## `rename-client`
 
 ```bash
-hivemind-core rename-client "new name" 1
+hivemind-core rename-client 1 --name "new name"
 ```
 
 ---
@@ -158,6 +160,17 @@ Control whether a client may send `PROPAGATE` HiveMessages.
 ```bash
 hivemind-core allow-propagate 1
 hivemind-core blacklist-propagate 1
+```
+
+---
+
+## `allow-broadcast` / `blacklist-broadcast`
+
+Control whether a client may send `BROADCAST` HiveMessages.
+
+```bash
+hivemind-core allow-broadcast 1
+hivemind-core blacklist-broadcast 1
 ```
 
 ---

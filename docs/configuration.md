@@ -21,7 +21,8 @@ The file is created with defaults on first run if absent.
   "min_password_bits": 40,
   "runtime_password_strength_check": true,
 
-  "last_seen_update_interval": 0,
+  "ping_flood_interval": 30,
+  "last_seen_update_interval": 60,
 
   "presence": {
     "enabled": true,
@@ -77,6 +78,10 @@ The file is created with defaults on first run if absent.
     }
   },
 
+  "utterance_transformers": {},
+  "metadata_transformers": {},
+  "dialog_transformers": {},
+
   "policy": {
     "chain": [
       {"module": "hivemind-ovos-agent-policy"}
@@ -97,7 +102,11 @@ The file is created with defaults on first run if absent.
 | `min_protocol_version` | int | `2` | Lowest HiveMind protocol version a client may negotiate. The server rejects a client that completes the handshake below this version. It advertises the higher of this value and the version its crypto settings need |
 | `min_password_bits` | float | `40` | Lowest password entropy `add-client` accepts, and the handshake backstop rejects |
 | `runtime_password_strength_check` | bool | `true` | Re-check password strength at handshake time. Set to `false`, or set `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1`, to skip the backstop |
-| `last_seen_update_interval` | int | `0` | Seconds to debounce the `last_seen` write. `0` writes on every admitted message |
+| `last_seen_update_interval` | int | `60` | Seconds to debounce the `last_seen` write, which runs on every inbound message. `0` writes on every message |
+| `ping_flood_interval` | int | `30` | Minimum seconds between two mesh-wide `PING` floods emitted by this node. Inside the window the node answers only the peer that pinged it |
+| `utterance_transformers` | dict | `{}` | OVOS utterance transformer plugins to load, keyed by plugin name. See [transformers.md](transformers.md) |
+| `metadata_transformers` | dict | `{}` | OVOS metadata transformer plugins to load, keyed by plugin name |
+| `dialog_transformers` | dict | `{}` | OVOS dialog transformer plugins to load, keyed by plugin name. They rewrite `QUERY`/`CASCADE` answer chunks before they go back to clients |
 | `presence` | dict | see above | Local-network advertisement through the optional `hivemind-presence` package. Keys: `enabled`, `name`, `zeroconf` (mDNS), `upnp` (SSDP) |
 | `upstream` | dict | see above | Connection to a master above this node. Disabled by default |
 

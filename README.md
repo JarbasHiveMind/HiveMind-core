@@ -236,6 +236,8 @@ Commands:
   blacklist-escalate   deny ESCALATE messages from a client
   allow-propagate      allow PROPAGATE messages from a client
   blacklist-propagate  deny PROPAGATE messages from a client
+  allow-broadcast      allow BROADCAST messages from a client
+  blacklist-broadcast  deny BROADCAST messages from a client
   delete-client        remove credentials for a client
   list-clients         list clients and credentials
   listen               start listening for HiveMind connections
@@ -300,7 +302,7 @@ $ hivemind-core list-clients
 Rename a registered client.
 
 ```bash
-$ hivemind-core rename-client "new name" 1
+$ hivemind-core rename-client 1 --name "new name"
 ```
 
 - **When to use**:

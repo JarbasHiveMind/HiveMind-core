@@ -105,17 +105,32 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 Called when a PROPAGATE message's inner payload is a PING.
 
 Discovery is PING-only. There is no PONG message. The handler feeds the PING into the
-local `HiveMapper`, emits `hive.ping.received` on the agent bus, then checks the
-`flood_id`. If the node has not seen that `flood_id` before, it builds its own PING with
-the same `flood_id` and sends it to every connected peer and upstream. If it has seen the
-`flood_id`, it stops. That check is what ends the flood.
+local `HiveMapper`, which answers whether this `(flood_id, peer)` pair is new. Only a new
+pair emits `hive.ping.received` on the agent bus, so a peer that reaches this node over
+several mesh paths is reported once, not once per path.
+
+The handler then builds its own responsive PING carrying the same `flood_id`, and decides
+who gets it. Three separate flood-id caches take part:
+
+| Cache | Scope | Question it answers |
+|---|---|---|
+| `_answered_floods` | private to this protocol half | Has this half already answered this flood? |
+| `_seen_flood_ids` | shared with the upstream slave protocol through `bind_flood_cache` | Has the node, as a whole, already claimed this flood? It keeps the two halves counted as one node in remote maps |
+| `_forwarded_flood_ids` | private | Has this flood already been forwarded on this path? |
+
+The mesh-wide fan-out is rate-limited by `ping_flood_interval` (default 30 seconds).
+Inside that window the node answers **only the peer that pinged it**, with one send, so
+that peer's map is still correct. Outside the window the responsive PING goes to every
+connected peer and upstream.
 
 ```
 Receive PROPAGATE(PING)
   ├─ hive_mapper.on_ping(message)
-  ├─ emit hive.ping.received on the agent bus
-  └─ if flood_id is new: send PROPAGATE(PING) with the same flood_id
-       to all peers and upstream
+  ├─ if new to the map: emit hive.ping.received on the agent bus
+  ├─ if _answered_floods already holds flood_id: stop
+  └─ send PROPAGATE(PING) with the same flood_id
+       ├─ inside ping_flood_interval: to the asking peer only
+       └─ otherwise: to all peers and upstream
 ```
 
 The node that started the flood collects the answering PINGs until its timeout expires,

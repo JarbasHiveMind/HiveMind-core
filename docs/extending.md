@@ -120,8 +120,21 @@ def natural_language_query(self, utterance: str,
     ...
 ```
 
-This is the seam consumed by hivemind-core's QUERY and CASCADE message handlers.
 Yield `None` immediately if the agent has no answer (triggers upstream escalation).
+
+**Entry point hivemind-core calls:**
+
+```python
+def answer_query(self, utterance: str, lang: str,
+                 client: Optional[HiveMindClientConnection] = None
+                 ) -> Iterator[Optional[str]]:
+    ...
+```
+
+The QUERY and CASCADE handlers call `answer_query`, not `natural_language_query`. The
+base implementation ignores `client` and delegates to `natural_language_query`, so a
+plugin only implements the primitive. Override `answer_query` when the agent needs the
+caller's identity, for example to dispatch to one sub-agent per access key.
 
 **Registration:**
 
