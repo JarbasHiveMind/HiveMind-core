@@ -23,6 +23,7 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from hivemind_bus_client.hive_map import FloodIdCache
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
+from hivemind_bus_client.hive_map import FloodIdCache
 
 from hivemind_core.protocol import HiveMindListenerProtocol
 
@@ -262,6 +263,8 @@ def test_responsive_ping_is_also_sent_upstream():
     node.hive_mapper = MagicMock()
     node._seen_flood_ids = FloodIdCache()
     node._answered_floods = FloodIdCache()
+    node._last_ping_flood = 0.0
+    node.ping_flood_interval = 0.0
     node.agent_protocol = MagicMock()
     sent = _wire_peers(node, "sat::1")
     captured = _upstream(node)
