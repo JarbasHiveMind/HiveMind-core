@@ -56,7 +56,6 @@ messages). Responses from the agent travel back through the same path.
 | `CASCADE` | server → satellite(s) | Scatter/gather: distributes a query across children |
 | `INTERCOM` | bidirectional | Signed/encrypted end-to-end peer message |
 | `BINARY` | bidirectional | Raw bytes (audio, image, file). Crosses the same `allowed_types` gate as `BUS` |
-| `THIRDPRTY` | bidirectional | User-land message. HiveMind carries it and does nothing else with it |
 
 ### QUERY / CASCADE streaming
 
