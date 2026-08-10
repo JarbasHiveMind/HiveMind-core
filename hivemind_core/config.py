@@ -86,6 +86,16 @@ _DEFAULT = {
     # ALWAYS prepended to whatever appears in `chain` below — it cannot
     # be disabled by configuration. This list is for *additional*
     # policies layered on top.
+    # OVOS transformer pipelines applied to the text/bus path
+    # (OVOS-TRANSFORM). Loading is config-gated and opt-in: a plugin only
+    # loads when named in its section, e.g.
+    #   "utterance_transformers": {"ovos-utterance-corrections-plugin": {}}
+    # utterance/metadata transformers run on client utterances before they
+    # reach the agent bus; dialog transformers rewrite QUERY/CASCADE answer
+    # chunks before they are sent back to clients.
+    "utterance_transformers": {},
+    "metadata_transformers": {},
+    "dialog_transformers": {},
     "policy": {
         "chain": [
             # OVOSAgentPolicy ships with hivemind-ovos-agent-plugin
