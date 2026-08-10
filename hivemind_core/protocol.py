@@ -453,14 +453,16 @@ class CascadeCollector:
     def add_response(self, message: HiveMessage) -> 'CascadeResponse':
         meta = message.metadata or {}
         responder = meta.get("responder_peer", "unknown")
-        resp = self._by_responder.get(responder)
-        if resp is None:
-            resp = CascadeResponse(
-                responder_peer=responder,
-                responder_site_id=meta.get("responder_site_id", ""),
-                metadata=meta,
-            )
-            self._by_responder[responder] = resp
+        candidate = CascadeResponse(
+            responder_peer=responder,
+            responder_site_id=meta.get("responder_site_id", ""),
+            metadata=meta,
+        )
+        # setdefault is a single atomic dict op under the GIL, so two threads
+        # racing on the same responder can never both win: whichever entry
+        # setdefault returns is the one and only entry for that responder.
+        resp = self._by_responder.setdefault(responder, candidate)
+        if resp is candidate:
             self.responses.append(resp)
         inner = message.payload
         if isinstance(inner, HiveMessage) and inner.msg_type == HiveMessageType.BUS:
@@ -494,6 +496,14 @@ class HiveMindListenerProtocol:
     # finds working values instead of raising AttributeError on the ping path.
     # __post_init__ still overwrites ping_flood_interval from config, so
     # operator config keeps winning.
+    # Backing field for the ``_pending_cascades_lock`` property below. A
+    # plain __post_init__ assignment left every object.__new__ fixture
+    # raising AttributeError the first time a cascade or query was routed.
+    _cascades_lock: Optional[threading.Lock] = field(default=None, init=False, repr=False)
+    # Backing field for ``trusted_pubkeys``. handle_client_disconnected now
+    # sweeps the TOFU pin store on every disconnect, so a bypass-built
+    # fixture reaches it too.
+    _trusted_pubkeys: Optional[dict] = field(default=None, init=False, repr=False)
     _last_ping_flood: float = field(default=0.0, init=False, repr=False)
     ping_flood_interval: float = field(default=30.0, init=False)
 
@@ -535,7 +545,7 @@ class HiveMindListenerProtocol:
         # client MUST verify against the pinned key. In-memory for now — pins
         # last for the lifetime of this listener (the Client DB model has no
         # pubkey column yet).
-        self.trusted_pubkeys: dict = {}  # client.key -> PEM public key
+        self._trusted_pubkeys = {}  # client.key -> PEM public key
         # Already-answered PING floods (MSG-1 §4). Set-like, FIFO-evicting:
         # a dedup miss re-triggers a whole flood, so an eviction that drops a
         # live flood_id amplifies the very traffic this cache exists to stop.
@@ -548,6 +558,11 @@ class HiveMindListenerProtocol:
         # ``handle_ping_message`` for why the node needs both records.
         self._answered_floods: FloodIdCache = FloodIdCache()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
+        # guards lookup/creation of _pending_cascades entries: _route_query_response
+        # runs both on the tornado thread (direct clients) and on the upstream
+        # slave thread (cascade/query relayed from a master), so two threads can
+        # race to create the same query_id's collector without this.
+        self._cascades_lock = threading.Lock()
         self._last_seen_updates: dict = {}  # client.key -> last persisted timestamp
         self.last_seen_update_interval = _non_negative_float(
             get_server_config().get("last_seen_update_interval", 0),
@@ -591,6 +606,39 @@ class HiveMindListenerProtocol:
         # every chain is normalized, including one handed to the constructor
         # by an embedder \u2014 the builtin gates are not opt-out
         self.policy_chain = self._with_builtin_policies(self.policy_chain)
+
+    @property
+    def trusted_pubkeys(self) -> dict:
+        """TOFU pin store for INTERCOM origin authentication (CRYPTO-1 §5).
+
+        Maps a client's access key to the PEM public key first seen for it.
+        Lazily created so the field default can be ``None`` — a class
+        attribute a bypass-built instance still sees.
+        """
+        if self._trusted_pubkeys is None:
+            self._trusted_pubkeys = {}
+        return self._trusted_pubkeys
+
+    @trusted_pubkeys.setter
+    def trusted_pubkeys(self, value: dict) -> None:
+        self._trusted_pubkeys = value
+
+    @property
+    def _pending_cascades_lock(self) -> threading.Lock:
+        """Guards lookup/creation of ``_pending_cascades`` entries.
+
+        ``_route_query_response`` runs both on the tornado thread (direct
+        clients) and on the upstream slave thread (a cascade or query relayed
+        from a master), so two threads can race to create the same query_id's
+        collector without this.
+
+        __post_init__ builds the lock eagerly, so a normally-constructed node
+        never reaches the lazy branch; that branch exists for fixtures built
+        with ``object.__new__``, which are single-threaded.
+        """
+        if self._cascades_lock is None:
+            self._cascades_lock = threading.Lock()
+        return self._cascades_lock
 
     @property
     def identity_rsa_key(self) -> RSA.RsaKey:
@@ -850,6 +898,26 @@ class HiveMindListenerProtocol:
         # snapshot: a reconnect on another thread can insert while we iterate
         if not any(conn.key == client.key for conn in list(self.clients.values())):
             self._last_seen_updates.pop(client.key, None)
+            # trusted_pubkeys is keyed by api-key, not peer, so a reconnect
+            # under the same key must keep its TOFU pin — only drop it once
+            # no live connection uses this key AND the key itself is gone
+            # from the db (revoked/replaced), never just because of a single
+            # disconnect. This runs off the hot path (disconnect, not every
+            # message), so the db lookup is cheap enough to afford here.
+            if client.key in self.trusted_pubkeys:
+                with self.db:
+                    if self.db.get_client_by_api_key(client.key) is None:
+                        self.trusted_pubkeys.pop(client.key, None)
+        # a pending cascade is only ever consumed in _route_query_response,
+        # which requires ``originator_peer in self.clients`` before touching
+        # its collector (see the CASCADE branch above) — once the originator
+        # itself has disconnected, no future message can reach that check, so
+        # its collectors are dead and safe to purge now instead of waiting
+        # for 256-entry cap churn to evict them.
+        with self._pending_cascades_lock:
+            for query_id in [qid for qid, c in self._pending_cascades.items()
+                              if c.originator_peer == client.peer]:
+                self._pending_cascades.pop(query_id, None)
         client.disconnect()
         context = {"source": client.peer}
         # never hand the reserved session of a non-admin to the OVOS bus: it
@@ -1991,15 +2059,22 @@ class HiveMindListenerProtocol:
                 and self.cascade_select_callback is not None
                 and originator_conn is not None):
             query_id = metadata.get("query_id", "")
-            if query_id not in self._pending_cascades:
-                # AGENT-1 §4.3: bound the collector map. It counts concurrent
-                # queries — a collector holds one entry per responder, so the
-                # per-query state is bounded by the mesh, not by chunk count.
-                while len(self._pending_cascades) >= 256:
-                    self._pending_cascades.pop(next(iter(self._pending_cascades)))
-                self._pending_cascades[query_id] = CascadeCollector(
-                    query_id=query_id, originator_peer=originator_peer)
-            collector = self._pending_cascades[query_id]
+            # _route_query_response runs both on the tornado thread (direct
+            # clients) and on the upstream slave thread (relayed cascades), so
+            # the lookup/creation of a query_id's collector must be atomic:
+            # otherwise two threads can each create one, and whichever loses
+            # the final assignment has its responses silently discarded.
+            with self._pending_cascades_lock:
+                collector = self._pending_cascades.get(query_id)
+                if collector is None:
+                    # AGENT-1 §4.3: bound the collector map. It counts concurrent
+                    # queries — a collector holds one entry per responder, so the
+                    # per-query state is bounded by the mesh, not by chunk count.
+                    while len(self._pending_cascades) >= 256:
+                        self._pending_cascades.pop(next(iter(self._pending_cascades)))
+                    collector = CascadeCollector(
+                        query_id=query_id, originator_peer=originator_peer)
+                    self._pending_cascades[query_id] = collector
             collector.add_response(message)
             try:
                 bus = self.get_bus(originator_conn)
@@ -2014,7 +2089,8 @@ class HiveMindListenerProtocol:
                 selected = self.cascade_select_callback(query_id, collector.responses)
                 if selected is not None:
                     bus.emit(selected)
-                    del self._pending_cascades[query_id]
+                    with self._pending_cascades_lock:
+                        self._pending_cascades.pop(query_id, None)
             except Exception:
                 LOG.exception(f"cascade_select_callback error for query_id={query_id}")
             return
