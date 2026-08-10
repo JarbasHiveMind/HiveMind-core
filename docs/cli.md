@@ -191,6 +191,10 @@ hivemind-core blacklist-propagate [NODE_ID]
 
 Control whether a client may send `BROADCAST` messages (fanned out to all peers below this node).
 
+> The client must also be admin. BROADCAST is gated on `is_admin` **and**
+> `can_broadcast`, so granting this to a non-admin changes nothing — the CLI
+> prints a note saying so.
+
 ```bash
 hivemind-core allow-broadcast [NODE_ID]
 hivemind-core blacklist-broadcast [NODE_ID]

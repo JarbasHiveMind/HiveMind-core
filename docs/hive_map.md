@@ -62,9 +62,10 @@ class HiveMapper:
         """
 ```
 
-`nodes` and `edges` are not capped. They expire instead: call
-`prune_stale_nodes()` to drop what has gone quiet, so a live but silent peer is never
-evicted only because it is old.
+`nodes` and `edges` are not FIFO-capped. They expire on age instead: a node is
+dropped once `node_ttl` seconds (default 600) have passed with no PING from it, so a
+peer that is alive but silent does age out of the map. `on_ping` prunes automatically;
+`prune_stale_nodes()` can also be called directly.
 
 ### `start_ping(flood_id: str) -> None`
 

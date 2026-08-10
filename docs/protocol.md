@@ -110,13 +110,14 @@ pair emits `hive.ping.received` on the agent bus, so a peer that reaches this no
 several mesh paths is reported once, not once per path.
 
 The handler then builds its own responsive PING carrying the same `flood_id`, and decides
-who gets it. Three separate flood-id caches take part:
+who gets it. Two caches decide the answer; a third, `_forwarded_flood_ids`, gates the
+PROPAGATE fan-out around it:
 
 | Cache | Scope | Question it answers |
 |---|---|---|
 | `_answered_floods` | private to this protocol half | Has this half already answered this flood? |
 | `_seen_flood_ids` | shared with the upstream slave protocol through `bind_flood_cache` | Has the node, as a whole, already claimed this flood? It keeps the two halves counted as one node in remote maps |
-| `_forwarded_flood_ids` | private | Has this flood already been forwarded on this path? |
+| `_forwarded_flood_ids` | private | Has this **node** already forwarded this flood? Consulted by `handle_propagate_message` before the fan-out, not by the PING answer logic. Dedup is per node, never per peer |
 
 The mesh-wide fan-out is rate-limited by `ping_flood_interval` (default 30 seconds).
 Inside that window the node answers **only the peer that pinged it**, with one send, so
