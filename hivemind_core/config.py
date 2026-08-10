@@ -159,6 +159,15 @@ def get_server_config() -> JsonStorageXDG:
     for k, v in defaults.items():
         if k not in db:
             db[k] = v
+        elif isinstance(v, dict) and isinstance(db[k], dict):
+            # ...and that a partially specified block keeps the rest of its
+            # defaults. Overriding one plugin setting is the common case:
+            #     {"network_protocol": {"hivemind-websocket-plugin": {...}}}
+            # Without this the block loses "module" and the service dies at
+            # startup with a bare KeyError.
+            for subk, subv in v.items():
+                if subk not in db[k]:
+                    db[k][subk] = subv
     # back-compat for the policy block: legacy installs may have
     # `policy.fail_open` (removed — chain is unconditionally fail-closed)
     # or be missing `policy.chain` (we default to OVOSAgentPolicy).
