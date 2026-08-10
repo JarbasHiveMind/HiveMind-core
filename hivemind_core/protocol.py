@@ -578,6 +578,9 @@ class HiveMindListenerProtocol:
         # Private to this half, unlike ``_seen_flood_ids`` above: see
         # ``handle_ping_message`` for why the node needs both records.
         self._answered_floods: FloodIdCache = FloodIdCache()
+        # Floods this node has already FORWARDED, kept apart from the floods
+        # it has already ANSWERED above. See ``_already_forwarded_flood``.
+        self._forwarded_flood_ids: FloodIdCache = FloodIdCache()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         # guards lookup/creation of _pending_cascades entries: _route_query_response
         # runs both on the tornado thread (direct clients) and on the upstream
@@ -1670,6 +1673,57 @@ class HiveMindListenerProtocol:
                "targets": list(payload.target_peers) or [self._node_id]}
         payload.replace_route(list(payload.route) + [hop])
 
+    @staticmethod
+    def _flood_id(message: HiveMessage) -> str:
+        """The ``flood_id`` a routing message carries, or ``""`` when it carries
+        none.
+
+        The id lives on the innermost payload mapping — a PROPAGATE wraps a PING
+        whose payload is the plain mapping described in MSG-1 §4. Messages that
+        are not floods (a PROPAGATE around a BUS ``Message``, a QUERY, ...) have
+        no such mapping and yield ``""``, which every caller reads as "not a
+        flood, no dedup applies".
+        """
+        inner = message.payload
+        if isinstance(inner, HiveMessage):
+            inner = inner.payload
+        return inner.get("flood_id", "") if isinstance(inner, dict) else ""
+
+    def _already_forwarded_flood(self, message: HiveMessage) -> bool:
+        """HIVEMIND-MSG-1 §4 / NODE-1 §4: a node drops a flood whose ``flood_id``
+        it has already seen. Returns True when this node has already forwarded
+        this flood, and records the id otherwise.
+
+        This is a **second, independent** gate on top of the §5 route-loop check.
+        Route-loop suppression only stops a message that carries this node in its
+        own ``route``; a responsive PING is built fresh by the answering node
+        (empty ``route``, same ``flood_id``), so it looks brand new at every hop.
+        Without this gate a master re-fans every one of the n responses to all
+        n-1 other peers, and the mesh cost of one ping round grows as n(n-1)^2.
+
+        The forwarded ids are tracked **separately** from
+        :attr:`_seen_flood_ids`, which records the floods this node has already
+        *answered*. Answering and forwarding are different decisions taken at
+        different moments: ``handle_ping_message`` answers (and marks the flood
+        answered) *before* the forwarding block below runs, so a shared set would
+        make the node consider every flood already forwarded on first sight and
+        the flood would never leave the node that received it.
+
+        Deduplication is deliberately per-node and not per-peer: once a flood has
+        crossed this node in any direction it has reached everything this node
+        can reach, so a second copy arriving from another peer adds nothing.
+        """
+        flood_id = self._flood_id(message)
+        if not flood_id:
+            return False
+        # FloodIdCache.check() records the id and reports whether it was
+        # already there, so the test and the insert cannot race. Sized from
+        # the client count like the answer caches: every connected peer can
+        # start a flood of its own, and each eviction of a live flood_id buys
+        # a duplicate fan-out.
+        return self._forwarded_flood_ids.check(
+            flood_id, max_size=max(1000, len(self.clients) * 100))
+
     def handle_propagate_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
@@ -1723,6 +1777,14 @@ class HiveMindListenerProtocol:
         if looped:
             LOG.debug("not re-forwarding PROPAGATE already routed through this "
                       f"node {self._node_id} (MSG-1 §5); route={message.route}")
+            return
+
+        # MSG-1 §4: a flood crosses each node once. Local delivery above already
+        # ran (the mapper sees every PING, answered or not); only the fan-out is
+        # dropped for a flood this node has forwarded before.
+        if self._already_forwarded_flood(message):
+            LOG.debug("not re-forwarding PROPAGATE for already seen "
+                      f"flood_id={self._flood_id(message)} (MSG-1 §4)")
             return
 
         # propagate message to other peers (NODE-1 §3.3: keep the envelope, so a
@@ -1910,11 +1972,16 @@ class HiveMindListenerProtocol:
     def _relay_downstream(self, message: HiveMessage) -> None:
         """Fan a routing message received from the upstream master out to every
         downstream client, with NODE-1 §3.4 loop prevention: a message whose
-        route already names this node is not relayed again."""
+        route already names this node is not relayed again, and MSG-1 §4 flood
+        dedup: a flood this node already relayed is not relayed again."""
         if self._is_routing_loop(message):
             LOG.debug(f"not relaying {message.msg_type} already routed through "
                       f"this node {self._node_id} (NODE-1 §3.4); "
                       f"route={message.route}")
+            return
+        if self._already_forwarded_flood(message):
+            LOG.debug(f"not relaying {message.msg_type} for already seen "
+                      f"flood_id={self._flood_id(message)} (MSG-1 §4)")
             return
         self._append_self_hop(message)
         plaintext = message.serialize()
