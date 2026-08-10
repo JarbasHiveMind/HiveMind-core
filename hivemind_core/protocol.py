@@ -506,6 +506,11 @@ class HiveMindListenerProtocol:
     # plain __post_init__ assignment left every object.__new__ fixture
     # raising AttributeError the first time a cascade or query was routed.
     _cascades_lock: Optional[threading.Lock] = field(default=None, init=False, repr=False)
+    # Backing field for the ``_forwarded_flood_ids`` property below. Same
+    # treatment as the other flood caches: a mutable FloodIdCache cannot be a
+    # class-level default without every node sharing one, so the default is
+    # None and the property builds one per instance on first access.
+    _forwarded_flood_cache: Optional[FloodIdCache] = field(default=None, init=False, repr=False)
     # Backing field for ``trusted_pubkeys``. handle_client_disconnected now
     # sweeps the TOFU pin store on every disconnect, so a bypass-built
     # fixture reaches it too.
@@ -580,7 +585,7 @@ class HiveMindListenerProtocol:
         self._answered_floods: FloodIdCache = FloodIdCache()
         # Floods this node has already FORWARDED, kept apart from the floods
         # it has already ANSWERED above. See ``_already_forwarded_flood``.
-        self._forwarded_flood_ids: FloodIdCache = FloodIdCache()
+        self._forwarded_flood_cache = FloodIdCache()
         self._pending_cascades: dict = {}  # query_id -> CascadeCollector
         # guards lookup/creation of _pending_cascades entries: _route_query_response
         # runs both on the tornado thread (direct clients) and on the upstream
@@ -646,6 +651,22 @@ class HiveMindListenerProtocol:
     @trusted_pubkeys.setter
     def trusted_pubkeys(self, value: dict) -> None:
         self._trusted_pubkeys = value
+
+    @property
+    def _forwarded_flood_ids(self) -> FloodIdCache:
+        """Floods this node has already forwarded, kept apart from the floods
+        it has already answered. See ``_already_forwarded_flood``.
+
+        Lazily created for the same reason as the other caches: the field
+        default has to be ``None`` so a bypass-constructed instance sees it.
+        """
+        if self._forwarded_flood_cache is None:
+            self._forwarded_flood_cache = FloodIdCache()
+        return self._forwarded_flood_cache
+
+    @_forwarded_flood_ids.setter
+    def _forwarded_flood_ids(self, value: FloodIdCache) -> None:
+        self._forwarded_flood_cache = value
 
     @property
     def _pending_cascades_lock(self) -> threading.Lock:
