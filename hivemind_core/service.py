@@ -4,6 +4,8 @@
 import dataclasses
 import ipaddress
 import socket
+import threading
+import time
 from typing import Callable, Mapping, Optional, Type
 
 from json_database import JsonConfigXDG
@@ -154,6 +156,9 @@ class HiveMindService:
     stopping_hook: Callable[[], None] = on_stopping
 
     _status: Optional[ProcessStatus] = None
+    #: seconds between attempts to build the agent protocol when its backend
+    #: is unreachable
+    agent_retry_delay: float = 5.0
 
     def __post_init__(self) -> None:
         self._presence = None
@@ -259,6 +264,63 @@ class HiveMindService:
         self._upstream = slave
         return slave
 
+    def _start_agent_protocol(self, agent_class: Type, config: Mapping):
+        """Build the agent protocol, retrying while its backend is unreachable.
+
+        Agents are expected to degrade rather than raise: the OVOS plugin comes
+        up with a disconnected bus, its client reconnects on its own, and Core
+        answers BACKEND_UNAVAILABLE meanwhile — the node serves its satellites
+        the whole time. An agent that insists on raising leaves nothing to
+        build the listeners around, so keep trying instead of exiting: on a
+        slow board the OVOS messagebus is simply a few seconds behind, and
+        exiting would take the whole hive down until someone restarts us.
+        """
+        while True:
+            try:
+                return agent_class(config=config)
+            except ConnectionError as e:
+                LOG.error(f"{agent_class.__name__} can not reach its backend "
+                          f"({e}); retrying in {self.agent_retry_delay}s. No "
+                          f"client can be served until it answers.")
+                time.sleep(self.agent_retry_delay)
+
+    def _run_network_protocols(self, protos: list) -> None:
+        """Start every network protocol on its own daemon thread.
+
+        ``run`` blocks on an IOLoop, so an exception in it (a port already in
+        use, an unreadable SSL certificate) kills its thread and nothing else.
+        Unwatched, the service would report itself ready while carrying no
+        traffic at all. One dead transport is survivable — the others still
+        serve — but a node with every transport dead is in error, and must say
+        so instead of looking healthy.
+        """
+        alive = len(protos)
+        lock = threading.Lock()
+
+        def run(network_protocol):
+            nonlocal alive
+            try:
+                network_protocol.run()
+            except Exception:
+                LOG.exception(f"Network protocol "
+                              f"{type(network_protocol).__name__} stopped")
+            with lock:
+                alive -= 1
+                dead = alive == 0
+            if dead:
+                LOG.error("Every network protocol has stopped, this node no "
+                          "longer accepts clients")
+                self._status.set_error("all network protocols stopped")
+
+        # ready first: set_ready and set_error are plain assignments, so a
+        # transport that fails the moment it starts (port already bound,
+        # unreadable certificate) would set_error before this line ran and
+        # the node would end up READY with nothing listening
+        self._status.set_ready()
+
+        for network_protocol in protos:
+            create_daemon(run, (network_protocol,))
+
     def _stop_upstream(self) -> None:
         if self._upstream is not None:
             self._upstream.hm.close()
@@ -274,7 +336,7 @@ class HiveMindService:
         agent_class, agent_config = get_agent_protocol()
         LOG.info(f"Agent protocol: {agent_class.__name__}")
 
-        agent_protocol = agent_class(config=agent_config)
+        agent_protocol = self._start_agent_protocol(agent_class, agent_config)
         self._status.bind(agent_protocol.bus)
 
         # binary data handling protocol
@@ -310,10 +372,7 @@ class HiveMindService:
             self._status.set_stopping()
             return
 
-        for network_protocol in protos:
-            create_daemon(network_protocol.run)
-
-        self._status.set_ready()
+        self._run_network_protocols(protos)
 
         self._start_presence()
         wait_for_exit_signal()  # block until ctrl+c
