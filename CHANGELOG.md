@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.0a1) (2026-08-11)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.9a1...4.13.0a1)
+
+**Merged pull requests:**
+
+- feat: route RENDEZVOUS to an optional store-and-forward mailbox [\#243](https://github.com/JarbasHiveMind/HiveMind-core/pull/243) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.12.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.9a1) (2026-08-11)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.8a1...4.12.9a1)
@@ -206,19 +214,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
-
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 **Merged pull requests:**
 
