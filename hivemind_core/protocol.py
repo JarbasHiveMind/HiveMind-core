@@ -527,6 +527,14 @@ class HiveMindListenerProtocol:
     metadata_transformers: Optional[MetadataTransformersService] = None
     dialog_transformers: Optional[DialogTransformersService] = None
 
+    # Store-and-forward mailbox, bound at startup when the optional
+    # hivemind-rendezvous package is installed and rendezvous is enabled
+    # (see HiveMindService._start_rendezvous). None on every ordinary node,
+    # which is what makes RENDEZVOUS answer "not_a_rendezvous_node".
+    # A dataclass field, so an instance built with ``object.__new__`` in a
+    # test fixture still finds the default instead of raising AttributeError.
+    mailbox: Optional[object] = field(default=None, repr=False)
+
     # Interval (seconds) between persisted last-seen updates for the same
     # client, read from config in __post_init__ (which always wins over this
     # default). Declared as a field — not just a __post_init__ assignment —
@@ -1086,6 +1094,8 @@ class HiveMindListenerProtocol:
             self.handle_intercom_message(message, client)
         elif message.msg_type == HiveMessageType.BINARY:
             self.handle_binary_message(message, client)
+        elif message.msg_type == HiveMessageType.RENDEZVOUS:
+            self.handle_rendezvous_message(message, client)
         else:
             self.handle_unknown_message(message, client)
 
@@ -1157,6 +1167,30 @@ class HiveMindListenerProtocol:
         return True
 
     # HiveMind protocol messages -  from slave -> master
+    def handle_rendezvous_message(
+            self, message: HiveMessage, client: HiveMindClientConnection
+    ):
+        """Serve a RENDEZVOUS request, when this node holds mail.
+
+        A rendezvous node is an ordinary node with the optional
+        hivemind-rendezvous package installed and ``rendezvous.enabled`` set;
+        ``mailbox`` is then bound at startup. Every other node has no mailbox
+        and says so, rather than dropping the frame silently — a peer that
+        cannot tell "no mail" from "not a rendezvous node" cannot fail over to
+        one that is.
+
+        The caller never names a mailbox. It gets the one belonging to the
+        public key this connection was TOFU-pinned to at handshake time, so
+        collecting another node's mail is not something the wire can express.
+        """
+        if self.mailbox is None:
+            client.send(HiveMessage(
+                HiveMessageType.RENDEZVOUS,
+                payload={"status": "error", "reason": "not_a_rendezvous_node"}))
+            return
+        owner = self.trusted_pubkeys.get(client.key) or client.pub_key
+        client.send(self.mailbox.handle(message, owner))
+
     def handle_unknown_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):

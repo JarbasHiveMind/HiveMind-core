@@ -199,6 +199,30 @@ class HiveMindService:
         create_daemon(self._presence.start)
         LOG.info("LocalPresence started")
 
+    def _start_rendezvous(self, hm_protocol: HiveMindListenerProtocol) -> None:
+        """Optionally make this node a rendezvous point, holding mail for peers
+        that are never online at the same time, via the optional
+        hivemind-rendezvous package. No-op when that package is not installed
+        or rendezvous is disabled — the node then answers RENDEZVOUS with
+        "not_a_rendezvous_node", which is the honest reply.
+
+        Same shape as _start_presence: an optional import, a config switch,
+        and nothing else in the process to run or expose. The mailbox is
+        served over the listener that is already accepting clients, so being
+        a rendezvous node costs no extra port, credential or service.
+        """
+        try:
+            from hivemind_rendezvous import RendezvousMailbox
+        except ImportError:
+            return
+        cfg = get_server_config().get("rendezvous", {})
+        if not cfg.get("enabled", False):
+            return
+        hm_protocol.mailbox = RendezvousMailbox(
+            max_pending_per_mailbox=cfg.get("max_pending_per_mailbox", 256)
+        )
+        LOG.info("rendezvous mailbox enabled")
+
     def _connect_upstream(self, hm_protocol: HiveMindListenerProtocol
                           ) -> Optional[HiveMindSlaveProtocol]:
         """Optionally connect this node to a master above it
@@ -351,6 +375,9 @@ class HiveMindService:
                                        callbacks=self.callbacks,
                                        binary_data_protocol=bin_protocol,
                                        agent_protocol=agent_protocol)
+
+        # optionally hold mail for peers that are never online together
+        self._start_rendezvous(hm_protocol)
 
         # optionally connect this node to a master above it
         self._connect_upstream(hm_protocol)

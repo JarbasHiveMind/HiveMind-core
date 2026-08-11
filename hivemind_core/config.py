@@ -47,6 +47,13 @@ _DEFAULT = {
         "zeroconf": True,   # mDNS (optional zeroconf)
         "upnp": False,      # UPnP/SSDP (optional upnpclient)
     },
+    # store-and-forward dead drop for peers that are never online at the same
+    # time (optional hivemind-rendezvous package). Off by default: holding
+    # other nodes' mail is a role an operator opts into, not a default.
+    "rendezvous": {
+        "enabled": False,
+        "max_pending_per_mailbox": 256,
+    },
     # optional connection to a master above this node — HIVEMIND-NODE-1
     # §3.3/§4. Disabled by default: the node is a top-level master. Enable it
     # and the node also holds one connection upstream.
