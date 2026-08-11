@@ -1,5 +1,14 @@
 # Changelog
 
+## [4.12.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.9a1) (2026-08-11)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.8a1...4.12.9a1)
+
+**Merged pull requests:**
+
+- fix: accept the hybrid INTERCOM envelope the client actually sends [\#236](https://github.com/JarbasHiveMind/HiveMind-core/pull/236) ([JarbasAl](https://github.com/JarbasAl))
+- docs: correct claims that no longer match the code [\#234](https://github.com/JarbasHiveMind/HiveMind-core/pull/234) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.12.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.8a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.7a1...4.12.8a1)
