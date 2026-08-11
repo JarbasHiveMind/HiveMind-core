@@ -49,8 +49,8 @@ messages). Responses from the agent travel back through the same path.
 | `BUS` | bidirectional | Wraps an OVOS `Message`; the most common type |
 | `SHARED_BUS` | server → satellite | Bus event pushed to satellite |
 | `BROADCAST` | satellite → server | Deliver to all connected satellites |
-| `PROPAGATE` | satellite → server | Forward upstream to the parent server |
-| `ESCALATE` | satellite → server | Forward up the relay chain |
+| `PROPAGATE` | bidirectional | Fan out to every other connected peer **and** upstream, keeping the `PROPAGATE` envelope (`_rewrap`) so each peer can fan it out again |
+| `ESCALATE` | satellite → server | Forward upstream only, up the relay chain. It is never fanned out sideways |
 | `PING` | bidirectional | Topology discovery flood. Each node answers with its own PING carrying the same `flood_id`. There is no PONG |
 | `QUERY` | satellite → server | Natural-language query. The server streams answer chunks |
 | `CASCADE` | server → satellite(s) | Scatter/gather: distributes a query across children |
@@ -59,8 +59,12 @@ messages). Responses from the agent travel back through the same path.
 
 ### QUERY / CASCADE streaming
 
-A `QUERY` message triggers `AgentProtocol.natural_language_query(utterance, lang)`, a
-generator that yields string answer chunks followed by a final `None` sentinel.
+A `QUERY` message triggers `AgentProtocol.answer_query(utterance, lang, client=...)`, a
+generator that yields string answer chunks followed by a final `None` sentinel. The
+`client` argument lets a multiplexing agent pick the right per-key sub-agent. Its default
+implementation delegates to the backend primitive
+`natural_language_query(utterance, lang)`, which is the abstract method a plugin
+implements.
 Each chunk is forwarded to the satellite as it arrives. A `hive.query.complete` control
 message is sent when the generator exhausts. If the agent yields `None` immediately (no
 answer), the server escalates the query upstream.

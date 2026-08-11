@@ -4,9 +4,12 @@
 directed graph of the reachable network. It lives in `hivemind_bus_client.hive_map`
 and the server imports it in `hivemind_core/protocol.py`.
 
-Discovery is PING-only. Every node answers an inbound PING by relaying its own PING
-with the same `flood_id`, so all nodes in the network sync in one round. There is
-no separate PONG message. The `flood_id` stops infinite relay loops.
+Discovery is PING-only. A node answers an inbound PING with its own PING carrying the
+same `flood_id`. There is no separate PONG message, and the `flood_id` stops infinite
+relay loops. On the server the mesh-wide fan-out of that answer is rate-limited by
+`ping_flood_interval` (default 30 seconds); inside that window the node answers only the
+peer that pinged it. See [Protocol Internals](protocol.md) for the three flood-id caches
+involved.
 
 For a conceptual overview of the discovery protocol, see
 [HiveMind community docs: network discovery](https://github.com/JarbasHiveMind/HiveMind-community-docs/blob/master/docs/20_network_discovery.md).
@@ -41,17 +44,28 @@ HiveMapper.to_json()              ← export as a JSON string
 
 ```python
 class HiveMapper:
-    def __init__(self) -> None:
+    def __init__(self, max_seen_pings: int = 1000, node_ttl: float = 600.0) -> None:
         """
         Initialize an empty topology map.
+
+        Args:
+            max_seen_pings: FIFO bound on the per-flood deduplication index.
+            node_ttl: Seconds a node stays in the map after its last PING.
 
         Attributes:
             nodes (Dict[str, NodeInfo]): peer_id -> node metadata
             edges (Dict[str, Set[str]]): peer_id -> set of peer_ids it was seen routing to
-            _seen_pings (Dict[str, Set[str]]): flood_id -> set of peer_ids that already sent a PING
-            _seen_flood_ids (OrderedDict[str, float]): flood_id -> timestamp, for loop prevention
+            _seen_pings (OrderedDict[str, Set[str]]): flood_id -> set of peer_ids that already
+                sent a PING, FIFO-evicted at max_seen_pings
+            _seen_flood_ids (FloodIdCache): already-answered flood ids, for loop prevention.
+                It is replaceable, so the two protocol halves of one node can share one store
         """
 ```
+
+`nodes` and `edges` are not FIFO-capped. They expire on age instead: a node is
+dropped once `node_ttl` seconds (default 600) have passed with no PING from it, so a
+peer that is alive but silent does age out of the map. `on_ping` prunes automatically;
+`prune_stale_nodes()` can also be called directly.
 
 ### `start_ping(flood_id: str) -> None`
 
@@ -149,6 +163,15 @@ Check whether `flood_id` was already seen, and register it. The first call for a
 given `flood_id` returns `False` (not seen). Later calls return `True`. When the
 cache passes `max_size`, the oldest entries are evicted first (FIFO).
 
+### `prune_stale_nodes(now: Optional[float] = None) -> None`
+
+Drop every node, and its edges, not heard from within `node_ttl` seconds. Pass `now` to
+use a clock other than `time.time()`.
+
+```python
+mapper.prune_stale_nodes()
+```
+
 ### `clear() -> None`
 
 Reset the mapper to an empty state (nodes, edges, seen-ping and seen-flood-id
@@ -188,13 +211,18 @@ The server-side protocol creates a `HiveMapper` instance and feeds it PINGs:
 
 def handle_ping_message(self, message: HiveMessage, client: HiveMindClientConnection) -> None:
     """
-    Feed the PING into the local HiveMapper, emit hive.ping.received, then,
-    if this flood_id has not been seen before, relay this node's own
-    responsive PING (same flood_id) to all connected peers.
+    Feed the PING into the local HiveMapper. Emit hive.ping.received only for
+    a peer new to the map, then relay this node's own responsive PING (same
+    flood_id) — to every connected peer and upstream once per
+    ping_flood_interval, and to the asking peer alone inside that window.
     """
-    self.hive_mapper.on_ping(message, received_at=time.time())
-    self.agent_protocol.bus.emit(Message("hive.ping.received", {...}))
-    if flood_id_already_seen:
+    new_to_map = self.hive_mapper.on_ping(message, received_at=time.time())
+    if new_to_map:
+        self.agent_protocol.bus.emit(Message("hive.ping.received", {...}))
+    if self._answered_floods.check(flood_id):
+        return
+    if now - self._last_ping_flood < self.ping_flood_interval:
+        client.send(own_ping_outer)   # answer the asker only
         return
     for peer_id, conn in self.clients.items():
         conn.send(own_ping_outer)
