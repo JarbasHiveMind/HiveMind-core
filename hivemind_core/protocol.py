@@ -1381,7 +1381,11 @@ class HiveMindListenerProtocol:
         pinned = self._get_pinned_client_noise_key(client)
         if pinned and transport.remote_static_key != pinned:
             self._abort_noise_handshake(
-                client, "client Noise static key contradicts pinned key")
+                client,
+                "client Noise static key contradicts the pinned key. If this "
+                "client was reinstalled or moved to new hardware, clear the "
+                f"pin with 'hivemind-core reset-noise-pin {client.key}' and "
+                "let it pair again; otherwise another node is answering for it")
             return
         if not pinned and transport.remote_static_key:
             self._pin_client_noise_key(client, transport.remote_static_key)

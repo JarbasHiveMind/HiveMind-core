@@ -214,6 +214,41 @@ def rename_client(node_id, name):
         print(f"Renamed '{old_name}' to {name}")
 
 
+@hmcore_cmds.command(
+    help="Forget a client's pinned Noise static key so it can pair again.",
+    name="reset-noise-pin")
+@click.argument("node_id", required=False, type=int)
+def reset_noise_pin(node_id):
+    """Clear the TOFU-pinned Noise static key for one client.
+
+    The pin is what stops an unknown key answering for a known client
+    (CRYPTO-1 §3.4.5), so the node refuses any protocol v3 handshake whose
+    static key contradicts it. A client that legitimately lost its key —
+    reinstalled, reflashed, moved to new hardware, or rebuilt its identity
+    file — therefore cannot reconnect at all, and before this command the
+    only way out was editing the database by hand.
+
+    Clearing the pin re-arms trust-on-first-use: the next handshake pins
+    whatever key that client presents. Only run it when the client really did
+    change, since it is exactly the check that would otherwise catch an
+    impostor.
+    """
+    with ClientDatabase() as db:
+        client = resolve_client(db, node_id)
+        if client is None:
+            print("Invalid Node ID!")
+            return
+        metadata = client.metadata or {}
+        if not metadata.get("noise_pubkey"):
+            print(f"{client.name} has no pinned Noise key — nothing to reset")
+            return
+        metadata.pop("noise_pubkey")
+        client.metadata = metadata
+        db.update_item(client)
+        print(f"Forgot the pinned Noise key for {client.name}. "
+              "Its next connection will pin the key it presents.")
+
+
 @hmcore_cmds.command(help="Give administrator powers to a client in the database.", name="make-admin")
 @click.argument("node_id", required=False, type=int)
 def make_admin(node_id):
