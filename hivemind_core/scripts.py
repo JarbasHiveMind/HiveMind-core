@@ -75,9 +75,21 @@ def resolve_client(db: ClientDatabase, node_id) -> Optional[Client]:
     Returns None when no client carries that id — every caller reports
     that to the operator itself.
     """
-    node_id = node_id or prompt_node_id(db)
+    if node_id is None:
+        node_id = prompt_node_id(db)
+    # An access key is accepted as well as a numeric id: error messages the
+    # node logs identify a client by its access key, and an operator following
+    # such a message verbatim would otherwise get "not a valid integer".
+    wanted = str(node_id)
     for client in db:
-        if client.client_id == int(node_id):
+        if client.api_key == wanted:
+            return client
+    try:
+        numeric = int(wanted)
+    except (TypeError, ValueError):
+        return None
+    for client in db:
+        if client.client_id == numeric:
             return client
     return None
 
@@ -217,7 +229,10 @@ def rename_client(node_id, name):
 @hmcore_cmds.command(
     help="Forget a client's pinned Noise static key so it can pair again.",
     name="reset-noise-pin")
-@click.argument("node_id", required=False, type=int)
+# str, not int: the node logs this command with the client's ACCESS KEY, and
+# click would reject that with "is not a valid integer" before resolve_client
+# ever saw it — leaving the operator exactly as stuck as before.
+@click.argument("node_id", required=False, type=str)
 def reset_noise_pin(node_id):
     """Clear the TOFU-pinned Noise static key for one client.
 
