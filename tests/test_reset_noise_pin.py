@@ -87,3 +87,22 @@ def test_an_unknown_node_id_is_reported():
 
     assert "Invalid Node ID" in result.output
     assert db.updated == []
+
+
+def test_the_command_accepts_the_access_key_the_logs_print():
+    """The node's abort message names the client by ACCESS KEY.
+
+    With click coercing the argument to int, following that message verbatim
+    failed with "is not a valid integer" — the operator was left exactly as
+    stuck as before the command existed.
+    """
+    client = _client(metadata={"noise_pubkey": "abc123"})
+    db = _DB(client)
+
+    with patch("hivemind_core.scripts.ClientDatabase", return_value=db), \
+            patch("hivemind_core.scripts.resolve_client", return_value=client):
+        result = CliRunner().invoke(reset_noise_pin, ["c0d14821bbece410349e2541"])
+
+    assert result.exit_code == 0, result.output
+    assert "not a valid integer" not in result.output
+    assert db.updated == [client]

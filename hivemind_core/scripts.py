@@ -229,7 +229,10 @@ def rename_client(node_id, name):
 @hmcore_cmds.command(
     help="Forget a client's pinned Noise static key so it can pair again.",
     name="reset-noise-pin")
-@click.argument("node_id", required=False, type=int)
+# str, not int: the node logs this command with the client's ACCESS KEY, and
+# click would reject that with "is not a valid integer" before resolve_client
+# ever saw it — leaving the operator exactly as stuck as before.
+@click.argument("node_id", required=False, type=str)
 def reset_noise_pin(node_id):
     """Clear the TOFU-pinned Noise static key for one client.
 
