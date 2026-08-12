@@ -52,7 +52,7 @@ def scratch_config_home():
     would come too late. Redirect the folder explicitly instead.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        with patch("hivemind_core.service.JsonConfigXDG",
+        with patch("hivemind_bus_client.identity.JsonConfigXDG",
                    lambda name, subfolder: JsonConfigXDG(
                        name, xdg_folder=tmp, subfolder=subfolder)):
             yield tmp
@@ -129,14 +129,16 @@ class TestUpstreamConfigured(unittest.TestCase):
         # upstream can not hold the node down
         daemon.assert_called_once()
 
-    def test_the_upstream_client_gets_its_own_identity_file(self):
-        """Regression, found by live testing against two real nodes.
+    def test_the_upstream_client_uses_the_nodes_own_identity(self):
+        """A node has one identity and uses it in both directions: the key it
+        answers its own clients with is the key it announces to its master.
 
-        ``HiveMessageBusClient`` copies the credentials it is given onto the
-        identity it holds, and the first Noise handshake saves that identity
-        to disk. Handed the node's own identity, it overwrote the node's
-        ``password`` and ``access_key``, and every downstream satellite then
-        failed its handshake with "invalid api key".
+        A second identity file made a relay two nodes to the mesh — anonymous
+        as a client of its master, keyed as a server to its own clients, with
+        nothing to show they were one. It existed because the client copied
+        the credentials it was given onto the identity it held and the first
+        Noise handshake persisted them; that is fixed in the client, so the
+        node keeps one identity.
         """
         service = _make_service()
 
@@ -147,9 +149,7 @@ class TestUpstreamConfigured(unittest.TestCase):
                 patch("hivemind_core.service.create_daemon"):
             service._connect_upstream(MagicMock())
 
-        identity = client.call_args.kwargs["identity"]
-        self.assertTrue(identity.IDENTITY_FILE.path.endswith(
-            "_identity_upstream.json"), identity.IDENTITY_FILE.path)
+        self.assertIs(client.call_args.kwargs["identity"], service.identity)
 
     def test_ssl_selects_the_wss_scheme(self):
         service = _make_service()

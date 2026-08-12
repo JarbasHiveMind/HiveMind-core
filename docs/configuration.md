@@ -193,10 +193,12 @@ Run `hivemind-core add-client` **on the master** to get the `key` and
 error and stays a top-level master, rather than refusing to start and taking
 its own clients offline with it.
 
-The upstream connection keeps its credentials in its own identity file,
-`~/.config/hivemind/_identity_upstream.json`. The node's own
-`_identity.json` — the identity it presents to its downstream clients — is
-never written to by the upstream link.
+The upstream connection uses the node's own identity
+(`~/.config/hivemind/_identity.json`) for both directions — the key it
+answers its own clients with is the key it announces to its master.
+`upstream.key` / `upstream.password` are connection settings for the
+upstream client, not part of the node's identity, and they are never
+written back into `_identity.json`.
 
 The connection opens on a background thread and the client keeps retrying, so
 an unreachable master delays nothing at startup: the node comes up and serves
