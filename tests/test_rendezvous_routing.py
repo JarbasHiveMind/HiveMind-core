@@ -67,35 +67,72 @@ def test_node_without_a_mailbox_says_so():
     assert reply.payload["reason"] == "not_a_rendezvous_node"
 
 
-def test_mailbox_is_served_the_pinned_pubkey_not_a_requested_one():
+def test_mailbox_is_served_the_authenticated_access_key():
     # the caller does not get to name a mailbox: whatever it puts in the
-    # payload, the owner passed to the mailbox is the pinned key of *this*
-    # connection
+    # payload, the owner is the access key THIS connection authenticated with
     proto = _protocol()
     proto.mailbox = _RecordingMailbox()
-    proto.trusted_pubkeys["access-key"] = "PINNED-PEM"
-    client = _client()
+    client = _client(key="my-key")
 
     proto.handle_rendezvous_message(
         HiveMessage(HiveMessageType.RENDEZVOUS,
-                    payload={"cmd": "collect", "pubkey": "VICTIM-PEM"}),
+                    payload={"cmd": "collect", "pubkey": "VICTIM-PEM",
+                             "key": "victim-key"}),
         client)
 
     _msg, owner = proto.mailbox.calls[0]
-    assert owner == "PINNED-PEM"
+    assert owner == "my-key"
 
 
-def test_falls_back_to_the_connection_pubkey_when_unpinned():
+def test_a_declared_pubkey_cannot_claim_a_mailbox():
+    """The HELLO-declared pubkey carries no proof of possession.
+
+    trusted_pubkeys is filled from the HELLO payload and keyed by the caller's
+    OWN access key, so if ownership were derived from it, any admitted client
+    could name a victim's public key — which is public by design, it is the
+    INTERCOM addressing key — and be handed the victim's mailbox.
+    """
     proto = _protocol()
     proto.mailbox = _RecordingMailbox()
-    client = _client(pub_key="CONN-PEM")
+    proto.trusted_pubkeys["attacker-key"] = "VICTIM-PEM"
+    client = _client(key="attacker-key", pub_key="VICTIM-PEM")
 
     proto.handle_rendezvous_message(
         HiveMessage(HiveMessageType.RENDEZVOUS, payload={"cmd": "collect"}),
         client)
 
     _msg, owner = proto.mailbox.calls[0]
-    assert owner == "CONN-PEM"
+    assert owner == "attacker-key", "ownership must not come from a declared pubkey"
+
+
+def test_a_connection_with_no_identity_gets_no_mailbox():
+    # otherwise every such connection shares one mailbox
+    proto = _protocol()
+    proto.mailbox = _RecordingMailbox()
+    client = _client(key="")
+
+    proto.handle_rendezvous_message(
+        HiveMessage(HiveMessageType.RENDEZVOUS, payload={"cmd": "collect"}),
+        client)
+
+    assert proto.mailbox.calls == []
+    assert client.sent[0].payload["reason"] == "no_client_identity"
+
+
+def test_a_raising_mailbox_does_not_kill_the_connection():
+    class _Boom:
+        def handle(self, message, owner):
+            raise RuntimeError("backend down")
+
+    proto = _protocol()
+    proto.mailbox = _Boom()
+    client = _client()
+
+    proto.handle_rendezvous_message(
+        HiveMessage(HiveMessageType.RENDEZVOUS, payload={"cmd": "collect"}),
+        client)
+
+    assert client.sent[0].payload["reason"] == "mailbox_error"
 
 
 def test_the_mailbox_reply_reaches_the_client():

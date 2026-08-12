@@ -1174,22 +1174,45 @@ class HiveMindListenerProtocol:
 
         A rendezvous node is an ordinary node with the optional
         hivemind-rendezvous package installed and ``rendezvous.enabled`` set;
-        ``mailbox`` is then bound at startup. Every other node has no mailbox
-        and says so, rather than dropping the frame silently — a peer that
-        cannot tell "no mail" from "not a rendezvous node" cannot fail over to
-        one that is.
+        ``mailbox`` is then bound at startup. Every other node answers
+        "not_a_rendezvous_node" rather than dropping the frame, so a peer can
+        tell "no mail" from "wrong node" and fail over.
 
-        The caller never names a mailbox. It gets the one belonging to the
-        public key this connection was TOFU-pinned to at handshake time, so
-        collecting another node's mail is not something the wire can express.
+        The mailbox is addressed by ``client.key`` — the access key this
+        connection authenticated with — and never by anything in the request.
+
+        It deliberately is NOT addressed by ``client.pub_key`` or by
+        ``trusted_pubkeys``. Both are populated from the HELLO payload with no
+        proof of possession (see ``handle_hello_message``), and
+        ``trusted_pubkeys`` is keyed by the *caller's own* access key, so any
+        admitted client could name a victim's public key — which is public by
+        design, it is the INTERCOM addressing key — and be handed that
+        victim's mailbox. The access key is proven by the handshake itself,
+        which is what makes it safe to own a mailbox.
         """
         if self.mailbox is None:
             client.send(HiveMessage(
                 HiveMessageType.RENDEZVOUS,
                 payload={"status": "error", "reason": "not_a_rendezvous_node"}))
             return
-        owner = self.trusted_pubkeys.get(client.key) or client.pub_key
-        client.send(self.mailbox.handle(message, owner))
+        if not client.key:
+            # No authenticated identity means no mailbox to serve. Falling
+            # through would hand every such connection one shared mailbox.
+            client.send(HiveMessage(
+                HiveMessageType.RENDEZVOUS,
+                payload={"status": "error", "reason": "no_client_identity"}))
+            return
+        try:
+            reply = self.mailbox.handle(message, client.key)
+        except Exception:
+            # The mailbox is an optional third-party component. An exception
+            # here used to escape handle_message and take the connection down
+            # with it, skipping update_last_seen on the way out.
+            LOG.exception(f"rendezvous mailbox failed for {client.peer}")
+            reply = HiveMessage(HiveMessageType.RENDEZVOUS,
+                                payload={"status": "error",
+                                         "reason": "mailbox_error"})
+        client.send(reply)
 
     def handle_unknown_message(
             self, message: HiveMessage, client: HiveMindClientConnection
