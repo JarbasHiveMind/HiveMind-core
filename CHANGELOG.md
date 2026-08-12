@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.13.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.3a1) (2026-08-12)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.2a1...4.13.3a1)
+
+**Closed issues:**
+
+- PING flood dedup: core and the conformance harness disagree on what a flood is \(nodes below a relay never learn the rest of the hive\) [\#245](https://github.com/JarbasHiveMind/HiveMind-core/issues/245)
+
+**Merged pull requests:**
+
+- fix: dedup PING floods per announcement, so nodes below a relay see the hive [\#250](https://github.com/JarbasHiveMind/HiveMind-core/pull/250) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.2a1) (2026-08-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.1a1...4.13.2a1)
@@ -398,10 +410,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.7.0a1...4.8.0a1)
 
-**Merged pull requests:**
-
-- feat: optional presence advertise + GGWave pairing [\#97](https://github.com/JarbasHiveMind/HiveMind-core/pull/97) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.7.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.7.0a1) (2026-07-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.7a1...4.7.0a1)
@@ -506,10 +514,6 @@
 ## [4.5.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.5.0a1) (2026-06-05)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.4.0a2...4.5.0a1)
-
-**Merged pull requests:**
-
-- feat: native relay support \(bind\_upstream\) [\#98](https://github.com/JarbasHiveMind/HiveMind-core/pull/98) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.4.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.4.0a2) (2026-06-05)
 
