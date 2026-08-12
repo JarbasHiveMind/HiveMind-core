@@ -1757,6 +1757,19 @@ class HiveMindListenerProtocol:
         payload.replace_route(list(payload.route) + [hop])
 
     @staticmethod
+    def _flood_peer(message: HiveMessage) -> str:
+        """The ``peer`` a flood message announces, or ``""`` when it names none.
+
+        A flood is not one message. Every node that answers builds its own PING
+        carrying the same ``flood_id`` and its own ``peer``, so one flood id
+        covers as many distinct announcements as there are answering nodes.
+        """
+        inner = message.payload
+        if isinstance(inner, HiveMessage):
+            inner = inner.payload
+        return inner.get("peer", "") if isinstance(inner, dict) else ""
+
+    @staticmethod
     def _flood_id(message: HiveMessage) -> str:
         """The ``flood_id`` a routing message carries, or ``""`` when it carries
         none.
@@ -1799,6 +1812,26 @@ class HiveMindListenerProtocol:
         flood_id = self._flood_id(message)
         if not flood_id:
             return False
+        # Keyed on (flood_id, peer), not flood_id alone.
+        #
+        # One flood carries one announcement per answering node. Collapsing
+        # them by flood_id makes a node forward whichever arrives first and
+        # silently drop the rest, so a satellite below a relay never learns
+        # the nodes above it — and not only for someone else's flood: when it
+        # floods itself, every answer comes back wrapped with ITS flood id, so
+        # the relay forwards one of them and the originator's own map comes
+        # back incomplete. A topology probe that quietly reports a wrong
+        # topology is worse than an expensive one.
+        #
+        # The duplication this gate exists for is still removed: the same
+        # node's announcement crossing this node twice is what cost
+        # n(n-1)^2, and that is still dropped. Mesh-wide answer volume is
+        # bounded by ping_flood_interval, which is the knob for cost.
+        #
+        # The mapper already keys its own novelty check the same way, so this
+        # brings the gate in line with how the rest of the node models a
+        # flood.
+        flood_id = f"{flood_id}\x00{self._flood_peer(message)}"
         # FloodIdCache.check() records the id and reports whether it was
         # already there, so the test and the insert cannot race. Sized from
         # the client count like the answer caches: every connected peer can
