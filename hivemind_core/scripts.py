@@ -212,9 +212,21 @@ def add_client(name, access_key, password, crypto_key, admin, metadata, allow_we
 
 
 @hmcore_cmds.command(help="Rename a client in the database.", name="rename-client")
-@click.argument("node_id", required=False, type=int)
-@click.option("--name", required=False, type=str, help="The new friendly name for the client")
+@click.argument("node_id", required=False, type=str)
+@click.option("--name", required=True, type=str, help="The new friendly name for the client")
 def rename_client(node_id, name):
+    """Rename a client.
+
+    ``--name`` is required. It used to be optional and was assigned
+    unconditionally, so omitting it blanked the client's name and printed
+    "Renamed 'kitchen' to None" — a destructive edit reported as a success,
+    with no way to recover the old name.
+
+    ``node_id`` is a string for the same reason as in ``reset-noise-pin``:
+    the node names clients by access key in its logs, and coercing to int
+    rejected the value an operator would copy from there before
+    ``resolve_client`` ever saw it.
+    """
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
         if client is None:
@@ -223,7 +235,7 @@ def rename_client(node_id, name):
         old_name = client.name
         client.name = name
         db.update_item(client)
-        print(f"Renamed '{old_name}' to {name}")
+        print(f"Renamed '{old_name}' to '{name}'")
 
 
 @hmcore_cmds.command(

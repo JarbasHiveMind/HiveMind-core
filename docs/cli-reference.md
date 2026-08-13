@@ -92,8 +92,12 @@ hivemind-core list-clients
 
 ## `rename-client`
 
+`--name` is required. `NODE_ID` accepts the client's database id or its
+access key.
+
 ```bash
 hivemind-core rename-client 1 --name "new name"
+hivemind-core rename-client 42caf3d2405075fb9e7a4e1ff44e4c4f --name "new name"
 ```
 
 ---
