@@ -1191,16 +1191,16 @@ class HiveMindListenerProtocol:
         which is what makes it safe to own a mailbox.
         """
         if self.mailbox is None:
-            client.send(HiveMessage(
+            client.send(self._name_the_mailbox(HiveMessage(
                 HiveMessageType.RENDEZVOUS,
-                payload={"status": "error", "reason": "not_a_rendezvous_node"}))
+                payload={"status": "error", "reason": "not_a_rendezvous_node"})))
             return
         if not client.key:
             # No authenticated identity means no mailbox to serve. Falling
             # through would hand every such connection one shared mailbox.
-            client.send(HiveMessage(
+            client.send(self._name_the_mailbox(HiveMessage(
                 HiveMessageType.RENDEZVOUS,
-                payload={"status": "error", "reason": "no_client_identity"}))
+                payload={"status": "error", "reason": "no_client_identity"})))
             return
         try:
             reply = self.mailbox.handle(message, client.key)
@@ -1212,7 +1212,62 @@ class HiveMindListenerProtocol:
             reply = HiveMessage(HiveMessageType.RENDEZVOUS,
                                 payload={"status": "error",
                                          "reason": "mailbox_error"})
-        client.send(reply)
+        client.send(self._name_the_mailbox(reply))
+
+    def _name_the_mailbox(self, reply: HiveMessage) -> HiveMessage:
+        """Say which node answered, so a dead drop can be identified.
+
+        A mailbox belongs to the node holding it, and every node in a hive may
+        hold one. Two peers that deposit and collect against different nodes
+        each get a well-formed answer — ``{"status": "ok", "messages": []}``
+        for the collector — and neither can tell it is reading a different
+        dead drop from the one written to. The exchange fails as silence.
+
+        Naming the node makes that visible without changing where mail lives:
+        a depositor and a collector comparing ``mailbox_node`` can see whether
+        they met, and a client that wants a particular dead drop can tell
+        whether it reached it. This covers every RENDEZVOUS reply this node
+        sends, including the two early "not a mailbox" / "no identity"
+        answers below — a peer failing over needs to know which node just
+        refused it as much as it needs to know which node served mail.
+
+        Like ``_rewrap`` (HIVEMIND-NODE-1 §3.3), the reply is rebuilt with a
+        naive ``HiveMessage(type, payload=payload)`` only if we also drop
+        ``metadata``, ``target_site_id`` and ``target_pubkey`` — all three
+        are constructor-only, so they must be carried explicitly or a
+        third-party mailbox that set any of them (it is documented as an
+        optional third-party component) loses them silently.
+
+        ``mailbox_node`` is always present in the returned payload, even when
+        this node has no identity yet — as ``None`` rather than a missing
+        key. A consumer doing ``payload["mailbox_node"]`` must not have to
+        guess whether absence means "this node has no identity" or "this
+        code predates the field"; ``None`` says the former outright, and two
+        ``None``s must never compare equal as "we met" (checked below). Once
+        every node is guaranteed a public key (tracked in a separate PR),
+        this is the value only a not-yet-provisioned node emits — it is the
+        transitional case, not the steady state.
+
+        If the mailbox already stamped its own ``mailbox_node``, this node's
+        identity overwrites it rather than being merged in. The point of the
+        field is to say which node *actually answered this connection*, which
+        is always this node — a mailbox is documented as addressed by
+        ``client.key`` on this node, never as a proxy fronting another node's
+        drop, so its own claim about who it is on someone else's behalf isn't
+        one we can trust. Preserving it would let a buggy or malicious
+        mailbox spoof identity, defeating the reason the field exists.
+        """
+        payload = reply.payload
+        if not isinstance(payload, dict):
+            return reply
+        payload = dict(payload)
+        payload["mailbox_node"] = self._node_id or None
+        return HiveMessage(
+            HiveMessageType.RENDEZVOUS, payload=payload,
+            metadata=reply.metadata,
+            target_site_id=reply.target_site_id,
+            target_pubkey=reply.target_public_key,
+        )
 
     def handle_unknown_message(
             self, message: HiveMessage, client: HiveMindClientConnection

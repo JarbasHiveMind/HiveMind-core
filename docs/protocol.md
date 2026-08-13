@@ -98,6 +98,22 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 | `handle_invalid_protocol_version(client)` | A client negotiates below `min_protocol_version` |
 | `handle_unknown_message(message, client)` | The message type matches no handler |
 
+### RENDEZVOUS mailboxes
+
+Mail is held by whichever node serves the request — any node in a hive may
+run a store-and-forward mailbox if the optional `hivemind-rendezvous`
+package is installed and `rendezvous.enabled` is set. Every RENDEZVOUS reply
+carries `mailbox_node`, the public key of the node that answered, on every
+path including the two refusal reasons (`not_a_rendezvous_node`,
+`no_client_identity`). A node with no public key of its own reports
+`mailbox_node: null` rather than omitting the field.
+
+This lets a depositor and a collector attached to different nodes tell that
+they read different dead drops instead of getting matching well-formed
+empty answers (`{"status": "ok", "messages": []}`) from two different
+mailboxes and reading that as "we met." A client that wants a specific
+mailbox can also confirm it reached that one.
+
 ### PING handler behaviour
 
 #### `handle_ping_message(message, client)`
