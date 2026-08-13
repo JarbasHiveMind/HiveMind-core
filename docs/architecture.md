@@ -191,6 +191,14 @@ negotiate a session cipher during HANDSHAKE. Supported ciphers (order of prefere
 in config): `CHACHA20-POLY1305`, `AES-GCM`. Supported encodings: `JSON-B64`,
 `JSON-URLSAFE-B64`, `JSON-B91`, `JSON-Z85B`, `JSON-Z85P`, `JSON-B32`, `JSON-HEX`.
 
+If `_identity.json` has no public key yet, one is generated and persisted
+the first time the service starts. This never stops the node from booting:
+a read-only or unwritable config directory is logged and the node continues
+unkeyed, since a node that served clients yesterday must not refuse to boot
+today over a key it can live without. An unkeyed node cannot be addressed by
+INTERCOM, is invisible on the hive map (its PINGs report no `peer`), and does
+not suppress loops in its own PROPAGATE floods.
+
 `INTERCOM` messages add a second layer: signed and end-to-end encrypted between the
 originating and target peers, opaque to intermediate relay nodes.
 

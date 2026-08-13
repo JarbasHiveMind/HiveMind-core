@@ -34,8 +34,13 @@ dependencies = [
     # node derive each Noise PSK once per (password, node_id) instead of once
     # per connection (argon2id, ~217ms and 64 MiB each time). The server still
     # degrades gracefully to the legacy handshake against older clients on the
-    # wire.
-    "hivemind_bus_client>=1.0.3a1,<2.0.0",
+    # wire. 1.0.12a1 raises the floor further: this node now generates and
+    # uses one identity in both directions, and the client at that release
+    # stops copying a master's credentials onto that identity and rotating its
+    # Noise static key. An older client paired with this change rotates the
+    # node's server-side key on first upstream connect and breaks every pinned
+    # downstream peer, so the floor must move with it.
+    "hivemind_bus_client>=1.0.12a1,<2.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
     # 0.9.0a1 added AbstractDB.get_client_by_api_key, which ClientDatabase calls

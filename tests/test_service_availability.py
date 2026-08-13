@@ -16,7 +16,9 @@ from hivemind_core.service import HiveMindService
 
 
 def _service(**kwargs):
-    # avoid touching a real ClientDatabase at construction
+    # avoid touching a real ClientDatabase at construction, and never let the
+    # startup key generation write into the developer's real ~/.config/hivemind
+    kwargs.setdefault("identity", mock.MagicMock())
     with mock.patch("hivemind_core.service.ClientDatabase"):
         return HiveMindService(**kwargs)
 
