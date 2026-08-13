@@ -1956,12 +1956,23 @@ class HiveMindListenerProtocol:
         # dedup gate: a flood we already answered keeps carrying peers we have
         # never seen, and those are the discoveries.
         if new_to_map:
-            self.agent_protocol.bus.emit(Message("hive.ping.received", {
-                "flood_id": flood_id,
-                "peer": ping_payload.get("peer"),
-                "site_id": ping_payload.get("site_id"),
-                "timestamp": ping_payload.get("timestamp"),
-            }))
+            # Telemetry on the way past, not a step in answering. A flood is
+            # asked precisely when something is wrong, and an unreachable OVOS
+            # bus is one of the things being diagnosed — letting that failure
+            # out of here silenced the node's answer and made a hive that was
+            # merely missing its agent look unreachable. Same reasoning as
+            # _emit_lifecycle: log and carry on.
+            try:
+                self.agent_protocol.bus.emit(Message("hive.ping.received", {
+                    "flood_id": flood_id,
+                    "peer": ping_payload.get("peer"),
+                    "site_id": ping_payload.get("site_id"),
+                    "timestamp": ping_payload.get("timestamp"),
+                }))
+            except Exception as e:
+                LOG.error(f"can not publish 'hive.ping.received' for "
+                          f"{ping_payload.get('peer')}, the agent bus is "
+                          f"unreachable: {e}")
 
         # Flood-loop prevention (MSG-1 §4): answer a flood at most once.
         #
