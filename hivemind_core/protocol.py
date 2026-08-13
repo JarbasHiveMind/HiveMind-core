@@ -2796,8 +2796,27 @@ class HiveMindListenerProtocol:
             LOG.exception(f"failed to send hive.policy.denied to {client.peer}")
 
     def handle_client_shared_bus(self, message: Message, client: HiveMindClientConnection):
+        """Pass a client's own bus activity to the operator's monitor hook.
+
+        The content is chosen by the client, so it is admitted exactly like a
+        BUS message: the per-client message-type allowlist and the policy
+        chain both apply. Skipping them made ``shared_bus_callback`` a way
+        around the allowlist — a documented extension point that operators
+        wire to logging, aggregation or another system, reached with any
+        message type at all, including by a client whose allowlist is empty
+        and which is therefore denied everything else.
+        """
         # this message is going inside the client bus
         # take any metrics you need
         LOG.info("Monitoring bus from client: " + client.peer)
+        if not client.authorize(message):
+            LOG.warning(client.peer + " sent an unauthorized shared bus message")
+            return
+        verdict = self.policy_chain.review(message, client)
+        if verdict.denied:
+            LOG.info(f"policy denied shared bus '{message.msg_type}' from "
+                     f"{client.peer}: {verdict.code} ({verdict.reason})")
+            self._send_policy_denied(client, message, verdict)
+            return
         if self.shared_bus_callback:
             self.shared_bus_callback(message)
