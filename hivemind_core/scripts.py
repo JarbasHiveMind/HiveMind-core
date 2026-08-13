@@ -277,7 +277,7 @@ def reset_noise_pin(node_id):
 
 
 @hmcore_cmds.command(help="Give administrator powers to a client in the database.", name="make-admin")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def make_admin(node_id):
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
@@ -293,7 +293,7 @@ def make_admin(node_id):
 
 
 @hmcore_cmds.command(help="Revoke administrator powers from a client in the database.", name="revoke-admin")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def revoke_admin(node_id):
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
@@ -309,12 +309,26 @@ def revoke_admin(node_id):
 
 
 @hmcore_cmds.command(help="Remove credentials for a client.", name="delete-client")
-@click.argument("node_id", required=False, type=int)
-def delete_client(node_id):
+@click.argument("node_id", required=False, type=str)
+@click.option("--yes", is_flag=True, default=False,
+              help="Skip the confirmation prompt (for scripting).")
+def delete_client(node_id, yes):
+    """Delete a client, permanently revoking its credentials.
+
+    Destructive, so it always confirms before deleting — including when
+    ``node_id`` is omitted and there is exactly one client: without this,
+    a bare ``delete-client`` would silently auto-select and remove the
+    only client on the server. ``--yes`` skips the prompt for scripting.
+    """
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
         if client is None:
             print("Invalid Node ID!")
+            return
+        if not yes and not click.confirm(
+                f"Delete client '{client.name}' (id {client.client_id})? "
+                "This permanently revokes its credentials."):
+            print("Aborted.")
             return
         db.delete_client(client.api_key)
         print("Revoked credentials!\n")
@@ -371,7 +385,7 @@ def export_clients(path):
 
 @hmcore_cmds.command(help="Allow a message type to be sent from a client.", name="allow-msg")
 @click.argument("msg_type", required=True, type=str)
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def allow_msg(msg_type, node_id):
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
@@ -388,7 +402,7 @@ def allow_msg(msg_type, node_id):
 
 @hmcore_cmds.command(help="Blacklist a message type from a client.", name="blacklist-msg")
 @click.argument("msg_type", required=True, type=str)
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def blacklist_msg(msg_type, node_id):
     with ClientDatabase() as db:
         client = resolve_client(db, node_id)
@@ -435,7 +449,7 @@ def toggle_capability(label: str, node_id, allow: bool) -> None:
 
 
 @hmcore_cmds.command(help="allow 'BROADCAST' messages to be sent from a client", name="allow-broadcast")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def allow_broadcast(node_id):
     """Grant a client permission to send 'BROADCAST' messages.
 
@@ -443,60 +457,56 @@ def allow_broadcast(node_id):
     this grant only narrows it.
     """
     with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if client.can_broadcast:
-                    print(f"Client {client.name} already allowed to send 'BROADCAST' messages")
-                    exit()
-                client.can_broadcast = True
-                db.update_item(client)
-                print(f"Allowed 'BROADCAST' messages for {client.name}")
-                if not client.is_admin:
-                    print(f"NOTE: {client.name} is not an admin, so it still can not broadcast")
-                break
-        else:
+        client = resolve_client(db, node_id)
+        if client is None:
             print("Invalid Node ID!")
+            return
+        if client.can_broadcast:
+            print(f"Client {client.name} already allowed to send 'BROADCAST' messages")
+            exit()
+        client.can_broadcast = True
+        db.update_item(client)
+        print(f"Allowed 'BROADCAST' messages for {client.name}")
+        if not client.is_admin:
+            print(f"NOTE: {client.name} is not an admin, so it still can not broadcast")
 
 
 @hmcore_cmds.command(help="blacklist 'BROADCAST' messages from being sent by a client", name="blacklist-broadcast")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def blacklist_broadcast(node_id):
     with ClientDatabase() as db:
-        node_id = node_id or prompt_node_id(db)
-        for client in db:
-            if client.client_id == int(node_id):
-                if client.can_broadcast:
-                    client.can_broadcast = False
-                    db.update_item(client)
-                    print(f"Blacklisted 'BROADCAST' messages for {client.name}")
-                    return
-                print(f"Client '{client.name}' 'BROADCAST' messages already blacklisted")
-                break
-        else:
+        client = resolve_client(db, node_id)
+        if client is None:
             print("Invalid Node ID!")
+            return
+        if client.can_broadcast:
+            client.can_broadcast = False
+            db.update_item(client)
+            print(f"Blacklisted 'BROADCAST' messages for {client.name}")
+            return
+        print(f"Client '{client.name}' 'BROADCAST' messages already blacklisted")
 
 
 @hmcore_cmds.command(help="Allow 'ESCALATE' messages to be sent from a client.", name="allow-escalate")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def allow_escalate(node_id):
     toggle_capability("ESCALATE", node_id, allow=True)
 
 
 @hmcore_cmds.command(help="blacklist 'ESCALATE' messages from being sent by a client", name="blacklist-escalate")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def blacklist_escalate(node_id):
     toggle_capability("ESCALATE", node_id, allow=False)
 
 
 @hmcore_cmds.command(help="allow 'PROPAGATE' messages to be sent from a client", name="allow-propagate")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def allow_propagate(node_id):
     toggle_capability("PROPAGATE", node_id, allow=True)
 
 
 @hmcore_cmds.command(help="blacklist 'PROPAGATE' messages from being sent by a client", name="blacklist-propagate")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def blacklist_propagate(node_id):
     toggle_capability("PROPAGATE", node_id, allow=False)
 
@@ -542,7 +552,7 @@ def _toggle_metadata_blacklist(metadata_key: str, value: str,
                           "OVOSAgentPolicy in the server's policy.chain.",
                      name="blacklist-skill")
 @click.argument("skill_id", required=True, type=str)
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def blacklist_skill(skill_id, node_id):
     _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=True)
 
@@ -551,7 +561,7 @@ def blacklist_skill(skill_id, node_id):
                           "requires OVOSAgentPolicy in the server's policy.chain.",
                      name="allow-skill")
 @click.argument("skill_id", required=True, type=str)
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def unblacklist_skill(skill_id, node_id):
     _toggle_metadata_blacklist("skill_blacklist", skill_id, node_id, add=False)
 
@@ -560,7 +570,7 @@ def unblacklist_skill(skill_id, node_id):
                           "OVOSAgentPolicy in the server's policy.chain.",
                      name="blacklist-intent")
 @click.argument("intent_id", required=True, type=str)
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def blacklist_intent(intent_id, node_id):
     _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=True)
 
@@ -569,7 +579,7 @@ def blacklist_intent(intent_id, node_id):
                           "requires OVOSAgentPolicy in the server's policy.chain.",
                      name="allow-intent")
 @click.argument("intent_id", required=True, type=str)
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 def unblacklist_intent(intent_id, node_id):
     _toggle_metadata_blacklist("intent_blacklist", intent_id, node_id, add=False)
 
@@ -580,7 +590,7 @@ def unblacklist_intent(intent_id, node_id):
          "other policies may read their own keys. Merge a JSON object with --metadata "
          "and/or set one entry with --key/--value; --unset removes a key.",
     name="set-metadata")
-@click.argument("node_id", required=False, type=int)
+@click.argument("node_id", required=False, type=str)
 @click.option("--metadata", required=False, type=str,
               help="JSON object merged into the client's metadata.")
 @click.option("--key", required=False, type=str,
