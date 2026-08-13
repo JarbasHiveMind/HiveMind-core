@@ -170,6 +170,14 @@ class HiveMindClientConnection:
     send_msg: Callable[[str, bool], None]
     disconnect: Callable[[], None]
 
+    #: Close the connection saying the credentials were refused, carrying the
+    #: transport's authentication-failure code (WebSocket 1008). A bare
+    #: ``disconnect`` is indistinguishable from a network drop, so a satellite
+    #: treats a refused identity as a transient fault, reports itself connected
+    #: and reconnects forever. Optional: a transport that does not supply it
+    #: falls back to ``disconnect``, which is the behaviour without it.
+    reject: Optional[Callable[[str], None]] = None
+
     sess: Session = dataclasses.field(default_factory=Session)  # unique session per client
     name: str = "AnonClient"
     node_type: HiveMindNodeType = HiveMindNodeType.CANDIDATE_NODE
@@ -1316,13 +1324,34 @@ class HiveMindListenerProtocol:
         except Exception:
             LOG.exception("failed to pin client noise key")
 
+    @staticmethod
+    def _reject(client: HiveMindClientConnection, reason: str) -> None:
+        """Close *client* saying its identity was refused.
+
+        The distinction matters to the peer, not to this node. A bare close
+        looks exactly like a dropped network, so a satellite retries forever
+        on credentials that will never work, and — because its socket did
+        open — reports itself connected the whole time. The transport's
+        authentication-failure code (WebSocket 1008) is what lets the client
+        library raise instead of reconnecting.
+
+        Transports that predate ``reject`` keep their previous behaviour.
+        """
+        if client.reject is not None:
+            try:
+                client.reject(reason)
+                return
+            except Exception:
+                LOG.exception("reject callback failed, closing the connection")
+        client.disconnect()
+
     def _abort_noise_handshake(self, client: HiveMindClientConnection, reason: str):
         """Fatal Noise handshake failure — reject the connection (§3.4.3)."""
         LOG.error(f"protocol v3 handshake with {client.peer} FAILED: {reason}")
         client.noise_handshake = None
         client.noise_transport = None
         self.handle_invalid_key_connected(client)
-        client.disconnect()
+        self._reject(client, reason)
 
     def handle_noise_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -1506,7 +1535,7 @@ class HiveMindListenerProtocol:
             if not verified:
                 LOG.warning("Client password handshake verification failed")
                 self.handle_invalid_key_connected(client)
-                client.disconnect()
+                self._reject(client, "password handshake verification failed")
                 return
 
             # key is derived safely from password in both sides
