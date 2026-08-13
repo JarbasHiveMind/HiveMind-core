@@ -100,11 +100,14 @@ hivemind-core export-clients [--path PATH]
 
 ### `rename-client`
 
-Rename a registered client.
+Rename a registered client. `--name` is required — the command edits a
+name, it does not clear one.
 
 ```bash
-hivemind-core rename-client [NODE_ID] [--name NAME]
+hivemind-core rename-client NODE_ID --name NAME
 ```
+
+`NODE_ID` accepts either the client's database id or its access key.
 
 ---
 
