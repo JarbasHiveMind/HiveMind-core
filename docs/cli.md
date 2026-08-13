@@ -6,7 +6,7 @@ All commands are available under the `hivemind-core` entry point.
 hivemind-core [COMMAND] [OPTIONS]
 ```
 
-If `node_id` is optional on a command and is not provided, you will be shown an interactive client selection table.
+`NODE_ID` accepts either the client's database id or its access key (the identifier a node prints in its own logs), on every command that takes one. If `node_id` is optional on a command and is not provided, you will be shown an interactive client selection table.
 
 ---
 

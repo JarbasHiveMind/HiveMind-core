@@ -1,7 +1,9 @@
 # CLI Reference
 
-All administration is done through the `hivemind-core` command. If you omit the numeric
-client ID from any command that requires one, you will be prompted to select interactively.
+All administration is done through the `hivemind-core` command. Any command that takes a
+client ID accepts either the client's numeric database id or its access key (the identifier
+a node prints in its own logs). If you omit the ID from a command that requires one, you
+will be prompted to select interactively.
 
 ```
 Usage: hivemind-core [OPTIONS] COMMAND [ARGS]...
