@@ -15,9 +15,10 @@ from hivemind_core.service import HiveMindService
 
 
 def _service():
-    # avoid touching a real ClientDatabase at construction
+    # avoid touching a real ClientDatabase at construction, and never let the
+    # startup key generation write into the developer's real ~/.config/hivemind
     with mock.patch("hivemind_core.service.ClientDatabase"):
-        return HiveMindService()
+        return HiveMindService(identity=mock.MagicMock())
 
 
 def test_presence_block_in_default_config():

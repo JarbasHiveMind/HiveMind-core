@@ -2,13 +2,13 @@
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
+from os.path import isfile
 import ipaddress
 import socket
 import threading
 import time
 from typing import Callable, Mapping, Optional, Type
 
-from json_database import JsonConfigXDG
 
 from ovos_utils import create_daemon, wait_for_exit_signal
 from ovos_utils.log import LOG
@@ -17,6 +17,7 @@ from ovos_utils.process_utils import ProcessStatus, StatusCallbackMap
 from hivemind_bus_client.client import HiveMessageBusClient
 from hivemind_bus_client.fakebus import FakeBus
 from hivemind_bus_client.identity import NodeIdentity
+from poorman_handshake.asymmetric.utils import load_RSA_key
 from hivemind_bus_client.protocol import HiveMindSlaveProtocol
 from hivemind_core.config import get_server_config, upstream_config
 from hivemind_core.database import ClientDatabase
@@ -90,29 +91,66 @@ def own_listener_for(host: str, port: int, network_protocol: Mapping) -> Optiona
     return None
 
 
-def upstream_identity() -> NodeIdentity:
-    """Identity for the client this node uses to reach its upstream master,
-    kept in ``hivemind/_identity_upstream.json``.
+def _ensure_node_identity(identity: NodeIdentity) -> None:
+    """Give an identity a public key if it does not have one yet.
 
-    It MUST NOT be the node's own ``_identity.json``. ``HiveMessageBusClient``
-    copies the credentials it is given onto the identity it holds, and the
-    first successful Noise handshake calls ``pin_noise_key``, which saves that
-    whole identity to disk. Handed the node's own identity, the client would
-    overwrite the node's ``password`` and ``access_key`` — the very values the
-    node presents to its own downstream clients — and every satellite would
-    then fail its handshake with "invalid api key".
+    ``NodeIdentity`` reads its JSON file and returns ``None`` for a key that
+    was never generated. Nothing on the server path generates one:
+    ``hivemind-client set-identity`` does, but that is the client CLI, and an
+    operator who only ever runs ``hivemind-core`` never calls it. The node then
+    runs with ``_node_id is None`` for its whole life, and the public key is
+    not decoration:
+
+    * It is the ``peer`` of every responsive PING the node sends, so an unkeyed
+      node answers a flood anonymously and no client can put it on the hive
+      map. Observed live: ``hivemind-client ping`` printing
+      "[No responses received]" against a node that was answering.
+    * It is the hop identity for MSG-1 §5 loop suppression. ``_append_self_hop``
+      stamps ``{"source": _node_id}`` and ``HiveMessage.route`` drops any hop
+      with a falsy ``source``, so an unkeyed node never appears in a route and
+      never recognises its own — a flood is not suppressed at all.
+    * It is how the mesh addresses this node end-to-end (INTERCOM
+      ``target_pubkey``), so mail to it cannot be addressed.
+
+    A node has one identity and uses it in both directions: the key it answers
+    its own clients with is the key it announces to its master. A relay without
+    one is mapped as an anonymous client, and its two halves cannot be
+    recognised as one node.
+
+    Generating is idempotent: it happens only when the field is empty, and the
+    key is persisted so it stays stable across restarts, which is the property
+    everything above depends on. Failure is not fatal. A read-only or
+    root-owned config directory is a normal container shape, and a node that
+    served clients yesterday must not refuse to boot today over a key it can
+    live without.
     """
-    identity_file = JsonConfigXDG("_identity_upstream", subfolder="hivemind")
-    if not identity_file:
-        # NodeIdentity does `identity_file or JsonConfigXDG("_identity", ...)`,
-        # and a JsonConfigXDG for a file that does not exist yet is an empty
-        # dict — which is falsy, so it would silently fall back to the node's
-        # own identity. Write one key so the file exists and is TRUTHY; the
-        # value is never read. HiveMessageBusClient overwrites `name` with the
-        # name the master knows this node by, so do not read anything into it.
-        identity_file["name"] = "hivemind-core-upstream"
-        identity_file.store()
-    return NodeIdentity(identity_file=identity_file)
+    if identity.public_key:
+        return
+    # A configured private key is the node's identity even when the JSON
+    # carries no public_key field: create_keys() writes a fresh keypair to a
+    # fixed filename and rewrites secret_key, so generating here would orphan
+    # the operator's key and rotate the identity everything else pinned.
+    # Publish the public half of the key that is already in use instead.
+    configured = identity.IDENTITY_FILE.get("secret_key")
+    if configured and isfile(configured):
+        try:
+            identity.public_key = load_RSA_key(configured).publickey(
+                ).export_key().decode("utf-8")
+            identity.save()
+            LOG.info(f"published the public half of {configured}")
+            return
+        except Exception:
+            LOG.exception(f"could not read the configured private key "
+                          f"{configured}, generating a new keypair")
+    try:
+        LOG.info("no node public key found, generating one")
+        identity.create_keys()
+        identity.save()
+        LOG.info(f"node identity saved to {identity.IDENTITY_FILE.path}")
+    except Exception:
+        LOG.exception("could not generate a node public key, continuing "
+                      "without one — this node will be unmappable and cannot "
+                      "be addressed by INTERCOM")
 
 
 def on_ready():
@@ -172,6 +210,8 @@ class HiveMindService:
                                                          on_stopping=self.stopping_hook,
                                                      ))
         self._status.set_alive()
+        # after the status hooks exist: a failure in here must be reportable
+        _ensure_node_identity(self.identity)
 
     def _start_presence(self) -> None:
         """Optionally advertise this hivemind-core server on the local network
@@ -269,7 +309,7 @@ class HiveMindService:
                                         host=scheme + config["host"],
                                         port=config["port"],
                                         self_signed=config["self_signed"],
-                                        identity=upstream_identity())
+                                        identity=self.identity)
         slave = HiveMindSlaveProtocol(hm=upstream)
         hm_protocol.bind_upstream(slave)
         LOG.info(f"Upstream master: {config['host']}:{config['port']}")
