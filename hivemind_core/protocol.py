@@ -2342,18 +2342,25 @@ class HiveMindListenerProtocol:
         """
         LOG.info(f"Received QUERY from: {client.peer}")
         metadata = message.metadata or {}
+        if not client.can_escalate:
+            # HIVEMIND-AGENT-1 §3.2: a client without escalate permission may
+            # not author a QUERY, and that includes forging a fake "response"
+            # to smuggle an arbitrary payload to an arbitrary peer by name
+            # (metadata.originator_peer) — the response branch below trusts
+            # that field with no other proof of participation, so it must be
+            # gated by the same permission as the request branch, not skipped
+            # ahead of it.
+            LOG.warning("Received QUERY from client without escalate permission")
+            if self.illegal_callback:
+                self.illegal_callback(self._unpack_message(message, client))
+            client.disconnect()
+            return
+
         if metadata.get("is_response", False):
             self._route_query_response(message, client)
             return
 
         payload = self._unpack_message(message, client)
-        if not client.can_escalate:
-            LOG.warning("Received QUERY from client without escalate permission")
-            if self.illegal_callback:
-                self.illegal_callback(payload)
-            client.disconnect()
-            return
-
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
         try:
@@ -2406,16 +2413,24 @@ class HiveMindListenerProtocol:
         downstream toward the originator."""
         LOG.info(f"Received CASCADE from: {client.peer}")
         metadata = message.metadata or {}
+        if not client.can_propagate:
+            # See the matching comment in handle_query_message: the
+            # is_response branch below trusts an attacker-supplied
+            # originator_peer as a delivery address, so it must be gated by
+            # the same permission as the request branch, not skipped ahead
+            # of it (HIVEMIND-AGENT-1 §3.2).
+            LOG.warning("Received CASCADE from client without propagate "
+                        "permission")
+            if self.illegal_callback:
+                self.illegal_callback(self._unpack_message(message, client))
+            client.disconnect()
+            return
+
         if metadata.get("is_response", False):
             self._route_query_response(message, client)
             return
 
         payload = self._unpack_message(message, client)
-        if not client.can_propagate:
-            if self.illegal_callback:
-                self.illegal_callback(payload)
-            client.disconnect()
-            return
 
         # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
         # handling; suppress only the fan-out + master-forward at the end.
