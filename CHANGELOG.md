@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.10a1) (2026-08-14)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.9a1...4.13.10a1)
+
+**Merged pull requests:**
+
+- fix: raise ovos-bus-client floor to 2.2.0a1 for receive-side migration [\#265](https://github.com/JarbasHiveMind/HiveMind-core/pull/265) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.9a1) (2026-08-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.8a1...4.13.9a1)
@@ -219,19 +227,19 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
 
 **Merged pull requests:**
 
 - perf: import the RSA identity key once per node [\#205](https://github.com/JarbasHiveMind/HiveMind-core/pull/205) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
-
 ## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+
+## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
 
 **Merged pull requests:**
 
