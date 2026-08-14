@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.11a1) (2026-08-14)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.10a1...4.13.11a1)
+
+**Merged pull requests:**
+
+- fix: raise ovos-bus-client floor to 2.8.3a1 for send-side wire twins [\#267](https://github.com/JarbasHiveMind/HiveMind-core/pull/267) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.10a1) (2026-08-14)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.9a1...4.13.10a1)
@@ -537,10 +545,6 @@
 ## [4.6.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.1a1) (2026-06-06)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.6.0a2...4.6.1a1)
-
-**Merged pull requests:**
-
-- fix: restore hive.ping.received agent-bus event \(regression from \#98\) [\#107](https://github.com/JarbasHiveMind/HiveMind-core/pull/107) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.6.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.6.0a2) (2026-06-05)
 
