@@ -258,6 +258,29 @@ class HiveMindService:
         cfg = get_server_config().get("rendezvous", {})
         if not cfg.get("enabled", False):
             return
+
+        # hivemind-rendezvous 2.0.0a1 (PR #14) switched from keying mailboxes
+        # by the recipient's public key to keying them by the authenticated
+        # access key, which is what this protocol passes to mailbox.handle().
+        # An older package silently accepts deposits under the wrong key and
+        # never delivers them, so a too-old install must not be bound at all.
+        try:
+            from hivemind_rendezvous.version import (
+                VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD
+            )
+            installed = (VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD)
+        except (ImportError, AttributeError):
+            installed = (0, 0, 0)
+        if installed < (2, 0, 0):
+            LOG.error(
+                f"hivemind-rendezvous>=2.0.0a1 is required for mailbox "
+                f"delivery; installed {'.'.join(map(str, installed))} keys "
+                f"mailboxes by public key and is incompatible with this "
+                f"core's access-key addressing — rendezvous DISABLED, "
+                f"upgrade to restore it"
+            )
+            return
+
         hm_protocol.mailbox = RendezvousMailbox(
             max_pending_per_mailbox=cfg.get("max_pending_per_mailbox", 256)
         )
