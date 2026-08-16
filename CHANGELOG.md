@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.12a1) (2026-08-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.11a2...4.13.12a1)
+
+**Merged pull requests:**
+
+- fix: disable rendezvous mailbox when hivemind-rendezvous is too old to deliver [\#271](https://github.com/JarbasHiveMind/HiveMind-core/pull/271) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.11a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.11a2) (2026-08-15)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.11a1...4.13.11a2)
@@ -180,10 +188,6 @@
 ## [4.12.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.0a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.6a2...4.12.0a1)
-
-**Merged pull requests:**
-
-- feat: OVOS transformer pipelines on the text/bus path [\#148](https://github.com/JarbasHiveMind/HiveMind-core/pull/148) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.11.6a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.6a2) (2026-08-10)
 
