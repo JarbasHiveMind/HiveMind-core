@@ -56,6 +56,7 @@ def _forged_response(msg_type, originator_peer, query_id="not-a-real-query"):
 
 def _wire(proto, peer):
     conn = MagicMock()
+    conn.peer = peer
     conn.send = MagicMock()
     proto.clients[peer] = conn
     return conn
@@ -98,8 +99,10 @@ def test_legitimate_query_response_still_reaches_its_originator():
 
     response = _forged_response(HiveMessageType.QUERY, "originator::1",
                                 query_id="real-query-42")
-    # simulate a genuinely privileged responder answering a real query
+    # simulate a genuinely privileged responder answering a real query the
+    # node actually saw (participation binding, MSG-1 §5.2)
     response.metadata["responder_peer"] = responder.peer
+    proto._record_outstanding_query("real-query-42", "originator::1")
 
     proto.handle_query_message(response, responder)
 
@@ -116,6 +119,8 @@ def test_legitimate_cascade_response_still_reaches_its_originator():
     response = _forged_response(HiveMessageType.CASCADE, "originator::1",
                                 query_id="real-query-42")
     response.metadata["responder_peer"] = responder.peer
+    # the node actually saw this request (participation binding, MSG-1 §5.2)
+    proto._record_outstanding_query("real-query-42", "originator::1")
 
     proto.handle_cascade_message(response, responder)
 

@@ -33,6 +33,7 @@ def _wire_peers(node, *peers):
     sent = {p: [] for p in peers}
     for p in peers:
         conn = MagicMock()
+        conn.peer = p
         conn.send = lambda m, *a, box=sent[p]: box.append(m)
         node.clients[p] = conn
     return sent
@@ -95,6 +96,8 @@ def test_direct_originator_still_receives_the_response():
     node = _make_node()
     sent = _wire_peers(node, "asker::1", "sibling::2")
 
+    # participation binding (MSG-1 §5.2): the node saw this request
+    node._record_outstanding_query("q1", "asker::1")
     node._route_query_response(_response("asker::1"), None)
 
     assert len(sent["asker::1"]) == 1
@@ -107,6 +110,8 @@ def test_route_walk_still_delivers_to_the_downstream_hop():
     node = _make_node()
     sent = _wire_peers(node, "relay::1", "sibling::2")
 
+    # participation binding (MSG-1 §5.2): the node saw this request
+    node._record_outstanding_query("q1", "relay::1")
     node._route_query_response(
         _response("behind-relay::7",
                   route=[{"source": "relay::1", "targets": ["master:0.0.0.0"]}]),
@@ -121,6 +126,8 @@ def test_route_walk_does_not_send_the_response_back_to_its_sender():
     sent = _wire_peers(node, "relay::1", "responder::2")
     client = MagicMock(peer="responder::2")
 
+    # participation binding (MSG-1 §5.2): the node saw this request
+    node._record_outstanding_query("q1", "relay::1")
     node._route_query_response(
         _response("behind-relay::7",
                   route=[{"source": "responder::2", "targets": ["master:0.0.0.0"]},

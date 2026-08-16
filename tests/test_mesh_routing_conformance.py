@@ -57,6 +57,7 @@ def _wire_peers(node, *peers):
     sent = {p: [] for p in peers}
     for p in peers:
         conn = MagicMock()
+        conn.peer = p
         conn.send = lambda m, *a, box=sent[p]: box.append(m)
         node.clients[p] = conn
     return sent
@@ -124,6 +125,8 @@ def test_query_response_from_master_reaches_only_the_originator():
     node = _make_node()
     sent = _wire_peers(node, "asker::1", "sibling::2")
 
+    # participation binding (MSG-1 §5.2): this node forwarded the request
+    node._record_outstanding_query("q1", "asker::1")
     node.query_from_master(_response(HiveMessageType.QUERY, "asker::1"))
 
     assert len(sent["asker::1"]) == 1
@@ -137,6 +140,8 @@ def test_cascade_response_from_master_reaches_only_the_originator():
     node._pending_cascades = {}
     sent = _wire_peers(node, "asker::1", "sibling::2")
 
+    # participation binding (MSG-1 §5.2): this node forwarded the request
+    node._record_outstanding_query("q1", "asker::1")
     node.cascade_from_master(_response(HiveMessageType.CASCADE, "asker::1"))
 
     assert len(sent["asker::1"]) == 1

@@ -134,6 +134,15 @@ class HiveMindNodeType(str, Enum):
 # protocol content, not loose metadata.
 QUERY_STREAM_END = "hive.query.complete"
 
+# Retention window (seconds) for participation-binding state (MSG-1 §5.2): how
+# long a node remembers a request it saw so it can route the matching answer.
+# Kept comfortably above a query's expected round-trip; a later answer is a
+# genuinely stale one and is dropped. Time source is time.monotonic().
+OUTSTANDING_QUERY_TTL = 300.0
+# Hard cap on distinct outstanding queries, mirroring the _pending_cascades
+# bound, so a flood of unique query_ids cannot grow the store without limit.
+OUTSTANDING_QUERY_MAX = 256
+
 
 def _non_negative_float(value, default: float) -> float:
     try:
@@ -507,6 +516,16 @@ class HiveMindListenerProtocol:
     # plain __post_init__ assignment left every object.__new__ fixture
     # raising AttributeError the first time a cascade or query was routed.
     _cascades_lock: Optional[threading.Lock] = field(default=None, init=False, repr=False)
+    # Participation-binding state (MSG-1 §5.2): (originator_peer, query_id) ->
+    # monotonic insert time for every request this node admitted or forwarded.
+    # An is_response QUERY/CASCADE is only routed when a matching entry exists,
+    # which is what proves this node saw the request and holds a return path.
+    # Backing fields with None defaults (class attributes) so a fixture built
+    # with ``object.__new__`` finds them, and the properties build the real
+    # store/lock lazily — the same treatment as the flood caches and the
+    # cascade lock above.
+    _outstanding_queries_store: Optional[dict] = field(default=None, init=False, repr=False)
+    _outstanding_query_lock: Optional[threading.Lock] = field(default=None, init=False, repr=False)
     # Backing field for the ``_forwarded_flood_ids`` property below. Same
     # treatment as the other flood caches: a mutable FloodIdCache cannot be a
     # class-level default without every node sharing one, so the default is
@@ -693,6 +712,58 @@ class HiveMindListenerProtocol:
         if self._cascades_lock is None:
             self._cascades_lock = threading.Lock()
         return self._cascades_lock
+
+    @property
+    def _outstanding_queries(self) -> dict:
+        """Participation-binding store (MSG-1 §5.2): query_id -> (return_peer,
+        monotonic insert time). ``return_peer`` is the SERVER-OBSERVED peer of
+        the connection the request arrived on — the only address authorized to
+        receive the answer, never the client-claimed ``originator_peer``.
+        Lazily built so a fixture constructed with ``object.__new__`` finds it
+        instead of raising AttributeError."""
+        if self._outstanding_queries_store is None:
+            self._outstanding_queries_store = {}
+        return self._outstanding_queries_store
+
+    @property
+    def _outstanding_queries_lock(self) -> threading.Lock:
+        """Guards the outstanding-query store. ``_route_query_response`` runs on
+        both the tornado thread and the upstream slave thread, so record/check/
+        evict must be atomic (same reasoning as ``_pending_cascades_lock``)."""
+        if self._outstanding_query_lock is None:
+            self._outstanding_query_lock = threading.Lock()
+        return self._outstanding_query_lock
+
+    def _record_outstanding_query(self, query_id: str,
+                                  return_peer: str) -> None:
+        """Bind ``query_id`` to the connection it arrived on so the matching
+        answer can only be routed back that way (MSG-1 §5.2). FIRST-WRITER-WINS:
+        a query_id already bound is never rebound, so an attacker cannot steal a
+        live query's return path by replaying its id. Bounded by a hard cap
+        alongside the TTL eviction in ``_outstanding_return_path``."""
+        now = time.monotonic()
+        with self._outstanding_queries_lock:
+            store = self._outstanding_queries
+            if query_id in store:
+                return
+            while len(store) >= OUTSTANDING_QUERY_MAX:
+                store.pop(next(iter(store)))
+            store[query_id] = (return_peer, now)
+
+    def _outstanding_return_path(self, query_id: str) -> Optional[str]:
+        """The server-observed return peer this node recorded for ``query_id``,
+        or None if it saw no request (forged, or evicted past
+        ``OUTSTANDING_QUERY_TTL``). An answer is only ever delivered to this
+        exact peer — a client-supplied originator_peer or route may select a
+        candidate, but this authorizes the send."""
+        now = time.monotonic()
+        with self._outstanding_queries_lock:
+            store = self._outstanding_queries
+            for qid in [q for q, (_, ts) in store.items()
+                        if now - ts > OUTSTANDING_QUERY_TTL]:
+                store.pop(qid, None)
+            entry = store.get(query_id)
+            return entry[0] if entry else None
 
     @property
     def _seen_flood_ids(self) -> FloodIdCache:
@@ -988,6 +1059,13 @@ class HiveMindListenerProtocol:
             for query_id in [qid for qid, c in self._pending_cascades.items()
                               if c.originator_peer == client.peer]:
                 self._pending_cascades.pop(query_id, None)
+        # participation-binding state whose return path is this connection is
+        # dead once it has disconnected — no future answer can reach it — so
+        # purge it now instead of waiting for TTL/cap reclaim (MSG-1 §5.2).
+        with self._outstanding_queries_lock:
+            for qid in [q for q, (peer, _) in self._outstanding_queries.items()
+                        if peer == client.peer]:
+                self._outstanding_queries.pop(qid, None)
         client.disconnect()
         context = {"source": client.peer}
         # never hand the reserved session of a non-admin to the OVOS bus: it
@@ -2216,6 +2294,11 @@ class HiveMindListenerProtocol:
         if (message.metadata or {}).get("is_response"):
             self._route_query_response(message, None)
             return
+        # A master-originated request has no downstream return path recorded on
+        # this node (the request came FROM upstream, not from a downstream peer
+        # this node admitted), so no participation state is bound here; the
+        # matching response has nowhere authorized to go and drops at
+        # _route_query_response, unchanged from before this binding existed.
         self._relay_downstream(message)
 
     def query_to_master(self, message: HiveMessage) -> None:
@@ -2334,16 +2417,39 @@ class HiveMindListenerProtocol:
         sender = client.peer if client else None
         metadata = message.metadata or {}
         originator_peer = metadata.get("originator_peer", "")
+        query_id = metadata.get("query_id", "")
+        # Participation binding (MSG-1 §5.2): route an answer only to the
+        # SERVER-OBSERVED connection the matching request arrived on. Both the
+        # client-supplied ``originator_peer`` and the client-supplied route may
+        # only SELECT a candidate connection below — the recorded return path
+        # AUTHORIZES the actual send. This closes two forgery vectors an
+        # existence-only check missed: (1) self-record — an attacker sends a
+        # request claiming a victim's originator_peer, then an answer for the
+        # same id; and (2) crafted-route — an attacker plants a victim hop in
+        # the route. In both the chosen candidate's peer is the attacker's, not
+        # the recorded arriving connection, so the send is refused.
+        return_peer = self._outstanding_return_path(query_id)
+        if return_peer is None:
+            LOG.warning(
+                "dropping unbacked %s response (participation binding, "
+                "MSG-1 §5.2): no request seen for query_id=%s "
+                "originator_peer=%s" % (message.msg_type, query_id,
+                                        originator_peer))
+            return
         # One lookup serves both the CASCADE gate below and the default route
         # at the end. An "in" check followed by an index would KeyError if the
         # originator disconnected between the two, and that KeyError travels up
         # to the websocket handler and drops the *responder's* connection.
         originator_conn = self.clients.get(originator_peer)
         # CASCADE disambiguation: collect responses for a select callback at
-        # the originating node, letting it pick a winner progressively.
+        # the originating node, letting it pick a winner progressively. Only
+        # when THIS node is the genuine originator — the direct originator
+        # connection is the recorded return path — so a forged originator_peer
+        # can not trigger the collector (and a relay does not mis-collect).
         if (message.msg_type == HiveMessageType.CASCADE
                 and self.cascade_select_callback is not None
-                and originator_conn is not None):
+                and originator_conn is not None
+                and originator_conn.peer == return_peer):
             query_id = metadata.get("query_id", "")
             # _route_query_response runs both on the tornado thread (direct
             # clients) and on the upstream slave thread (relayed cascades), so
@@ -2380,25 +2486,32 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception(f"cascade_select_callback error for query_id={query_id}")
             return
-        # Default routing: forward toward the originator.
+        # Default routing: forward toward the originator, but only if the
+        # candidate connection IS the recorded return path. A client-claimed
+        # originator_peer that resolves to some other live connection is a
+        # forged target and must not receive the answer.
         conn = originator_conn
-        if conn is not None:
+        if conn is not None and conn.peer == return_peer:
             conn.send(message)
             return
-        # route-aware return: send to the downstream hop on the path back to
-        # the originator (from the request's recorded route) instead of flooding
+        # route-aware return: the downstream hop on the path back to the
+        # originator (from the request's recorded route). Same authorization —
+        # a client-planted victim hop never equals the recorded return path.
         for hop in reversed(message.route or []):
             src = hop.get("source")
-            conn = self.clients.get(src) if src and src != sender else None
+            if not src or src == sender or src != return_peer:
+                continue
+            conn = self.clients.get(src)
             if conn is not None:
                 conn.send(message)
                 return
-        # no return path: the originator is not ours and the route names no
-        # peer we can reach. Fanning the response downstream would hand one
-        # peer's answer to its siblings (NODE-1 §5.2, AGENT-1 §3.2), so drop it.
-        LOG.warning(f"dropping {message.msg_type} response with no return path: "
-                    f"query_id={metadata.get('query_id', '')} "
-                    f"originator_peer={originator_peer}")
+        # no authorized return path: the recorded arriving connection is gone,
+        # or the claimed target/route names some other peer. Delivering anywhere
+        # else hands one peer's answer to another (NODE-1 §5.2, AGENT-1 §3.2),
+        # so drop it.
+        LOG.warning(f"dropping {message.msg_type} response with no authorized "
+                    f"return path: query_id={metadata.get('query_id', '')} "
+                    f"originator_peer={originator_peer} return_peer={return_peer}")
 
     def handle_query_message(self, message: HiveMessage,
                              client: HiveMindClientConnection):
@@ -2429,6 +2542,11 @@ class HiveMindListenerProtocol:
         payload = self._unpack_message(message, client)
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
+        # participation binding (MSG-1 §5.2): bind this query to the connection
+        # it arrived on (client.peer, the server-observed return path — NOT the
+        # client-claimed originator_peer), before any answer routes. The answer
+        # is only ever delivered back to this exact connection.
+        self._record_outstanding_query(query_id, client.peer)
         try:
             bus = self.get_bus(client)
         except ConnectionError as e:
@@ -2463,6 +2581,9 @@ class HiveMindListenerProtocol:
         if (message.metadata or {}).get("is_response"):
             self._route_query_response(message, None)
             return
+        # As with query_from_master: a master-originated cascade binds no
+        # downstream return path here, so its response drops at
+        # _route_query_response (behavior unchanged by participation binding).
         self._relay_downstream(message)
 
     def cascade_to_master(self, message: HiveMessage) -> None:
@@ -2507,6 +2628,11 @@ class HiveMindListenerProtocol:
 
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
+        # participation binding (MSG-1 §5.2): bind this cascade to the arriving
+        # connection (client.peer) before _answer_query_locally below, whose
+        # CASCADE answer routes THROUGH _route_query_response — the return path
+        # must already exist or the node would drop its own answer.
+        self._record_outstanding_query(query_id, client.peer)
         try:
             bus = self.get_bus(client)
         except ConnectionError as e:
