@@ -740,14 +740,19 @@ class HiveMindListenerProtocol:
         answer can only be routed back that way (MSG-1 §5.2). FIRST-WRITER-WINS:
         a query_id already bound is never rebound, so an attacker cannot steal a
         live query's return path by replaying its id. Bounded by a hard cap
-        alongside the TTL eviction in ``_outstanding_return_path``."""
+        alongside the TTL eviction in ``_outstanding_return_path``; at the cap,
+        the inserting peer's own oldest entry is evicted first, so a peer
+        flooding distinct query_ids can only ever displace its own prior
+        entries and can never starve other peers' outstanding queries."""
         now = time.monotonic()
         with self._outstanding_queries_lock:
             store = self._outstanding_queries
             if query_id in store:
                 return
             while len(store) >= OUTSTANDING_QUERY_MAX:
-                store.pop(next(iter(store)))
+                own = next((q for q, (p, _) in store.items()
+                            if p == return_peer), None)
+                store.pop(own if own is not None else next(iter(store)))
             store[query_id] = (return_peer, now)
 
     def _outstanding_return_path(self, query_id: str) -> Optional[str]:
