@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.14a1) (2026-08-31)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.13a1...4.13.14a1)
+
+**Merged pull requests:**
+
+- fix: evict flooding peer's own outstanding queries first [\#275](https://github.com/JarbasHiveMind/HiveMind-core/pull/275) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.13a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.13a1) (2026-08-17)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.12a1...4.13.13a1)
@@ -445,10 +453,6 @@
 ## [4.10.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a2) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a1...4.10.1a2)
-
-**Merged pull requests:**
-
-- perf: move last\_seen persistence off the message loop [\#150](https://github.com/JarbasHiveMind/HiveMind-core/pull/150) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [4.10.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a1) (2026-07-05)
 
