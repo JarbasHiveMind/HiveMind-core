@@ -200,9 +200,14 @@ def test_destination_routed():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_session_inbound_preserved():
-    """Satellite's session fields are preserved into bus context.session.
+    """Satellite's session fields are preserved into bus context.session,
+    except ``session_id`` itself, which the bridge translates to a
+    per-connection Layer-1 id (HIVEMIND-BRIDGE-1 §4): the client-chosen
+    session_id is an orchestrator-side identity OVOS SessionManager keys
+    conversational state on, and two peers picking the same value must not
+    collide onto one OVOS session.
 
-    Spec: BRIDGE-1 §4.1 (inbound)
+    Spec: BRIDGE-1 §4.1 (inbound), §4 (session_id translation)
     Helper: assert_session_inbound_preserved
     """
     b = _topology_with_utterance()
@@ -222,8 +227,17 @@ def test_session_inbound_preserved():
 
         assert_session_inbound_preserved(
             m, s,
-            expected_session={"session_id": sid, "lang": sess.serialize().get("lang")},
+            expected_session={"lang": sess.serialize().get("lang")},
         )
+
+        peer = s.peer
+        record = [
+            r for r in m.recorder.snapshot()
+            if r.direction == "bus_inject" and r.peer == peer
+        ][-1]
+        actual_sid = (getattr(record.payload, "context", {}) or {}).get(
+            "session", {}).get("session_id")
+        assert actual_sid != sid
     finally:
         b.stop_all()
 

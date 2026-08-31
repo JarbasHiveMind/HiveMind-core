@@ -228,6 +228,11 @@ class HiveMindClientConnection:
     # ``name::session_id`` string. See ``handle_hello_message``.
     _peer_suffix: str = field(default="", init=False, repr=False)
 
+    # Per-connection nonce, minted lazily once and stable for the
+    # connection's life. Namespaces the client-declared session_id — see
+    # ``layer1_session_id`` below (HIVEMIND-BRIDGE-1 §4).
+    _conn_nonce: str = field(default="", init=False, repr=False)
+
     # Serialises ``send``. The IOLoop thread, the ovos messagebus thread and
     # the upstream slave thread all send on the same connection, and a v3
     # Noise frame is only decryptable in the order its nonce was assigned, so
@@ -239,6 +244,26 @@ class HiveMindClientConnection:
     # outer frame was handed over, so it cannot invert the nonce sequence.
     _send_lock: threading.RLock = field(default_factory=threading.RLock,
                                         init=False, repr=False)
+
+    @property
+    def conn_nonce(self) -> str:
+        """Per-connection nonce, minted lazily on first use and stable for
+        the connection's life."""
+        if not self._conn_nonce:
+            self._conn_nonce = uuid.uuid4().hex
+        return self._conn_nonce
+
+    @property
+    def layer1_session_id(self) -> str:
+        """The orchestrator-side (Layer-1) session id for this connection's
+        CURRENT declared session — the connection nonce namespaces the
+        client-declared session_id, so two connections that chose the same
+        name get distinct Layer-1 sessions (HIVEMIND-BRIDGE-1 §4) while one
+        connection's distinct declared sessions (a re-HELLO, or a bridge like
+        baresip that mints a fresh session_id per call on one connection)
+        stay distinct too — session travels per message, the client
+        declares it."""
+        return f"{self.conn_nonce}:{self.sess.session_id}"
 
     def resolve_user(self, db, ttl: float = 5.0,
                      force: bool = False) -> Optional[Client]:
@@ -2874,6 +2899,13 @@ class HiveMindListenerProtocol:
             session.pop("pipeline", None)
         # SESSION-1 §2: strip null-valued fields — null is malformed, treat as absent.
         session = {k: v for k, v in session.items() if v is not None}
+        # HIVEMIND-BRIDGE-1 §4: session_id is a Layer-1 (orchestrator) identity
+        # that OVOS SessionManager keys conversational state on. The client
+        # picks it arbitrarily, so two peers choosing the same value (e.g. both
+        # "default") would otherwise collide onto one OVOS session. Translate
+        # it at this inbound boundary to a per-connection id; every other
+        # session field is passed through unchanged.
+        session["session_id"] = client.layer1_session_id
         message.context["session"] = session
         return message
 

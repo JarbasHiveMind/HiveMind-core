@@ -818,6 +818,7 @@ class TestProtocolWiring(unittest.TestCase):
         client.sess.session_id = "session-1"
         client.sess.serialize.return_value = {"session_id": "session-1"}
         client.sess.pipeline = None
+        client.layer1_session_id = "layer1-session-1"
         client.authorize.return_value = True
         client.key = "test-key"
         client._resolved_user = None
