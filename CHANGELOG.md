@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.15a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a2) (2026-09-01)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a1...4.13.15a2)
+
+**Merged pull requests:**
+
+- Accept a remote 'default' session; admin connections skip NAT \(BRIDGE-1 §4.1\) [\#279](https://github.com/JarbasHiveMind/HiveMind-core/pull/279) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a1) (2026-08-31)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.14a1...4.13.15a1)
@@ -456,7 +464,6 @@
 **Merged pull requests:**
 
 - ci: release merged fork pull requests with trusted token [\#153](https://github.com/JarbasHiveMind/HiveMind-core/pull/153) ([goldyfruit](https://github.com/goldyfruit))
-- ci: make release outcomes deterministic [\#152](https://github.com/JarbasHiveMind/HiveMind-core/pull/152) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [4.10.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a2) (2026-07-16)
 
