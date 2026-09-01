@@ -3008,7 +3008,19 @@ class HiveMindListenerProtocol:
         # be re-stamped, the session id installed by _install_client_session
         # is re-asserted here, after the transformer chain has run and right
         # before the message reaches the agent bus (HIVEMIND-BRIDGE-1 §4).
-        is_admin = getattr(client, "is_admin", False)
+        # A transformer plugin can block long enough (an LLM call, a network
+        # round trip) for the DB row to change mid-flight, so is_admin is
+        # re-resolved fresh here too, same as _install_client_session, rather
+        # than re-asserting the dispatch-time snapshot taken before the chain ran.
+        db = getattr(self, "db", None)
+        user = None
+        if db is not None:
+            try:
+                user = client.resolve_user(db)
+            except Exception:
+                LOG.exception("handle_inject_agent_msg: failed to resolve user for admin check")
+        is_admin = user.is_admin if user is not None else client.is_admin
+        client.is_admin = is_admin
         session = message.context.get("session")
         if not isinstance(session, dict):
             session = {}
