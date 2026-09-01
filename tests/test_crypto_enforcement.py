@@ -258,6 +258,10 @@ class TestPasswordHandshakeFailFast(unittest.TestCase):
         proto.handle_handshake_message(self._handshake_msg(self._WRONG_PASSWORD), client)
         assert client.crypto_key is None
         client.disconnect.assert_called_once()
+        # a bare/1000 close tells the client the credentials were fine and it
+        # can just reconnect, so it retries the same wrong password forever;
+        # this MUST be a terminal 1008 auth rejection
+        assert client.disconnect.call_args.args[0] == 1008
         client.send_msg.assert_not_called()
 
     def test_garbage_envelope_rejected_at_handshake_time(self):
@@ -269,6 +273,7 @@ class TestPasswordHandshakeFailFast(unittest.TestCase):
         proto.handle_handshake_message(msg, client)
         assert client.crypto_key is None
         client.disconnect.assert_called_once()
+        assert client.disconnect.call_args.args[0] == 1008
 
 
 class TestMinProtocolVersionFloor(unittest.TestCase):
@@ -298,6 +303,7 @@ class TestMinProtocolVersionFloor(unittest.TestCase):
             proto.handle_handshake_message(self._handshake_msg(), client)
         assert client.crypto_key is None
         client.disconnect.assert_called_once()
+        assert client.disconnect.call_args.args[0] == 1008
         client.send_msg.assert_not_called()
 
     def test_v2_password_handshake_accepted_when_floor_is_2(self):
@@ -388,3 +394,20 @@ class TestRejectedIntercomIsNotRelayed(unittest.TestCase):
             HiveMessage(HiveMessageType.ESCALATE,
                         payload=self._forged_intercom()), self.client)
         self._assert_dropped()
+
+
+class TestNoiseHandshakeAbortCloseCode(unittest.TestCase):
+    """Fix for: handshake-time auth/credential rejections closed with a bare
+    (code 1000) close, so a client retrying on any non-1008 close would spin
+    forever on a wrong PSK, tampered negotiation, or a pinned-key
+    contradiction. ``_abort_noise_handshake`` is the single fatal exit for
+    all of those, so it must always close 1008.
+    """
+
+    def test_abort_closes_1008(self):
+        proto = _make_protocol()
+        client = _make_client(proto)
+        proto.handle_invalid_key_connected = MagicMock()
+        proto._abort_noise_handshake(client, "wrong PSK")
+        client.disconnect.assert_called_once()
+        assert client.disconnect.call_args.args == (1008, "wrong PSK")
