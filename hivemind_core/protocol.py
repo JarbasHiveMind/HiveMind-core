@@ -1773,11 +1773,16 @@ class HiveMindListenerProtocol:
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
-        # track any Session updates from client side
-        """
-        Handles internal bus messages from a client, enforcing session restrictions and forwarding to the agent bus.
+        """Forward a client's internal bus message to the agent bus.
 
-        If a non-admin client attempts to use the "default" session ID, the client is disconnected. Otherwise, updates the client's session if the session ID matches and is not "default", then injects the message into the internal agent bus and invokes the agent bus callback if set.
+        A bus payload never mutates ``client.sess``: that stays the
+        connection's HELLO-established baseline and changes only on
+        (re-)HELLO. Each message declares its own session;
+        ``_install_client_session`` derives that message's Layer-1
+        (orchestrator) session id and merges the payload's session contents
+        over the baseline (HIVEMIND-BRIDGE-1 §4). The "default" session id is
+        gated by ``OVOSAgentPolicy.review`` — a non-admin payload using it is
+        denied and dropped, not forwarded.
         """
         try:
             payload = message.payload
@@ -1789,11 +1794,6 @@ class HiveMindListenerProtocol:
             LOG.warning("Ignoring BUS payload with invalid message/context shape")
             return
 
-        raw_session = payload.context.get("session") or {}
-        sent_pipeline = isinstance(raw_session, dict) and "pipeline" in raw_session
-        sess = Session.from_message(payload)
-        if sent_pipeline:
-            sess.pipeline = raw_session.get("pipeline")
         # The per-message "session_id == 'default'" gate moved to
         # OVOSAgentPolicy.review (HiveMind-core#85). Non-admin clients
         # injecting a default-session payload get Verdict.deny(
@@ -1801,13 +1801,14 @@ class HiveMindListenerProtocol:
         # with a hive.policy.denied response — replacing the previous
         # severe `client.disconnect()` reaction. The HELLO-time check at
         # handle_hello_message stays as connection-establishment gate.
-
-        if sess.session_id != "default" and client.sess.session_id == sess.session_id:
-            if not sent_pipeline:
-                sess.pipeline = client.sess.pipeline
-            client.sess = sess
-            LOG.debug(f"Client session updated from payload: {sess.serialize()}")
-
+        #
+        # A bus payload NEVER mutates ``client.sess``: that stays the
+        # HELLO-established baseline for the connection and only changes on
+        # (re-)HELLO (handle_hello_message). A single connection may
+        # multiplex several declared sessions (a relay, or a per-call bridge
+        # like baresip); each message declares its own session and
+        # ``_install_client_session`` derives that message's Layer-1 identity
+        # and merges its contents over the baseline (HIVEMIND-BRIDGE-1 §4).
         self.handle_inject_agent_msg(payload, client)
 
     def handle_broadcast_message(
@@ -2892,15 +2893,19 @@ class HiveMindListenerProtocol:
 
     # HiveMind mycroft bus messages -  from slave -> master
     @staticmethod
-    def _layer1_session_id(client: HiveMindClientConnection, is_admin: bool) -> str:
-        """The Layer-1 (orchestrator) session id this client is allowed to
-        address: the raw, client-declared session id for an admin, or the
-        per-connection NATted id for everyone else (HIVEMIND-BRIDGE-1 §4).
+    def _layer1_session_id(client: HiveMindClientConnection, is_admin: bool,
+                           declared_id: str) -> str:
+        """The Layer-1 (orchestrator) session id for a message declaring
+        ``declared_id``: the raw declared id for an admin, or the
+        per-connection NATted id ``conn_nonce:declared_id`` for everyone else
+        (HIVEMIND-BRIDGE-1 §4). ``declared_id`` is the per-message session id
+        (session travels per message; the client declares it), falling back
+        to the connection's HELLO baseline when the message declares none.
         Shared by ``_install_client_session`` and the post-transformer
         re-stamp in ``handle_inject_agent_msg`` so both apply the exact same
-        decision.
+        decision to the same message.
         """
-        return client.sess.session_id if is_admin else client.layer1_session_id
+        return declared_id if is_admin else f"{client.conn_nonce}:{declared_id}"
 
     def _install_client_session(self, message: Message,
                                  client: HiveMindClientConnection):
@@ -2922,13 +2927,26 @@ class HiveMindListenerProtocol:
         it to the message context so downstream consumers never see them.
         """
         raw_session = message.context.get("session") or {}
+        if not isinstance(raw_session, dict):
+            raw_session = {}
+        # ``client.sess`` is the connection's HELLO-established baseline. Start
+        # from it and OVERLAY the per-message declared session's present,
+        # non-null fields (merge, not replace): a thin control message keeps
+        # the baseline's location/lang/etc., while a rich message overrides
+        # them. The overlay is taken from the raw wire dict, NEVER by building
+        # a fresh Session (Session.__init__ fabricates Configuration() defaults
+        # — e.g. the master's own location — for absent fields, which would
+        # clobber the satellite's real values; that was the session-contents
+        # bleed bug).
         session = client.sess.serialize()
-        if not isinstance(raw_session, dict) or raw_session.get("pipeline") is None:
+        overlay = {k: v for k, v in raw_session.items() if v is not None}
+        session.update(overlay)
+        if raw_session.get("pipeline") is None:
             # Each bus message owns its outbound pipeline; do not reattach
-            # one from an earlier message. Per SESSION-1 §2 an explicit
-            # null pipeline is malformed and treated as absent; strip it
-            # here explicitly (serializers may render a None pipeline as
-            # [], which the generic null-strip below would not catch).
+            # one from the baseline. Per SESSION-1 §2 an explicit null
+            # pipeline is malformed and treated as absent; strip it here
+            # explicitly (serializers may render a None pipeline as [], which
+            # the generic null-strip below would not catch).
             session.pop("pipeline", None)
         # SESSION-1 §2: strip null-valued fields — null is malformed, treat as absent.
         session = {k: v for k, v in session.items() if v is not None}
@@ -2956,7 +2974,8 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception("_install_client_session: failed to resolve user for admin check")
         is_admin = user.is_admin if user is not None else client.is_admin
-        session["session_id"] = self._layer1_session_id(client, is_admin)
+        declared_id = raw_session.get("session_id") or client.sess.session_id
+        session["session_id"] = self._layer1_session_id(client, is_admin, declared_id)
         message.context["session"] = session
         return message
 
@@ -2973,6 +2992,16 @@ class HiveMindListenerProtocol:
         if not client.authorize(message):
             LOG.warning(client.peer + " sent an unauthorized bus message")
             return
+
+        # Capture the per-message declared session id BEFORE
+        # _install_client_session rewrites context["session"]["session_id"]
+        # to the derived Layer-1 id. The post-transformer re-stamp below
+        # re-derives from this raw declared id, not from the already-NATted
+        # value, so it re-asserts the SAME Layer-1 id instead of double-NATting.
+        _raw_declared = message.context.get("session") or {}
+        declared_id = (_raw_declared.get("session_id")
+                       if isinstance(_raw_declared, dict) else None) \
+            or client.sess.session_id
 
         # ensure client specific session data is injected in query to ovos
         message = self._install_client_session(message, client)
@@ -3024,7 +3053,7 @@ class HiveMindListenerProtocol:
         session = message.context.get("session")
         if not isinstance(session, dict):
             session = {}
-        session["session_id"] = self._layer1_session_id(client, is_admin)
+        session["session_id"] = self._layer1_session_id(client, is_admin, declared_id)
         message.context["session"] = session
 
         try:

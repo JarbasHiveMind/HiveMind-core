@@ -103,7 +103,9 @@ class TestSessionPipelineHandling(unittest.TestCase):
         self.assertEqual(
             emitted.context["session"]["pipeline"], ["client-sent-pipeline"]
         )
-        self.assertEqual(client.sess.pipeline, ["client-sent-pipeline"])
+        # A bus payload owns its outbound pipeline but does NOT mutate the
+        # connection's HELLO baseline: client.sess stays what HELLO set.
+        self.assertEqual(client.sess.pipeline, ["old-pipeline"])
 
     def test_explicit_none_pipeline_is_treated_as_absent(self):
         # OVOS-SESSION-1 §2: a null field is treated as omitted; the bridge
@@ -123,7 +125,9 @@ class TestSessionPipelineHandling(unittest.TestCase):
 
         emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
         self.assertNotIn("pipeline", emitted.context["session"])
-        self.assertIsNone(client.sess.pipeline)
+        # A bus payload does NOT mutate the connection's HELLO baseline; the
+        # null pipeline is stripped from the emitted message only.
+        self.assertEqual(client.sess.pipeline, ["old-pipeline"])
 
     def test_invalid_bus_payload_is_ignored(self):
         protocol = _make_protocol()
