@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.18a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.18a1) (2026-09-01)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.17a1...4.13.18a1)
+
+**Merged pull requests:**
+
+- fix: derive Layer-1 session per message and merge session contents [\#287](https://github.com/JarbasHiveMind/HiveMind-core/pull/287) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.17a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.17a1) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.16a1...4.13.17a1)
