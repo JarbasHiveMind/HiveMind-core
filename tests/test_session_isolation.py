@@ -83,7 +83,9 @@ class TestReservedDefaultSession(unittest.TestCase):
 
         emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
         self.assertEqual(emitted.msg_type, "hive.client.disconnect")
-        self.assertNotIn("session", emitted.context)
+        session_id = emitted.context["session"]["session_id"]
+        self.assertNotEqual(session_id, "default")
+        self.assertTrue(session_id.endswith(":default"))
 
     def test_disconnect_keeps_the_session_of_an_admin(self):
         protocol = _make_protocol()
