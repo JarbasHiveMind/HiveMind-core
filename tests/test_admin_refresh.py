@@ -11,6 +11,8 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 
+from hivemind_bus_client.message import HiveMessage, HiveMessageType
+
 from hivemind_core.protocol import (HiveMindClientConnection,
                                     HiveMindListenerProtocol)
 
@@ -83,6 +85,44 @@ def test_granted_admin_takes_effect_at_next_message():
 
     second = _stamp(protocol, client)
     assert second.context["session"]["session_id"] == "default"
+
+
+def _broadcast_hivemessage():
+    inner = HiveMessage(HiveMessageType.BUS, payload=Message("speak", {"utterance": "hi"}))
+    return HiveMessage(HiveMessageType.BROADCAST, payload=inner)
+
+
+def test_revoked_admin_loses_broadcast_at_next_message():
+    """``handle_broadcast_message`` reads ``client.is_admin`` directly, not
+    ``resolve_user``. It must still see a revoked admin's new standing at the
+    connection's next message, because ``handle_message`` — the common
+    dispatcher for every inbound message type — refreshes ``client.is_admin``
+    from the DB before dispatching (HIVEMIND-BRIDGE-1 §4/§4.1)."""
+    db_user = MagicMock(is_admin=True)
+    db = MagicMock()
+    db.get_client_by_api_key.return_value = db_user
+
+    protocol = _make_protocol(db)
+    client = _make_client(protocol, Session(session_id="default"), is_admin=True)
+    client.can_broadcast = True
+    protocol.clients = {}
+    protocol.illegal_callback = None
+    protocol.broadcast_callback = MagicMock()
+    protocol.identity = MagicMock(public_key="pubkey-master", site_id=None)
+
+    # while still admin, broadcast is allowed
+    protocol.handle_message(_broadcast_hivemessage(), client)
+    protocol.broadcast_callback.assert_called_once()
+    client.disconnect.assert_not_called()
+
+    # operator revokes admin in the DB
+    db_user.is_admin = False
+    protocol.broadcast_callback.reset_mock()
+
+    protocol.handle_message(_broadcast_hivemessage(), client)
+    protocol.broadcast_callback.assert_not_called()
+    client.disconnect.assert_called_once_with()
+    assert client.is_admin is False
 
 
 def test_resolve_failure_falls_back_to_connection_snapshot():

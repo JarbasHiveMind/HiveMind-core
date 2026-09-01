@@ -563,7 +563,7 @@ class HiveMindListenerProtocol:
     _last_ping_flood: float = field(default=0.0, init=False, repr=False)
     ping_flood_interval: float = field(default=30.0, init=False)
 
-    # OVOS transformer pipelines for the text/bus path (OVOS-TRANSFORM).
+    # OVOS transformer pipelines for the text/bus path.
     # Config-gated and opt-in via the utterance_transformers /
     # metadata_transformers / dialog_transformers blocks in server.json;
     # empty chains are no-ops.
@@ -1172,6 +1172,25 @@ class HiveMindListenerProtocol:
             return
 
         LOG.debug(f"message: {message}")
+
+        # Refresh is_admin from the DB once, here, so every admin-gated
+        # decision downstream of this dispatcher (the session NAT in
+        # _install_client_session, the BROADCAST gate in
+        # handle_broadcast_message, ...) sees a value no staler than
+        # resolve_user's TTL, instead of the connect-time snapshot for the
+        # life of the connection (HIVEMIND-BRIDGE-1 §4/§4.1). The disconnect
+        # lifecycle emit runs on socket close, outside this dispatcher, and
+        # keeps reading whatever is_admin was last refreshed to here.
+        db = getattr(self, "db", None)
+        if db is not None:
+            try:
+                user = client.resolve_user(db)
+            except Exception:
+                LOG.exception("handle_message: failed to resolve user for is_admin refresh")
+            else:
+                if user is not None:
+                    client.is_admin = user.is_admin
+
         # update internal peer ID
         message.update_source_peer(client.peer)
 
@@ -2872,6 +2891,17 @@ class HiveMindListenerProtocol:
         return False
 
     # HiveMind mycroft bus messages -  from slave -> master
+    @staticmethod
+    def _layer1_session_id(client: HiveMindClientConnection, is_admin: bool) -> str:
+        """The Layer-1 (orchestrator) session id this client is allowed to
+        address: the raw, client-declared session id for an admin, or the
+        per-connection NATted id for everyone else (HIVEMIND-BRIDGE-1 §4).
+        Shared by ``_install_client_session`` and the post-transformer
+        re-stamp in ``handle_inject_agent_msg`` so both apply the exact same
+        decision.
+        """
+        return client.sess.session_id if is_admin else client.layer1_session_id
+
     def _install_client_session(self, message: Message,
                                  client: HiveMindClientConnection):
         """Copy the client's serialised session onto an inbound bus message.
@@ -2926,10 +2956,7 @@ class HiveMindListenerProtocol:
             except Exception:
                 LOG.exception("_install_client_session: failed to resolve user for admin check")
         is_admin = user.is_admin if user is not None else client.is_admin
-        if is_admin:
-            session["session_id"] = client.sess.session_id
-        else:
-            session["session_id"] = client.layer1_session_id
+        session["session_id"] = self._layer1_session_id(client, is_admin)
         message.context["session"] = session
         return message
 
@@ -2963,8 +2990,8 @@ class HiveMindListenerProtocol:
             return
 
         # OVOS transformer pipelines: rewrite utterances / context before
-        # they reach the agent bus. A §8.1 cancellation terminates the
-        # lifecycle here (§8.2), the message never reaches the agent.
+        # they reach the agent bus. A cancellation terminates the lifecycle
+        # here, the message never reaches the agent.
         if message.msg_type == "recognizer_loop:utterance":
             message = self._apply_utterance_transformers(message, client)
             if message is None:
@@ -2973,6 +3000,20 @@ class HiveMindListenerProtocol:
         # send client message to internal mycroft bus
         LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
+        # A metadata/utterance transformer wholesale-replaces message.context
+        # (see _apply_utterance_transformers), which could otherwise let a
+        # config-opt-in transformer plugin move this message into another
+        # client's Layer-1 session (e.g. write "default" back into
+        # context["session"]["session_id"]) just like peer/source above must
+        # be re-stamped, the session id installed by _install_client_session
+        # is re-asserted here, after the transformer chain has run and right
+        # before the message reaches the agent bus (HIVEMIND-BRIDGE-1 §4).
+        is_admin = getattr(client, "is_admin", False)
+        session = message.context.get("session")
+        if not isinstance(session, dict):
+            session = {}
+        session["session_id"] = self._layer1_session_id(client, is_admin)
+        message.context["session"] = session
 
         try:
             bus = self.get_bus(client)
@@ -2997,9 +3038,9 @@ class HiveMindListenerProtocol:
         ``recognizer_loop:utterance`` message.
 
         Returns the (possibly rewritten) message, or ``None`` when a
-        transformer canceled the utterance — in that case the OVOS-TRANSFORM
-        §8.2 terminal events are sent back to the client and the message is
-        not injected into the agent bus.
+        transformer canceled the utterance — in that case the terminal
+        events are sent back to the client and the message is not injected
+        into the agent bus.
         """
         if not (self.utterance_transformers.plugins
                 or self.metadata_transformers.plugins):
@@ -3016,7 +3057,7 @@ class HiveMindListenerProtocol:
         if context.get("canceled"):
             LOG.info(f"utterance from {client.peer} canceled by "
                      f"{context.get('cancel_by')}: {context.get('cancel_reason')}")
-            # OVOS-TRANSFORM §8.2 terminal path: cancelled -> handled
+            # terminal path: cancelled -> handled
             for msg_type in ("ovos.utterance.cancelled", "ovos.utterance.handled"):
                 try:
                     client.send(HiveMessage(
