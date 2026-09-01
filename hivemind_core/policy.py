@@ -250,6 +250,15 @@ class DefaultSessionPolicy(PolicyPlugin):
     ``OVOSAgentPolicy`` performs the same check, but operators remove it
     whenever they run a non-OVOS backend. The reserved id is a property of
     the bridge, not of one agent, so the gate belongs in core.
+
+    Defense-in-depth note: in the live call graph,
+    ``_install_client_session`` already NATs a non-admin's declared
+    "default" to a per-connection Layer-1 id *before* the policy chain
+    runs, so this policy currently never actually sees a literal
+    "default" on a non-admin message — the check below is a backstop, not
+    the primary gate. If a future refactor ever reorders the NAT after
+    the policy chain, this policy becomes load-bearing; see
+    ``tests/test_session_nat_ordering.py``.
     """
 
     def review(self, message: Message,

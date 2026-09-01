@@ -2911,8 +2911,22 @@ class HiveMindListenerProtocol:
         # This translation only applies to non-admin connections. An admin is
         # trusted to skip it and address the orchestrator's sessions directly
         # (including the reserved, device-local "default"), per BRIDGE-1
-        # §4/§4.1.
-        if client.is_admin:
+        # §4/§4.1. Admin standing now gates that un-NATted write access, so
+        # (like ``MessageTypeACLPolicy`` does for ``allowed_types``) it is
+        # re-checked from the DB here rather than trusted from the
+        # connect-time snapshot — an operator revoking admin on a live
+        # connection takes effect within ``resolve_user``'s TTL instead of
+        # only on reconnect. Fall back to the connection snapshot only when
+        # the DB row can't be resolved at all.
+        db = getattr(self, "db", None)
+        user = None
+        if db is not None:
+            try:
+                user = client.resolve_user(db)
+            except Exception:
+                LOG.exception("_install_client_session: failed to resolve user for admin check")
+        is_admin = user.is_admin if user is not None else client.is_admin
+        if is_admin:
             session["session_id"] = client.sess.session_id
         else:
             session["session_id"] = client.layer1_session_id

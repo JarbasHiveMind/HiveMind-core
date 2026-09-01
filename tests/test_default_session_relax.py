@@ -24,6 +24,10 @@ def _make_protocol():
     agent.callbacks = MagicMock()
 
     db = MagicMock()
+    # No DB-backed user by default: _install_client_session falls back to
+    # the connection's is_admin snapshot, which is what these tests pin.
+    # See tests/test_admin_refresh.py for the DB-refresh behavior itself.
+    db.get_client_by_api_key.return_value = None
 
     return HiveMindListenerProtocol(agent_protocol=agent, db=db,
                                     require_crypto=False,
