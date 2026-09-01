@@ -23,6 +23,8 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 
+from hivemind_bus_client.message import HiveMessage, HiveMessageType
+
 from hivemind_core.protocol import (HiveMindClientConnection,
                                     HiveMindListenerProtocol)
 
@@ -128,17 +130,126 @@ def test_session_contents_preserved():
     assert session["intent_context"]["some_key"] == "some_value"
 
 
-def test_same_connection_different_named_payload_still_one_layer1_session():
-    client = _make_client(Session(session_id="shared"))
+def test_different_named_payload_gets_its_own_layer1_session():
+    # Session travels PER MESSAGE and the client declares it (BRIDGE-1 §4).
+    # A single connection may multiplex several declared sessions (a relay, or
+    # a per-call bridge like baresip). A payload declaring its OWN session_id
+    # must map to that declared id namespaced by the connection nonce —
+    # ``nonce:declared`` — NOT collapse onto the connection's HELLO baseline.
+    client = _make_client(Session(session_id="baseline"))
 
-    # a bus message arriving with a *different* session name already
-    # attached to it (e.g. relayed/replayed) must still be re-stamped with
-    # this connection's own Layer-1 id: the peer names its session at the
-    # connection level, not per message.
     message = Message("recognizer_loop:utterance", {"utterances": ["hi"]},
-                       {"session": {"session_id": "someone-elses-session"}})
+                       {"session": {"session_id": "call-42"}})
 
     result = _install(client, message)
 
-    assert result.context["session"]["session_id"] == client.layer1_session_id
-    assert result.context["session"]["session_id"] != "someone-elses-session"
+    sid = result.context["session"]["session_id"]
+    assert sid == f"{client.conn_nonce}:call-42"
+    # the declared id is namespaced, never handed through raw
+    assert sid != "call-42"
+    # and it is NOT the baseline's id — the per-message session wins
+    assert sid != f"{client.conn_nonce}:baseline"
+
+
+def test_multiplexed_sessions_over_one_connection_stay_isolated():
+    # DEFECT A: two DIFFERENT declared session_ids over ONE connection must
+    # resolve to two DISTINCT Layer-1 ids, each ``nonce:declared``. Collapsing
+    # them onto the connection baseline would merge a relay's / bridge's
+    # independent conversations into one OVOS session.
+    client = _make_client(Session(session_id="baseline"))
+
+    a = _install(client, Message("recognizer_loop:utterance", {"utterances": ["a"]},
+                                 {"session": {"session_id": "sess-A"}}))
+    b = _install(client, Message("recognizer_loop:utterance", {"utterances": ["b"]},
+                                 {"session": {"session_id": "sess-B"}}))
+
+    sid_a = a.context["session"]["session_id"]
+    sid_b = b.context["session"]["session_id"]
+
+    assert sid_a == f"{client.conn_nonce}:sess-A"
+    assert sid_b == f"{client.conn_nonce}:sess-B"
+    assert sid_a != sid_b
+
+
+def test_message_without_declared_session_uses_baseline_id():
+    # The unchanged single-session path, pinned explicitly: a client that
+    # declares no per-message session (or declares its own baseline id) gets
+    # ``nonce:baseline_session_id``.
+    client = _make_client(Session(session_id="baseline"))
+
+    none_declared = _install(client, Message("recognizer_loop:utterance",
+                                             {"utterances": ["hi"]}))
+    same_declared = _install(client, Message("recognizer_loop:utterance",
+                                             {"utterances": ["hi"]},
+                                             {"session": {"session_id": "baseline"}}))
+
+    assert none_declared.context["session"]["session_id"] == f"{client.conn_nonce}:baseline"
+    assert same_declared.context["session"]["session_id"] == f"{client.conn_nonce}:baseline"
+
+
+def test_rich_payload_location_overrides_baseline():
+    # Contents merge lets a message's OWN present fields win over the baseline:
+    # a rich payload declaring a new location overrides the HELLO baseline's
+    # location on that message.
+    baseline = Session(session_id="baseline", lang="de-DE")
+    baseline.location_preferences = {"city": {"name": "Berlin"},
+                                     "timezone": {"code": "Europe/Berlin"}}
+    client = _make_client(baseline)
+
+    message = Message("recognizer_loop:utterance", {"utterances": ["hi"]},
+                       {"session": {"session_id": "baseline",
+                                    "location": {"city": {"name": "Lisbon"},
+                                                 "timezone": {"code": "Europe/Lisbon"}}}})
+
+    result = _install(client, message)
+    session = result.context["session"]
+    assert session["location"]["timezone"]["code"] == "Europe/Lisbon"
+    assert session["location"]["city"]["name"] == "Lisbon"
+
+
+def test_thin_control_message_does_not_clobber_baseline_location():
+    # DEFECT B (session-contents bleed): a thin control bus message (same
+    # session_id, no location, lang: null) must NOT destroy the HELLO
+    # baseline's location. The old code wholesale-replaced ``client.sess``
+    # with a Session built from the thin payload, whose absent location was
+    # fabricated from the master's own Configuration() default — so a German
+    # satellite's Berlin location was silently replaced by the master default
+    # and time queries answered hours off. The message's emitted session must
+    # still carry Berlin, merged from the baseline.
+    baseline = Session(session_id="sat-de", lang="de-DE")
+    baseline.location_preferences = {"city": {"name": "Berlin"},
+                                     "timezone": {"code": "Europe/Berlin"}}
+
+    db = MagicMock()
+    db.get_client_by_api_key.return_value = MagicMock(is_admin=False)
+    agent = MagicMock()
+    agent.bus = MagicMock()
+    agent.get_bus.return_value = agent.bus
+    protocol = HiveMindListenerProtocol(agent_protocol=agent, db=db,
+                                        require_crypto=False,
+                                        handshake_enabled=False)
+    protocol.policy_chain = MagicMock()
+    protocol.policy_chain.review.return_value = MagicMock(denied=False)
+
+    client = HiveMindClientConnection(
+        key="k", send_msg=MagicMock(), disconnect=MagicMock(),
+        hm_protocol=protocol, sess=baseline)
+    client.name = "sat-de"
+    client.allowed_types = ["mycroft.volume.get"]
+    client.is_admin = False
+
+    thin = Message("mycroft.volume.get", {},
+                   {"session": {"session_id": "sat-de", "site_id": "default",
+                                "lang": None}})
+    protocol.handle_bus_message(HiveMessage(HiveMessageType.BUS, payload=thin),
+                                client)
+
+    # baseline was NOT mutated by the bus payload
+    assert client.sess.location_preferences["timezone"]["code"] == "Europe/Berlin"
+
+    emitted = agent.bus.emit.call_args[0][0]
+    loc = emitted.context["session"]["location"]
+    assert loc["timezone"]["code"] == "Europe/Berlin"
+    assert loc["city"]["name"] == "Berlin"
+    # and the message still got this connection's Layer-1 id
+    assert emitted.context["session"]["session_id"] == f"{client.conn_nonce}:sat-de"
