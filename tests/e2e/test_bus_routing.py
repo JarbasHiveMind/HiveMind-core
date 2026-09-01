@@ -41,11 +41,11 @@ def test_satellite_bus_message_reaches_master_bus():
 
 
 def test_satellite_session_id_attached_to_inbound_bus_messages():
-    """Master-side bus message context carries a session_id — but it is the
-    bridge's own per-connection Layer-1 id, not the satellite's chosen one
-    (HIVEMIND-BRIDGE-1 §4): session_id is an orchestrator-side identity that
-    OVOS SessionManager keys conversational state on, so the client-chosen
-    value is translated at the inbound boundary.
+    """Master-side bus message context carries a session_id. An admin
+    connection (like this satellite's) is trusted to skip the Layer-1
+    translation and address the orchestrator's sessions directly
+    (HIVEMIND-BRIDGE-1 §4/§4.1), so the satellite's own chosen session_id is
+    what lands on the bus.
     """
     b = admin_satellite(allowed_types=["recognizer_loop:utterance"])
     try:
@@ -65,9 +65,9 @@ def test_satellite_session_id_attached_to_inbound_bus_messages():
         assert _wait_for(lambda: len(seen) >= 1)
         ctx = seen[0].context.get("session", {})
         assert ctx.get("session_id"), f"session_id missing: {ctx}"
-        assert ctx.get("session_id") != s0.shim.session_id, (
-            f"session_id should be translated to a Layer-1 id, not the "
-            f"satellite's own: {ctx}"
+        assert ctx.get("session_id") == s0.shim.session_id, (
+            f"admin connection should skip the Layer-1 NAT and use its own "
+            f"session_id directly: {ctx}"
         )
     finally:
         b.stop_all()

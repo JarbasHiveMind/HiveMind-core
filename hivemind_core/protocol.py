@@ -1098,15 +1098,16 @@ class HiveMindListenerProtocol:
                 self._outstanding_queries.pop(qid, None)
         client.disconnect()
         context = {"source": client.peer}
-        # never hand the reserved session of a non-admin to the OVOS bus: it
-        # would update the device-local default session (OVOS-SESSION-2 §5)
-        # on behalf of a peer that is not allowed to touch it
-        # (HIVEMIND-BRIDGE-1 §4.1). This emit is outside the policy chain.
-        if client.sess.session_id != "default" or client.is_admin:
-            context["session"] = client.sess.serialize()
-        else:
-            LOG.warning(f"not reporting the 'default' session of non-admin "
-                        f"{client.peer} on disconnect")
+        # The disconnect notification carries the same Layer-1 session the
+        # bus saw for this connection: translated for non-admins, raw for
+        # admins (mirrors _install_client_session). The reserved
+        # device-local "default" is still never handed to the bus on behalf
+        # of a non-admin — it becomes "nonce:default" — while the agent can
+        # correlate this disconnect to the session it actually saw
+        # (HIVEMIND-BRIDGE-1 §4/§4.1). This emit is outside the policy chain.
+        context["session"] = client.sess.serialize()
+        context["session"]["session_id"] = (client.sess.session_id if client.is_admin
+                                             else client.layer1_session_id)
         message = Message("hive.client.disconnect", {"key": client.key}, context)
         self._emit_lifecycle(client, message)
 
@@ -1723,30 +1724,32 @@ class HiveMindListenerProtocol:
         LOG.debug(f"client site_id: {client.sess.site_id}")
         LOG.debug(f"client session_id: {client.sess.session_id}")
         LOG.debug(f"client is_admin: {client.is_admin}")
-        if client.sess.session_id == "default" and not client.is_admin:
-            LOG.warning("Client requested 'default' session, but is not an administrator")
-            client.disconnect()
-        else:
-            # a client that HELLOs again with a different session_id leaves a
-            # stale entry behind under its old peer id — drop it, or a later
-            # connection collides with a peer that no longer exists.
-            for peer, conn in list(self.clients.items()):
-                if conn is client and peer != client.peer:
-                    self.clients.pop(peer)
+        # A non-admin client may declare "default" here (HIVEMIND-BRIDGE-1
+        # §4/§4.1): _install_client_session stamps every inbound BUS message
+        # with a per-connection Layer-1 session id ("<nonce>:<session_id>")
+        # before the policy chain runs, so this remote "default" can never
+        # reach the OVOS bus as the bare, device-local "default" session.
 
-            # HIVEMIND-BRIDGE-1 §3: every peer needs a distinct ``source``.
-            # ``name`` comes from the access key and ``session_id`` comes from
-            # this HELLO, so two connections that share an access key can ask
-            # for the same peer string. The second one would evict the first
-            # from ``self.clients`` and then receive its responses
-            # (HIVEMIND-AGENT-1 §3). Give the newcomer a server-generated
-            # suffix instead — BRIDGE-1 §3.1 allows exactly this.
-            other = self.clients.get(client.peer)
-            if other is not None and other is not client:
-                client._peer_suffix = f"::{uuid.uuid4().hex[:8]}"
-                LOG.warning(f"peer id collision on '{other.peer}'; the new "
-                            f"connection is now known as '{client.peer}'")
-            self.clients[client.peer] = client
+        # a client that HELLOs again with a different session_id leaves a
+        # stale entry behind under its old peer id — drop it, or a later
+        # connection collides with a peer that no longer exists.
+        for peer, conn in list(self.clients.items()):
+            if conn is client and peer != client.peer:
+                self.clients.pop(peer)
+
+        # HIVEMIND-BRIDGE-1 §3: every peer needs a distinct ``source``.
+        # ``name`` comes from the access key and ``session_id`` comes from
+        # this HELLO, so two connections that share an access key can ask
+        # for the same peer string. The second one would evict the first
+        # from ``self.clients`` and then receive its responses
+        # (HIVEMIND-AGENT-1 §3). Give the newcomer a server-generated
+        # suffix instead — BRIDGE-1 §3.1 allows exactly this.
+        other = self.clients.get(client.peer)
+        if other is not None and other is not client:
+            client._peer_suffix = f"::{uuid.uuid4().hex[:8]}"
+            LOG.warning(f"peer id collision on '{other.peer}'; the new "
+                        f"connection is now known as '{client.peer}'")
+        self.clients[client.peer] = client
 
     def handle_bus_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -2905,7 +2908,14 @@ class HiveMindListenerProtocol:
         # "default") would otherwise collide onto one OVOS session. Translate
         # it at this inbound boundary to a per-connection id; every other
         # session field is passed through unchanged.
-        session["session_id"] = client.layer1_session_id
+        # This translation only applies to non-admin connections. An admin is
+        # trusted to skip it and address the orchestrator's sessions directly
+        # (including the reserved, device-local "default"), per BRIDGE-1
+        # §4/§4.1.
+        if client.is_admin:
+            session["session_id"] = client.sess.session_id
+        else:
+            session["session_id"] = client.layer1_session_id
         message.context["session"] = session
         return message
 
