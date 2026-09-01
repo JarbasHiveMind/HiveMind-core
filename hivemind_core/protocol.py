@@ -177,7 +177,7 @@ class HiveMindClientConnection:
     """represents a connection to the hivemind listener"""
     key: str
     send_msg: Callable[[str, bool], None]
-    disconnect: Callable[[], None]
+    disconnect: Callable[..., None]
 
     sess: Session = dataclasses.field(default_factory=Session)  # unique session per client
     name: str = "AnonClient"
@@ -398,7 +398,7 @@ class HiveMindClientConnection:
             # protocol v3 session: only valid Noise transport messages are
             # accepted; tampering/replay/reordering fails AEAD and is fatal
             if not isinstance(payload, bytes):
-                self.disconnect()
+                self.disconnect(1008, "non-Noise message received on a protocol v3 session")
                 raise NoiseTransportFailed(
                     "non-Noise message received on a protocol v3 session")
             try:
@@ -407,7 +407,7 @@ class HiveMindClientConnection:
                 LOG.error(f"rejecting invalid Noise transport message from "
                           f"{self.peer} (tampered, replayed or out-of-order), "
                           "disconnecting")
-                self.disconnect()
+                self.disconnect(1008, "invalid Noise transport message (tampered, replayed or out-of-order)")
                 raise
             # a decoded Noise transport frame is authenticated + encrypted
             encrypted = True
@@ -442,7 +442,7 @@ class HiveMindClientConnection:
                                              HiveMessageType.HANDSHAKE)):
             LOG.error(f"Dropping unencrypted {message.msg_type} message from "
                       f"{self.peer}: server requires crypto")
-            self.disconnect()
+            self.disconnect(1008, "unencrypted message rejected: crypto is required")
             raise UnencryptedMessageError(
                 f"unencrypted {message.msg_type} message rejected: "
                 f"crypto is required")
@@ -978,7 +978,7 @@ class HiveMindListenerProtocol:
                 f">= {int(min_version)} but this connection can offer at most "
                 f"{int(max_version)}"
             )
-            client.disconnect()
+            client.disconnect(1008, "server requires a protocol version this connection cannot offer")
             return
 
         hello_payload = {
@@ -1505,7 +1505,7 @@ class HiveMindListenerProtocol:
         client.noise_handshake = None
         client.noise_transport = None
         self.handle_invalid_key_connected(client)
-        client.disconnect()
+        client.disconnect(1008, reason)
 
     def handle_noise_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -1634,7 +1634,8 @@ class HiveMindListenerProtocol:
                 f"v{int(attempted_version)} is below the configured minimum "
                 f"v{int(cfg_min)}"
             )
-            client.disconnect()
+            client.disconnect(1008, f"legacy handshake at protocol v{int(attempted_version)} "
+                                     f"is below the configured minimum v{int(cfg_min)}")
             return
 
         LOG.debug("handshake received, generating session key")
@@ -1668,7 +1669,7 @@ class HiveMindListenerProtocol:
             if not ciphers or not encodings:
                 LOG.warning("Client tried to connect with invalid cipher/encoding")
                 # TODO - invalid handshake handler
-                client.disconnect()
+                client.disconnect(1008, "invalid cipher/encoding negotiation")
                 return
 
             # from the allowed options, select the one the client prefers
@@ -1689,7 +1690,7 @@ class HiveMindListenerProtocol:
             if not verified:
                 LOG.warning("Client password handshake verification failed")
                 self.handle_invalid_key_connected(client)
-                client.disconnect()
+                client.disconnect(1008, "password handshake verification failed")
                 return
 
             # key is derived safely from password in both sides
@@ -1703,7 +1704,7 @@ class HiveMindListenerProtocol:
             # self.crypto_key = self.pswd_handshake.secret
         else:
             # TODO - invalid handshake handler
-            client.disconnect()
+            client.disconnect(1008, "invalid or unrecognized handshake")
             return
 
         msg = HiveMessage(HiveMessageType.HANDSHAKE,
