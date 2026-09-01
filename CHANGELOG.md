@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.15a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a3) (2026-09-01)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a2...4.13.15a3)
+
+**Merged pull requests:**
+
+- Re-check is\_admin from the DB at the session-NAT boundary [\#281](https://github.com/JarbasHiveMind/HiveMind-core/pull/281) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.15a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a2) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a1...4.13.15a2)
@@ -460,10 +468,6 @@
 ## [4.10.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a3) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a2...4.10.1a3)
-
-**Merged pull requests:**
-
-- ci: release merged fork pull requests with trusted token [\#153](https://github.com/JarbasHiveMind/HiveMind-core/pull/153) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [4.10.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a2) (2026-07-16)
 
