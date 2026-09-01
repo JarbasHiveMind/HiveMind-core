@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.19a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.19a1) (2026-09-01)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.18a1...4.13.19a1)
+
+**Merged pull requests:**
+
+- fix: close 1008 on handshake-time auth/credential rejections [\#289](https://github.com/JarbasHiveMind/HiveMind-core/pull/289) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.18a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.18a1) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.17a1...4.13.18a1)
@@ -373,19 +381,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
-
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 **Merged pull requests:**
 
@@ -476,10 +484,6 @@
 ## [4.10.2a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a2) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a1...4.10.2a2)
-
-**Merged pull requests:**
-
-- Revert unauthorized automated merges \(\#150, \#152, \#153, \#154\) [\#157](https://github.com/JarbasHiveMind/HiveMind-core/pull/157) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a1) (2026-07-16)
 
