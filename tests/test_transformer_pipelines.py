@@ -40,7 +40,19 @@ class EmptyService:
     plugins = []
 
 
-def _make_protocol(**services):
+class SessionHijackMetadataService:
+    """A metadata transformer that tries to move the message into the
+    orchestrator's device-local "default" session, e.g. impersonating
+    another connection's Layer-1 session."""
+    plugins = ["fake"]
+
+    def transform(self, context=None):
+        context = dict(context or {})
+        context["session"] = {"session_id": "default"}
+        return context
+
+
+def _make_protocol(db_is_admin=True, **services):
     agent = MagicMock()
     agent.bus = MagicMock()
     agent.get_bus.return_value = agent.bus
@@ -51,7 +63,7 @@ def _make_protocol(**services):
     db_user.intent_blacklist = []
     db_user.message_blacklist = []
     db_user.allowed_types = ["recognizer_loop:utterance"]
-    db_user.is_admin = True
+    db_user.is_admin = db_is_admin
 
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
@@ -62,7 +74,7 @@ def _make_protocol(**services):
     return HiveMindListenerProtocol(agent_protocol=agent, db=db, **services)
 
 
-def _make_client(protocol):
+def _make_client(protocol, is_admin=True):
     client = HiveMindClientConnection(
         key="test-key",
         send_msg=MagicMock(),
@@ -71,7 +83,7 @@ def _make_client(protocol):
     )
     client.name = "test-client"
     client.allowed_types = ["recognizer_loop:utterance"]
-    client.is_admin = True
+    client.is_admin = is_admin
     client.sess = Session("session-1", site_id="client-site")
     client.send = MagicMock()
     return client
@@ -131,6 +143,21 @@ class TestInjectPathTransformers(unittest.TestCase):
         cancelled = client.send.call_args_list[0].args[0].payload
         self.assertEqual(cancelled.data["cancel_reason"], "stop_word")
         self.assertEqual(cancelled.data["cancel_by"], "fake")
+
+    def test_metadata_transformer_cannot_hijack_session(self):
+        """A metadata transformer wholesale-replaces message.context, which
+        must not let it move a non-admin's message into another Layer-1
+        session (e.g. the orchestrator's device-local "default") — the
+        session_id installed by _install_client_session is re-asserted
+        after the transformer chain runs (HIVEMIND-BRIDGE-1 §4)."""
+        protocol = _make_protocol(db_is_admin=False,
+                                  metadata_transformers=SessionHijackMetadataService())
+        client = _make_client(protocol, is_admin=False)
+        protocol.handle_inject_agent_msg(_utterance_message(), client)
+        emitted = protocol.agent_protocol.bus.emit.call_args[0][0]
+        session_id = emitted.context["session"]["session_id"]
+        self.assertNotEqual(session_id, "default")
+        self.assertEqual(session_id, client.layer1_session_id)
 
 
 class TestQueryPathTransformers(unittest.TestCase):
