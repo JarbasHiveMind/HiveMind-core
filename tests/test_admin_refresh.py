@@ -125,6 +125,47 @@ def test_revoked_admin_loses_broadcast_at_next_message():
     assert client.is_admin is False
 
 
+def test_revoked_admin_is_natted_after_slow_transformer():
+    """A transformer plugin can outlive resolve_user's TTL (an LLM call, a
+    network round trip). If the DB revokes the admin while it runs, the
+    post-transformer session-id re-stamp in handle_inject_agent_msg must see
+    the fresh standing, not the dispatch-time ``client.is_admin`` snapshot
+    taken before the chain ran."""
+    db_user = MagicMock(is_admin=True)
+    db = MagicMock()
+    db.get_client_by_api_key.return_value = db_user
+
+    protocol = _make_protocol(db)
+    protocol.policy_chain = MagicMock()
+    protocol.policy_chain.review.return_value = MagicMock(denied=False)
+
+    client = _make_client(protocol, Session(session_id="default"), is_admin=True)
+
+    def revoke_mid_transform(context):
+        # models the DB row changing + the cached resolve TTL elapsing while
+        # this transformer was blocked on something slow.
+        db_user.is_admin = False
+        client.invalidate_user()
+        return context
+
+    protocol.metadata_transformers = MagicMock()
+    protocol.metadata_transformers.plugins = {"fake": MagicMock()}
+    protocol.metadata_transformers.transform.side_effect = revoke_mid_transform
+    protocol.utterance_transformers = MagicMock()
+    protocol.utterance_transformers.plugins = {}
+
+    message = Message("recognizer_loop:utterance", {"utterances": ["hi"]},
+                       {"session": {"session_id": "default"}})
+
+    protocol.handle_inject_agent_msg(message, client)
+
+    emitted = protocol.get_bus(client).emit.call_args[0][0]
+    session_id = emitted.context["session"]["session_id"]
+    assert session_id == f"{client.conn_nonce}:default"
+    assert session_id != "default"
+    assert client.is_admin is False
+
+
 def test_resolve_failure_falls_back_to_connection_snapshot():
     db = MagicMock()
     db.get_client_by_api_key.return_value = None
