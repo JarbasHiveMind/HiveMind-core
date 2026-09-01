@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.16a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.16a1) (2026-09-01)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a3...4.13.16a1)
+
+**Merged pull requests:**
+
+- fix: re-assert Layer-1 session after transformers and refresh is\_admin for all admin gates [\#283](https://github.com/JarbasHiveMind/HiveMind-core/pull/283) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.15a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a3) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a2...4.13.15a3)
@@ -194,7 +202,7 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
 
 **Merged pull requests:**
 
@@ -202,13 +210,13 @@
 - fix: give bypass-constructed HiveMindListenerProtocol test fixtures real attribute defaults [\#219](https://github.com/JarbasHiveMind/HiveMind-core/pull/219) ([JarbasAl](https://github.com/JarbasAl))
 - fix: drop already-seen floods when forwarding, not only when answering [\#212](https://github.com/JarbasHiveMind/HiveMind-core/pull/212) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
-
 ## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+
+## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
 
 **Merged pull requests:**
 
@@ -460,10 +468,6 @@
 ## [4.10.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a1) (2026-07-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.1a3...4.10.2a1)
-
-**Merged pull requests:**
-
-- fix: avoid warning on expected cleartext handshake [\#154](https://github.com/JarbasHiveMind/HiveMind-core/pull/154) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [4.10.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.1a3) (2026-07-16)
 
