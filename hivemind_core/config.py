@@ -202,6 +202,19 @@ def get_server_config() -> JsonStorageXDG:
     # satellites included. Deep-merge it against the defaults, like the policy
     # block above, so every sub-key is always present.
     db["upstream"] = upstream_config(db)
+    # `network_protocol` is only backfilled sub-key by sub-key above, so a
+    # hand-edited `null` (or any other non-dict) survives untouched and
+    # `.items()` at the use site (`HiveMindService`) raises AttributeError
+    # before the graceful "no network protocols" exit path ever runs.
+    # Fall back to the default block, like the policy/upstream blocks above.
+    if not isinstance(db.get("network_protocol"), dict):
+        if "network_protocol" in db:
+            LOG.warning(
+                f"server.json 'network_protocol' is "
+                f"{type(db['network_protocol']).__name__}, not a block of "
+                f"settings — using the defaults."
+            )
+        db["network_protocol"] = dict(_DEFAULT["network_protocol"])
     return db
 
 
@@ -248,4 +261,12 @@ def runtime_password_min_bits() -> float:
     if not cfg.get("runtime_password_strength_check",
                    _DEFAULT["runtime_password_strength_check"]):
         return 0.0
-    return float(cfg.get("min_password_bits", _DEFAULT["min_password_bits"]))
+    min_bits = cfg.get("min_password_bits", _DEFAULT["min_password_bits"])
+    try:
+        return float(min_bits)
+    except (TypeError, ValueError):
+        LOG.warning(
+            f"server.json 'min_password_bits' is {min_bits!r}, not a "
+            f"number — using the default ({_DEFAULT['min_password_bits']})."
+        )
+        return float(_DEFAULT["min_password_bits"])
