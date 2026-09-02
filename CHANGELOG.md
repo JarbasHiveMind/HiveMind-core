@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.22a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.22a1) (2026-09-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.21a1...4.13.22a1)
+
+**Merged pull requests:**
+
+- fix: fail gracefully on malformed HELLO session and non-conforming config [\#295](https://github.com/JarbasHiveMind/HiveMind-core/pull/295) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.21a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.21a1) (2026-09-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.20a1...4.13.21a1)
@@ -242,7 +250,7 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
 
 **Merged pull requests:**
 
@@ -250,13 +258,13 @@
 - fix: give bypass-constructed HiveMindListenerProtocol test fixtures real attribute defaults [\#219](https://github.com/JarbasHiveMind/HiveMind-core/pull/219) ([JarbasAl](https://github.com/JarbasAl))
 - fix: drop already-seen floods when forwarding, not only when answering [\#212](https://github.com/JarbasHiveMind/HiveMind-core/pull/212) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
-
 ## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+
+## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
 
 **Merged pull requests:**
 
@@ -335,19 +343,19 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 **Merged pull requests:**
 
 - perf: import the RSA identity key once per node [\#205](https://github.com/JarbasHiveMind/HiveMind-core/pull/205) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
-
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 **Merged pull requests:**
 
@@ -480,10 +488,6 @@
 ## [4.10.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a3...4.10.3a1)
-
-**Merged pull requests:**
-
-- fix: suppress routing loops per MSG-1 §5 \(append self-hop, drop already-routed\) [\#162](https://github.com/JarbasHiveMind/HiveMind-core/pull/162) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.2a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a3) (2026-07-30)
 
