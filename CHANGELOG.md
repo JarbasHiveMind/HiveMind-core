@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.20a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.20a1) (2026-09-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.19a1...4.13.20a1)
+
+**Merged pull requests:**
+
+- fix: refresh can\_escalate/can\_propagate/can\_broadcast per message [\#291](https://github.com/JarbasHiveMind/HiveMind-core/pull/291) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.19a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.19a1) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.18a1...4.13.19a1)
@@ -460,10 +468,6 @@
 ## [4.10.3a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a2) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.3a1...4.10.3a2)
-
-**Merged pull requests:**
-
-- test: isolate E2E HiveMind identity storage [\#159](https://github.com/JarbasHiveMind/HiveMind-core/pull/159) ([goldyfruit](https://github.com/goldyfruit))
 
 ## [4.10.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.3a1) (2026-08-02)
 
