@@ -1173,23 +1173,28 @@ class HiveMindListenerProtocol:
 
         LOG.debug(f"message: {message}")
 
-        # Refresh is_admin from the DB once, here, so every admin-gated
-        # decision downstream of this dispatcher (the session NAT in
-        # _install_client_session, the BROADCAST gate in
-        # handle_broadcast_message, ...) sees a value no staler than
+        # Refresh is_admin and the can_broadcast/can_propagate/can_escalate
+        # grants from the DB once, here, so every privilege-gated decision
+        # downstream of this dispatcher (the session NAT in
+        # _install_client_session, the BROADCAST/ESCALATE/PROPAGATE gates in
+        # handle_broadcast_message/handle_escalate_message/
+        # handle_propagate_message, ...) sees a value no staler than
         # resolve_user's TTL, instead of the connect-time snapshot for the
         # life of the connection (HIVEMIND-BRIDGE-1 §4/§4.1). The disconnect
         # lifecycle emit runs on socket close, outside this dispatcher, and
-        # keeps reading whatever is_admin was last refreshed to here.
+        # keeps reading whatever these grants were last refreshed to here.
         db = getattr(self, "db", None)
         if db is not None:
             try:
                 user = client.resolve_user(db)
             except Exception:
-                LOG.exception("handle_message: failed to resolve user for is_admin refresh")
+                LOG.exception("handle_message: failed to resolve user for privilege refresh")
             else:
                 if user is not None:
                     client.is_admin = user.is_admin
+                    client.can_broadcast = user.can_broadcast
+                    client.can_propagate = user.can_propagate
+                    client.can_escalate = user.can_escalate
 
         # update internal peer ID
         message.update_source_peer(client.peer)

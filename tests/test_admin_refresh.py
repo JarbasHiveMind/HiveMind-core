@@ -166,6 +166,82 @@ def test_revoked_admin_is_natted_after_slow_transformer():
     assert client.is_admin is False
 
 
+def _escalate_hivemessage():
+    inner = HiveMessage(HiveMessageType.BUS, payload=Message("speak", {"utterance": "hi"}))
+    return HiveMessage(HiveMessageType.ESCALATE, payload=inner)
+
+
+def _propagate_hivemessage():
+    inner = HiveMessage(HiveMessageType.BUS, payload=Message("speak", {"utterance": "hi"}))
+    return HiveMessage(HiveMessageType.PROPAGATE, payload=inner)
+
+
+def test_revoked_can_escalate_is_denied_at_next_message():
+    """``handle_escalate_message`` reads ``client.can_escalate`` directly, not
+    ``resolve_user``. A live revoke of ``can_escalate`` must still take effect
+    at the connection's next message, because ``handle_message`` -- the common
+    dispatcher for every inbound message type -- refreshes ``client.can_escalate``
+    from the DB before dispatching (HIVEMIND-BRIDGE-1 §4/§4.1)."""
+    db_user = MagicMock(is_admin=False, can_broadcast=False, can_propagate=False,
+                         can_escalate=True)
+    db = MagicMock()
+    db.get_client_by_api_key.return_value = db_user
+
+    protocol = _make_protocol(db)
+    client = _make_client(protocol, Session(session_id="default"), is_admin=False)
+    client.can_escalate = True
+    client.can_propagate = False
+    client.can_broadcast = False
+    protocol.clients = {}
+    protocol.illegal_callback = None
+    protocol.escalate_callback = MagicMock()
+
+    # while still granted, escalate is allowed
+    protocol.handle_message(_escalate_hivemessage(), client)
+    protocol.escalate_callback.assert_called_once()
+    client.disconnect.assert_not_called()
+
+    # operator revokes can_escalate in the DB
+    db_user.can_escalate = False
+    protocol.escalate_callback.reset_mock()
+
+    protocol.handle_message(_escalate_hivemessage(), client)
+    protocol.escalate_callback.assert_not_called()
+    client.disconnect.assert_called_once_with()
+    assert client.can_escalate is False
+
+
+def test_revoked_can_propagate_is_denied_at_next_message():
+    """Same as above, for ``can_propagate`` / ``handle_propagate_message``."""
+    db_user = MagicMock(is_admin=False, can_broadcast=False, can_propagate=True,
+                         can_escalate=False)
+    db = MagicMock()
+    db.get_client_by_api_key.return_value = db_user
+
+    protocol = _make_protocol(db)
+    client = _make_client(protocol, Session(session_id="default"), is_admin=False)
+    client.can_propagate = True
+    client.can_escalate = False
+    client.can_broadcast = False
+    protocol.clients = {}
+    protocol.illegal_callback = None
+    protocol.propagate_callback = MagicMock()
+
+    # while still granted, propagate is allowed
+    protocol.handle_message(_propagate_hivemessage(), client)
+    protocol.propagate_callback.assert_called_once()
+    client.disconnect.assert_not_called()
+
+    # operator revokes can_propagate in the DB
+    db_user.can_propagate = False
+    protocol.propagate_callback.reset_mock()
+
+    protocol.handle_message(_propagate_hivemessage(), client)
+    protocol.propagate_callback.assert_not_called()
+    client.disconnect.assert_called_once_with()
+    assert client.can_propagate is False
+
+
 def test_resolve_failure_falls_back_to_connection_snapshot():
     db = MagicMock()
     db.get_client_by_api_key.return_value = None
