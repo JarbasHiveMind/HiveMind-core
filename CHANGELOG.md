@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.13.21a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.21a1) (2026-09-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.20a1...4.13.21a1)
+
+**Merged pull requests:**
+
+- fix: add-client refuses to overwrite an existing access key instead of silently demoting [\#293](https://github.com/JarbasHiveMind/HiveMind-core/pull/293) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.20a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.20a1) (2026-09-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.19a1...4.13.20a1)
@@ -480,10 +488,6 @@
 ## [4.10.2a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a3) (2026-07-30)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.2a2...4.10.2a3)
-
-**Merged pull requests:**
-
-- docs: rewrite README in Simplified Technical English [\#160](https://github.com/JarbasHiveMind/HiveMind-core/pull/160) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.2a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.2a2) (2026-07-16)
 
