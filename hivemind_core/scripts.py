@@ -171,11 +171,22 @@ def add_client(name, access_key, password, crypto_key, admin, metadata, allow_we
                 f"{e}\nPass --allow-weak-password to override.", param_hint="--password"
             )
 
+    requested_access_key = access_key
     password = password or os.urandom(16).hex()
     access_key = access_key or os.urandom(16).hex()
     client_metadata = parse_client_metadata(metadata)
 
     with ClientDatabase() as db:
+        if requested_access_key:
+            existing = db.get_client_by_api_key(requested_access_key)
+            if existing is not None:
+                raise click.ClickException(
+                    f"A client already exists for access key '{requested_access_key}' "
+                    f"(Node ID: {existing.client_id}, Friendly Name: {existing.name}).\n"
+                    "add-client would overwrite its admin status and password. "
+                    "Use rename-client / allow-* / blacklist-* / delete-client to "
+                    "modify the existing client instead."
+                )
         name = name or f"HiveMind-Node-{db.total_clients()}"
         print(f"Database backend: {db.db.__class__.__name__}")
         success = db.add_client(name, access_key, crypto_key=key, password=password,
