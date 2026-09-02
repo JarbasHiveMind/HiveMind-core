@@ -16,7 +16,7 @@ from typing import Union, List, Dict, Optional, Callable, Literal
 import pybase64
 from ovos_bus_client import MessageBusClient
 from ovos_bus_client.message import Message
-from ovos_bus_client.session import Session
+from ovos_bus_client.session import MalformedSession, Session
 from ovos_plugin_manager.transformer_services import (DialogTransformersService,
                                                       MetadataTransformersService,
                                                       UtteranceTransformersService)
@@ -1727,7 +1727,15 @@ class HiveMindListenerProtocol:
         LOG.debug("client Hello received, syncing personal session data")
         payload = message.payload
         if "session" in payload:
-            client.sess = Session.deserialize(payload["session"])
+            try:
+                client.sess = Session.deserialize(payload["session"])
+            except MalformedSession as e:
+                LOG.warning(f"malformed HELLO session from {client.peer}: {e}")
+                self._send_denied(
+                    client, str(message.msg_type), MALFORMED_PAYLOAD,
+                    f"HELLO 'session' can not be reconstructed "
+                    f"(HIVEMIND-MSG-1 §4)", {})
+                return
         if "site_id" in payload:
             client.sess.site_id = client.site_id = payload["site_id"]
         if "pubkey" in payload:
