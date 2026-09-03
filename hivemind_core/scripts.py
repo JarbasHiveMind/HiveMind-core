@@ -140,10 +140,36 @@ def derive_psk(password, node_id):
 @click.option("--allow-weak-password", is_flag=True, default=False,
               help="Skip the password-strength check (not recommended). By default a "
                    "guessable/low-entropy --password is refused.")
-def add_client(name, access_key, password, crypto_key, admin, metadata, allow_weak_password):
+@click.option("--allow-legacy-crypto-key", is_flag=True, default=False,
+              help="Confirm this client really is a legacy v1/v2 AES client on a node "
+                   "that permits it, bypassing the refusal below.")
+def add_client(name, access_key, password, crypto_key, admin, metadata, allow_weak_password,
+               allow_legacy_crypto_key):
     """Add a client, generating any credential the operator did not supply."""
     key = crypto_key
     if key:
+        # `min_protocol_version` >= 2 (the default) means every client must
+        # negotiate the v3 Noise handshake (protocol.ProtocolVersion.THREE),
+        # which uses the password-derived PSK, not this legacy v1/v2 AES
+        # pre-shared key. A crypto_key set on such a node is never used for
+        # decryption but IS stored, so the client keeps sending frames
+        # encrypted with it — every one fails server-side decryption
+        # (DecryptionKeyError) and the client surfaces that as a misleading
+        # "invalid access key/password" error instead of the real cause.
+        requires_noise_handshake = get_server_config().get("min_protocol_version", 2) >= 2
+        if requires_noise_handshake and not allow_legacy_crypto_key:
+            raise click.ClickException(
+                "--crypto-key is a legacy v1/v2 AES pre-shared key, incompatible with "
+                "the v3 Noise handshake this node requires (min_protocol_version >= 2).\n"
+                "Setting it will not break the connection outright — it breaks every "
+                "message after: the client keeps encrypting with this key, the server's "
+                "Noise session can't decrypt it, and the client reports that as an "
+                "\"invalid access key/password\" error, hiding the real cause.\n"
+                "Omit --crypto-key: v3 clients use the password-derived PSK instead "
+                "(see 'hivemind-core derive-psk').\n"
+                "If this really is a legacy v1/v2 client on a node that permits it, "
+                "pass --allow-legacy-crypto-key to proceed anyway."
+            )
         print(
             "WARNING: crypto key is deprecated, use password instead if your client supports it"
         )
