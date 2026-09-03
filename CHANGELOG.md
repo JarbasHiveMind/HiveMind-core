@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.14.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.0a1) (2026-09-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.23a1...4.14.0a1)
+
+**Merged pull requests:**
+
+- feat: identity-scoped durable session namespace \(survives reconnect\) [\#299](https://github.com/JarbasHiveMind/HiveMind-core/pull/299) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.13.23a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.23a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.22a1...4.13.23a1)
@@ -476,10 +484,6 @@
 ## [4.10.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.5a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.4a1...4.10.5a1)
-
-**Merged pull requests:**
-
-- fix: require a verifiable origin on signed INTERCOM, and drop rejected frames [\#166](https://github.com/JarbasHiveMind/HiveMind-core/pull/166) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.4a1) (2026-08-02)
 
