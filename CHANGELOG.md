@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.14.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.0a2) (2026-09-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.0a1...4.14.0a2)
+
+**Merged pull requests:**
+
+- chore\(deps\): require hivemind-ovos-agent-plugin\>=0.4.0a1 for session-owned routing [\#301](https://github.com/JarbasHiveMind/HiveMind-core/pull/301) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.14.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.0a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.23a1...4.14.0a1)
@@ -421,19 +429,19 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 **Merged pull requests:**
 
 - fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
-
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 **Merged pull requests:**
 
@@ -476,10 +484,6 @@
 ## [4.10.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.6a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.5a1...4.10.6a1)
-
-**Merged pull requests:**
-
-- fix: refuse unauthenticated INTERCOM when crypto is required [\#169](https://github.com/JarbasHiveMind/HiveMind-core/pull/169) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.5a1) (2026-08-02)
 
