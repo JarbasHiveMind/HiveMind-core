@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.15.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.15.0a1) (2026-09-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.2a1...4.15.0a1)
+
+**Merged pull requests:**
+
+- feat: un-NAT the client session in core send\(\) \(BRIDGE-1 §4 outbound half\) [\#306](https://github.com/JarbasHiveMind/HiveMind-core/pull/306) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.14.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.2a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.1a1...4.14.2a1)
@@ -476,10 +484,6 @@
 ## [4.10.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.8a1...4.10.9a1)
-
-**Merged pull requests:**
-
-- fix: isolate peer sessions and surface backend failures [\#174](https://github.com/JarbasHiveMind/HiveMind-core/pull/174) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.8a1) (2026-08-02)
 
