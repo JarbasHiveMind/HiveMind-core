@@ -50,7 +50,7 @@ dependencies = [
     "hivemind-sqlite-database>=0.4.0a2",
     "hivemind-json-db-plugin>=0.0.3a2",
     "hivemind-websocket-protocol>=0.2.10a1,<1.0.0",
-    "hivemind-ovos-agent-plugin>=0.3.1a1,<1.0.0",
+    "hivemind-ovos-agent-plugin>=0.4.0a1,<1.0.0",
     # transformer pipeline runner services on the text/bus path
     "ovos-plugin-manager>=2.10.0a1,<3.0.0",
     "setuptools",
