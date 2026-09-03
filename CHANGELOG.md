@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.14.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.1a1) (2026-09-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.0a2...4.14.1a1)
+
+**Merged pull requests:**
+
+- fix: add-client refuses a legacy crypto\_key on a node that requires the v3 Noise handshake [\#303](https://github.com/JarbasHiveMind/HiveMind-core/pull/303) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.14.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.0a2) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.0a1...4.14.0a2)
@@ -476,10 +484,6 @@
 ## [4.10.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.7a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.6a1...4.10.7a1)
-
-**Merged pull requests:**
-
-- fix: close three admission-control gaps in the policy chain [\#171](https://github.com/JarbasHiveMind/HiveMind-core/pull/171) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.6a1) (2026-08-02)
 
