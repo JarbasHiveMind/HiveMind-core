@@ -119,6 +119,11 @@ class PolicyChain:
             is_optional = self._optional[i] if i < len(self._optional) else False
             try:
                 verdict = policy.review(message, client)
+                if not isinstance(verdict, Verdict):
+                    raise TypeError(
+                        f"{type(policy).__name__}.review returned "
+                        f"{type(verdict).__name__}, not a Verdict"
+                    )
             except Exception as e:
                 if is_optional:
                     LOG.warning(
@@ -179,6 +184,11 @@ class PolicyChain:
             is_optional = self._optional[i] if i < len(self._optional) else False
             try:
                 verdict = policy.review_binary(payload, client)
+                if not isinstance(verdict, Verdict):
+                    raise TypeError(
+                        f"{type(policy).__name__}.review_binary returned "
+                        f"{type(verdict).__name__}, not a Verdict"
+                    )
             except Exception as e:
                 if is_optional:
                     LOG.warning(
@@ -315,7 +325,10 @@ class MessageTypeACLPolicy(PolicyPlugin):
             return list(client.allowed_types or [])
         user = client.resolve_user(db)
         if user is None:
-            return list(client.allowed_types or [])
+            # DB present but the row is gone — the client was deleted
+            # (e.g. revoked) while still connected. Deny, don't fall
+            # back to the stale connect-time snapshot.
+            return []
         return list(user.allowed_types or [])
 
     def review(self, message: Message,

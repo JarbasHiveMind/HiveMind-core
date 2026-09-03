@@ -312,6 +312,53 @@ class TestMessageTypeACLPolicy(unittest.TestCase):
         self.assertEqual(v.code, "policy_error")
 
 
+class TestMessageTypeACLPolicyDeletedRow(unittest.TestCase):
+    """POLICY-1 §5: a deleted client row (resolve_user returns None with
+    a DB present) must deny, not fall back to the stale connect-time
+    snapshot — otherwise a revoked/deleted client keeps its old grants
+    until it disconnects."""
+
+    def test_deleted_row_denies_not_stale_snapshot(self):
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["speak"], is_admin=False)
+        client.resolve_user = MagicMock(return_value=None)
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=MagicMock()))
+        self.assertEqual(p._allowed_types(client), [])
+        v = p.review(_msg("speak"), client)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "acl_disallowed_type")
+
+    def test_no_db_still_uses_snapshot(self):
+        """Negative control: db is None is the documented exception."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["speak"], is_admin=False)
+        client.resolve_user = MagicMock(return_value=None)
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=None))
+        self.assertEqual(p._allowed_types(client), ["speak"])
+
+    def test_present_row_uses_live_allowed_types(self):
+        """Negative control: an existing row's live grants are used."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["stale"], is_admin=False)
+        client.resolve_user = MagicMock(
+            return_value=SimpleNamespace(allowed_types=["fresh"]))
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=MagicMock()))
+        self.assertEqual(p._allowed_types(client), ["fresh"])
+
+    def test_resolve_user_raising_still_denies(self):
+        """Negative control: the pre-existing raise-path deny is unchanged."""
+        from types import SimpleNamespace
+        client = _FakeClient(allowed_types=["speak"], is_admin=False)
+
+        def boom(db, ttl=5.0, force=False):
+            raise RuntimeError("db down")
+        client.resolve_user = boom
+        p = MessageTypeACLPolicy(hm_protocol=SimpleNamespace(db=MagicMock()))
+        v = p.review(_msg("speak"), client)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+
 class TestMessageTypeACLPolicyBinary(unittest.TestCase):
     """POLICY-1 §2: BINARY payloads cross the same gate as BUS messages.
     A client whose whitelist grants nothing must not be able to push
@@ -596,6 +643,65 @@ class TestMutationFailure(unittest.TestCase):
         self.assertEqual(v.data.get("mutation"), "_RaisingMutation")
         self.assertEqual(v.data.get("policy"), "_RaisingMutationPolicy")
         self.assertIn("error", v.data)
+
+
+class _NoneReturningPolicy(PolicyPlugin):
+    def review(self, message, client):
+        return None
+
+    def review_binary(self, payload, client):
+        return None
+
+
+class _NonVerdictReturningPolicy(PolicyPlugin):
+    def review(self, message, client):
+        return "allow"
+
+    def review_binary(self, payload, client):
+        return "allow"
+
+
+class TestMalformedVerdictReturn(unittest.TestCase):
+    """A policy that returns None (or any non-Verdict) instead of raising
+    must fail the chain closed the same as a raise — not let an
+    AttributeError escape review()/review_binary()."""
+
+    def test_none_return_fails_closed_on_review(self):
+        chain = PolicyChain(policies=[_NoneReturningPolicy()])
+        v = chain.review(_msg(), client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+    def test_non_verdict_return_fails_closed_on_review(self):
+        chain = PolicyChain(policies=[_NonVerdictReturningPolicy()])
+        v = chain.review(_msg(), client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+    def test_none_return_fails_closed_on_review_binary(self):
+        chain = PolicyChain(policies=[_NoneReturningPolicy()])
+        v = chain.review_binary(b"x", client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+    def test_non_verdict_return_fails_closed_on_review_binary(self):
+        chain = PolicyChain(policies=[_NonVerdictReturningPolicy()])
+        v = chain.review_binary(b"x", client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
+
+    def test_correct_allow_verdict_still_allows(self):
+        """Negative control: a well-behaved policy is unaffected."""
+        chain = PolicyChain(policies=[_AllowPolicy()])
+        v = chain.review(_msg(), client=None)
+        self.assertFalse(v.denied)
+
+    def test_raising_policy_still_denies(self):
+        """Negative control: the pre-existing raise path is unchanged."""
+        chain = PolicyChain(policies=[_RaisingPolicy()])
+        v = chain.review(_msg(), client=None)
+        self.assertTrue(v.denied)
+        self.assertEqual(v.code, "policy_error")
 
 
 class TestStructuredPolicyErrorData(unittest.TestCase):
