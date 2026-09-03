@@ -1,6 +1,7 @@
 # hivemind-core
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
+import copy
 import dataclasses
 import hashlib
 import json
@@ -390,6 +391,26 @@ class HiveMindClientConnection:
                                  else message.payload.msg_type)
                 _log.debug("mycroft_type %s", _payload_type)
 
+                # OUTBOUND half of the BRIDGE-1 §4 session NAT, symmetric with
+                # the inbound _install_client_session / _layer1_session_id: the
+                # bus stamps every inbound message with the Layer-1 id
+                # f"{session_namespace}:{declared}", so on the way back to the
+                # client we strip this connection's namespace prefix and restore
+                # the client's own declared session_id. A client only ever sees
+                # its own declared ids; the internal namespace never crosses the
+                # wire. Living in core (the single per-client delivery choke
+                # point) means every agent/binary protocol plugin inherits it
+                # instead of each having to reimplement the un-NAT.
+                unnatted = self._unnat_outbound_session(message)
+                if unnatted is not message:
+                    # A per-peer deepcopy was made because the prefix matched;
+                    # the input ``message`` is shared across a fan-out and was
+                    # NOT mutated. Any ``plaintext`` passed in was serialized
+                    # from the still-NATted shared message and is wrong for this
+                    # peer, so drop it and reserialize the un-NATted copy below.
+                    message = unnatted
+                    plaintext = None
+
             _log.debug("sending to %s: %s", self.peer, message.msg_type)
 
             # WIRE-1 §4.3: a type with no assigned 5-bit code (INTERCOM) travels
@@ -436,6 +457,41 @@ class HiveMindClientConnection:
                 _log.debug("sent unencrypted!")
 
             self.send_msg(payload, is_bin)
+
+    def _unnat_outbound_session(self, message: HiveMessage) -> HiveMessage:
+        """Restore this connection's declared session_id on an outbound BUS
+        message, undoing the inbound NAT (BRIDGE-1 §4).
+
+        The inbound boundary rewrites a non-admin client's declared session_id
+        to ``f"{session_namespace}:{declared}"``. Here we recover ``declared``
+        by stripping this connection's namespace prefix. The payload is either
+        an ``ovos_bus_client`` ``Message`` or a raw dict (mirroring the
+        dict-vs-Message handling in :meth:`send`).
+
+        Returns a per-peer deepcopy with the session_id restored when the
+        prefix matches, otherwise the input ``message`` unchanged. The input is
+        shared across a fan-out to multiple peers and is never mutated. When the
+        session id carries no namespace prefix (an admin bare id, another
+        client's namespace, or no session at all) the message is left as-is.
+        """
+        payload = message.payload
+        if isinstance(payload, dict):
+            session = (payload.get("context") or {}).get("session")
+        else:
+            session = getattr(payload, "context", {}).get("session")
+        sid = session.get("session_id") if isinstance(session, dict) else None
+        prefix = f"{self.session_namespace}:"
+        if not isinstance(sid, str) or not sid.startswith(prefix):
+            return message
+        declared = sid[len(prefix):]
+        if not declared:
+            return message
+        out = copy.deepcopy(message)
+        if isinstance(out.payload, dict):
+            out.payload["context"]["session"]["session_id"] = declared
+        else:
+            out.payload.context["session"]["session_id"] = declared
+        return out
 
     @property
     def crypto_required(self) -> bool:
