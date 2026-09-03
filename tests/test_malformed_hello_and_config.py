@@ -29,9 +29,7 @@ def _make_protocol():
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(protocol):
@@ -44,7 +42,6 @@ def _make_client(protocol):
     )
     client.name = "test-client"
     client.allowed_types = []
-    client.crypto_key = None
     return client
 
 

@@ -20,11 +20,6 @@ _DEFAULT = {
                           "JSON-B32", "JSON-HEX"],
     "allowed_ciphers": ["CHACHA20-POLY1305", 'AES-GCM'],
 
-    # minimum HiveMind protocol version a client must negotiate to be admitted.
-    # 2 = require binary framing + handshake (rejects the oldest json-only /
-    # no-binary clients). The server advertises max(this, crypto-derived min).
-    "min_protocol_version": 2,
-
     # password-strength policy (bans low-entropy, guessable passwords).
     # `min_password_bits` is enforced at `add-client` (ingestion) and, unless
     # `runtime_password_strength_check` is disabled, again at handshake time as

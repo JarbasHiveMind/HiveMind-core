@@ -23,9 +23,7 @@ def _make_protocol(db):
     agent.get_bus.return_value = agent.bus
     agent.callbacks = MagicMock()
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(protocol, sess, is_admin, key="test-key", name="test-client"):

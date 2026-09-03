@@ -299,9 +299,7 @@ def test_disconnect_purges_entries_bound_to_that_connection():
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
 
-    node = HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    node = HiveMindListenerProtocol(agent_protocol=agent, db=db)
     client = HiveMindClientConnection(
         key="test-key", send_msg=MagicMock(), disconnect=MagicMock(),
         hm_protocol=node, sess=Session("a-session"))

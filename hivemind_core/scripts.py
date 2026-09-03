@@ -134,55 +134,18 @@ def derive_psk(password, node_id):
 @click.option("--name", required=False, type=str)
 @click.option("--access-key", required=False, type=str)
 @click.option("--password", required=False, type=str)
-@click.option("--crypto-key", required=False, type=str)
 @click.option("--admin", default=False, required=False, type=bool)
 @click.option("--metadata", required=False, type=str, help="Client metadata as a JSON object.")
 @click.option("--allow-weak-password", is_flag=True, default=False,
               help="Skip the password-strength check (not recommended). By default a "
                    "guessable/low-entropy --password is refused.")
-@click.option("--allow-legacy-crypto-key", is_flag=True, default=False,
-              help="Confirm this client really is a legacy v1/v2 AES client on a node "
-                   "that permits it, bypassing the refusal below.")
-def add_client(name, access_key, password, crypto_key, admin, metadata, allow_weak_password,
-               allow_legacy_crypto_key):
-    """Add a client, generating any credential the operator did not supply."""
-    key = crypto_key
-    if key:
-        # `min_protocol_version` >= 2 (the default) means every client must
-        # negotiate the v3 Noise handshake (protocol.ProtocolVersion.THREE),
-        # which uses the password-derived PSK, not this legacy v1/v2 AES
-        # pre-shared key. A crypto_key set on such a node is never used for
-        # decryption but IS stored, so the client keeps sending frames
-        # encrypted with it — every one fails server-side decryption
-        # (DecryptionKeyError) and the client surfaces that as a misleading
-        # "invalid access key/password" error instead of the real cause.
-        requires_noise_handshake = get_server_config().get("min_protocol_version", 2) >= 2
-        if requires_noise_handshake and not allow_legacy_crypto_key:
-            raise click.ClickException(
-                "--crypto-key is a legacy v1/v2 AES pre-shared key, incompatible with "
-                "the v3 Noise handshake this node requires (min_protocol_version >= 2).\n"
-                "Setting it will not break the connection outright — it breaks every "
-                "message after: the client keeps encrypting with this key, the server's "
-                "Noise session can't decrypt it, and the client reports that as an "
-                "\"invalid access key/password\" error, hiding the real cause.\n"
-                "Omit --crypto-key: v3 clients use the password-derived PSK instead "
-                "(see 'hivemind-core derive-psk').\n"
-                "If this really is a legacy v1/v2 client on a node that permits it, "
-                "pass --allow-legacy-crypto-key to proceed anyway."
-            )
-        print(
-            "WARNING: crypto key is deprecated, use password instead if your client supports it"
-        )
-        print(
-            "WARNING: for security the encryption key should be randomly generated\n"
-            "Defining your own key is discouraged"
-        )
-        if len(key) != 16:
-            print("Encryption key needs to be exactly 16 characters!")
-            raise ValueError
-    else:
-        key = os.urandom(8).hex()
+def add_client(name, access_key, password, admin, metadata, allow_weak_password):
+    """Add a client, generating any credential the operator did not supply.
 
+    The access key admits the client; the password derives the v3 Noise PSK
+    (HIVEMIND-CRYPTO-1 §3.4). Those are the only two credentials — the Noise
+    handshake is the sole key exchange, so there is no pre-shared crypto key.
+    """
     # Ban low-entropy, guessable passwords at ingestion time. Only a
     # user-supplied password is checked — an auto-generated one is always
     # high-entropy. The runtime handshake re-checks as a backstop (see
@@ -215,7 +178,7 @@ def add_client(name, access_key, password, crypto_key, admin, metadata, allow_we
                 )
         name = name or f"HiveMind-Node-{db.total_clients()}"
         print(f"Database backend: {db.db.__class__.__name__}")
-        success = db.add_client(name, access_key, crypto_key=key, password=password,
+        success = db.add_client(name, access_key, password=password,
                                 admin=admin, metadata=client_metadata)
         if not success:
             raise ValueError(f"Error adding User to database: {name}")
@@ -231,13 +194,8 @@ def add_client(name, access_key, password, crypto_key, admin, metadata, allow_we
         print("Friendly Name:", name)
         print("Access Key:", access_key)
         print("Password:", password)
-        print("Encryption Key:", key)
         if client_metadata is not None:
             print("Metadata:", json.dumps(user.metadata, sort_keys=True, ensure_ascii=False))
-
-        print(
-            "WARNING: Encryption Key is deprecated, only use if your client does not support password"
-        )
 
         if not user.allowed_types:
             print(
@@ -373,7 +331,6 @@ def delete_client(node_id, yes):
         print("Friendly Name:", client.name)
         print("Access Key:", client.api_key)
         print("Password:", client.password)
-        print("Encryption Key:", client.crypto_key)
 
 
 @hmcore_cmds.command(help="List all clients and their credentials.", name="list-clients")
@@ -384,7 +341,6 @@ def list_clients():
     table.add_column("Name", justify="center")
     table.add_column("Access Key", justify="center")
     table.add_column("Password", justify="center")
-    table.add_column("Crypto Key", justify="center")
 
     with ClientDatabase() as db:
         for x in db:
@@ -394,7 +350,6 @@ def list_clients():
                     x["name"],
                     x["api_key"],
                     x["password"],
-                    x["crypto_key"],
                 )
 
     console.print(table)
@@ -408,11 +363,11 @@ def export_clients(path):
     if path and os.path.isdir(path):
         path = os.path.join(path, "hivemind_clients.csv")
 
-    CSV = "client_id,name,is_admin,access_key,password,crypto_key"
+    CSV = "client_id,name,is_admin,access_key,password"
     with ClientDatabase() as db:
         for x in db:
             if x["client_id"] != -1:
-                CSV += f"\n{x['client_id']},{x['name']},{x['is_admin']},{x['api_key']},{x['password']},{x['crypto_key']}"
+                CSV += f"\n{x['client_id']},{x['name']},{x['is_admin']},{x['api_key']},{x['password']}"
     if path:
         with open(path, "w") as f:
             f.write(CSV)

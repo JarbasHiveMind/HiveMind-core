@@ -69,7 +69,6 @@ def _client(**kw):
         can_broadcast=False,
         metadata={},
         password="pw",
-        crypto_key="ck",
     )
     base.update(kw)
     return SimpleNamespace(**base)

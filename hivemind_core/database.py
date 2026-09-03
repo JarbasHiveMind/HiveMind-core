@@ -46,7 +46,6 @@ class ClientDatabase:
                    key: str = "",
                    admin: bool = False,
                    allowed_types: Optional[List[str]] = None,
-                   crypto_key: Optional[str] = None,
                    password: Optional[str] = None,
                    metadata: Optional[Dict[str, Any]] = None,
                    # Deprecated kwargs — folded into metadata. Kept so the
@@ -56,9 +55,6 @@ class ClientDatabase:
                    intent_blacklist: Optional[List[str]] = None,
                    skill_blacklist: Optional[List[str]] = None,
                    message_blacklist: Optional[List[str]] = None) -> bool:
-        if crypto_key is not None:
-            crypto_key = crypto_key[:16]
-
         # Migrate any legacy blacklist kwargs into metadata.
         meta = dict(metadata) if metadata else {}
         for k, v in (("skill_blacklist", skill_blacklist),
@@ -78,8 +74,6 @@ class ClientDatabase:
             # read as "no change"
             if admin is not None:
                 user.is_admin = admin
-            if crypto_key:
-                user.crypto_key = crypto_key
             if password:
                 user.password = password
             if meta:
@@ -92,7 +86,6 @@ class ClientDatabase:
         user = Client(
             api_key=key,
             name=name,
-            crypto_key=crypto_key,
             client_id=self.total_clients() + 1,
             is_admin=admin,
             password=password,

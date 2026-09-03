@@ -16,8 +16,6 @@ The file is created with defaults on first run if absent.
   ],
   "allowed_ciphers": ["CHACHA20-POLY1305", "AES-GCM"],
 
-  "min_protocol_version": 2,
-
   "min_password_bits": 40,
   "runtime_password_strength_check": true,
 
@@ -99,7 +97,6 @@ The file is created with defaults on first run if absent.
 | `binarize` | bool | `false` | Enable HiveMind binarization protocol (requires compatible client version) |
 | `allowed_encodings` | list | see above | Ordered list of accepted message encodings; first match wins during handshake |
 | `allowed_ciphers` | list | `["CHACHA20-POLY1305", "AES-GCM"]` | Accepted session ciphers; first match wins |
-| `min_protocol_version` | int | `2` | Lowest HiveMind protocol version a client may negotiate. The server rejects a client that completes the handshake below this version. It advertises the higher of this value and the version its crypto settings need |
 | `min_password_bits` | float | `40` | Lowest password entropy `add-client` accepts, and the handshake backstop rejects |
 | `runtime_password_strength_check` | bool | `true` | Re-check password strength at handshake time. Set to `false`, or set `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1`, to skip the backstop |
 | `last_seen_update_interval` | int | `60` | Seconds to debounce the `last_seen` write, which runs on every inbound message. `0` writes on every message |
@@ -110,12 +107,10 @@ The file is created with defaults on first run if absent.
 | `presence` | dict | see above | Local-network advertisement through the optional `hivemind-presence` package. Keys: `enabled`, `name`, `zeroconf` (mDNS), `upnp` (SSDP) |
 | `upstream` | dict | see above | Connection to a master above this node. Disabled by default |
 
-> **`require_crypto` is not a config key.** It is an attribute of
-> `HiveMindListenerProtocol` and it defaults to `True`. While it is true, the server
-> drops an `INTERCOM` frame that carries no signed envelope: such a frame proves nothing
-> about its origin, so the server does not relay it or escalate it. To change the value,
-> subclass the protocol or set the attribute on the instance you pass to
-> `HiveMindService`.
+> **Every session is encrypted.** The v3 Noise handshake is the sole key
+> exchange, so there is no "require crypto" switch. An `INTERCOM` frame that
+> carries no signed envelope proves nothing about its origin, so the server
+> drops it rather than relaying or escalating it (HIVEMIND-CRYPTO-1 §5).
 
 ---
 

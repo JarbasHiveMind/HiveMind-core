@@ -35,8 +35,6 @@ def _make_protocol(identity_path, node_id="node-A"):
     identity.private_key = identity_path
 
     proto = HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                     require_crypto=False,
-                                     handshake_enabled=False,
                                      identity=identity)
     patcher = patch.object(HiveMindListenerProtocol, "_node_id",
                            new_callable=PropertyMock, return_value=node_id)

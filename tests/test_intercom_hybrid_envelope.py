@@ -47,7 +47,6 @@ def _node(node_key, node_pub, client_pub, tmp_path=None):
     )
     node.clients = {}
     node.agent_protocol = MagicMock()
-    node.require_crypto = True
     node.trusted_pubkeys = {"client-key": client_pub}
     # a permissive chain: this module is about the crypto path, and admission
     # is covered by the policy tests

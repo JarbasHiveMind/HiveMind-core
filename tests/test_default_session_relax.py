@@ -29,9 +29,7 @@ def _make_protocol():
     # See tests/test_admin_refresh.py for the DB-refresh behavior itself.
     db.get_client_by_api_key.return_value = None
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(protocol, sess, is_admin=False, key="test-key", name="test-client"):

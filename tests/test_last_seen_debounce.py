@@ -35,8 +35,6 @@ def _protocol(db):
     return HiveMindListenerProtocol(
         agent_protocol=agent,
         db=db,
-        require_crypto=False,
-        handshake_enabled=True,
         policy_chain=MagicMock(),
     )
 

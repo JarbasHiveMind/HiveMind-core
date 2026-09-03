@@ -1,13 +1,17 @@
-"""Protocol v2/v3 migration matrix (HIVEMIND-CRYPTO-1 §3.4, HIVEMIND-WIRE-1 §2).
+"""Protocol v3 Noise-only matrix (HIVEMIND-CRYPTO-1 §3.4, HIVEMIND-WIRE-1 §2).
 
 End-to-end over a real websocket, real master + real client:
 
 - v3 client ↔ v3 server: Noise session established, messages round-trip both ways
-- v3 client ↔ v2 server: negotiates down to the legacy handshake, works
-- v2 client ↔ v3 server: server accepts the legacy handshake, works
+- v3 client ↔ non-Noise server: no fallback, connection refused with close 1008
+- sub-v3 (legacy) client ↔ v3 server: no fallback, connection refused with close 1008
 - wrong password: the v3 handshake fails fast, no session, no fallback
 - tampered negotiation (downgrade attempt): prologue mismatch aborts the handshake
 - replayed v3 transport message: rejected, session torn down
+
+There is no v1/v2 handshake left in this node (flag day, HIVEMIND-CRYPTO-1
+§3.4): any connection that cannot run the Noise handshake is rejected
+outright, never silently downgraded.
 """
 
 import time
@@ -105,38 +109,44 @@ def test_v3_client_v3_server_noise_session_round_trip():
         b.stop_all()
 
 
-# ─────────────────────────────────────────────── v3 ↔ v2 ──
+# ────────────────────────────────────── no fallback, refused 1008 ──
 
 
-def test_v3_client_v2_server_negotiates_down_to_legacy(monkeypatch):
-    # a pre-v3 server never advertises Noise support
+def test_v3_client_non_noise_server_is_refused(monkeypatch):
+    # a node with Noise unavailable never advertises v3 support, and no
+    # longer has a legacy handshake to fall back to: the connection is
+    # refused outright, no session of any kind.
     monkeypatch.setattr(server_protocol, "NOISE_SUPPORTED", False)
     b, m = _master()
     try:
         b.start_all()
         client = _make_client(m.network_protocol.url, "matrix-key", "matrix-pwd")
-        client.connect(site_id="matrix-site")
-        client.wait_for_handshake(timeout=10)
-        # legacy (v2) handshake: AES session key, no Noise transport
-        assert client.crypto_key is not None
+        with pytest.raises(Exception):
+            client.connect(site_id="matrix-site", handshake_max_retries=1)
+        assert not client.handshake_event.is_set()
         assert client.noise_transport is None
-        _assert_round_trip(client, m)
+        assert client.crypto_key is None
+        assert not any("v3-matrix-client" in p for p in m.connected_peers())
         client.close()
     finally:
         b.stop_all()
 
 
-def test_v2_client_v3_server_uses_legacy_handshake():
+def test_legacy_client_v3_server_is_refused():
+    # a client capped below protocol v3 falls back to its own legacy
+    # handshake code, but the v3-only server no longer speaks it: rejected
+    # with no session established.
     b, m = _master()
     try:
         b.start_all()
         client = _make_client(m.network_protocol.url, "matrix-key", "matrix-pwd",
                               max_protocol_version=2)
-        client.connect(site_id="matrix-site")
-        client.wait_for_handshake(timeout=10)
-        assert client.crypto_key is not None
+        with pytest.raises(Exception):
+            client.connect(site_id="matrix-site", handshake_max_retries=1)
+        assert not client.handshake_event.is_set()
         assert client.noise_transport is None
-        _assert_round_trip(client, m)
+        assert client.crypto_key is None
+        assert not any("v3-matrix-client" in p for p in m.connected_peers())
         client.close()
     finally:
         b.stop_all()

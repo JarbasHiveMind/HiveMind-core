@@ -6,11 +6,9 @@ branches — an inner ``HiveMessage`` payload, and a plain dict payload — used
 to dispatch the inner message to the bus with no origin authentication at
 all, so omitting the ``ciphertext`` field walked straight past the §5 check.
 
-A hub with ``require_crypto=True`` advertises ``crypto_required`` to clients
-and means "unencrypted payloads are not allowed". These tests hold it to
-that: the unauthenticated branches are dropped (and, being dropped, are not
-relayed to peers or escalated upstream). With ``require_crypto=False`` the
-deliberate plaintext INTERCOM feature (issue #117 / PR #123) still works.
+Every session on the hub is encrypted (the v3 Noise handshake is the sole
+transport crypto), so an unauthenticated INTERCOM is always dropped — and,
+being dropped, is not relayed to peers or escalated upstream.
 """
 
 import tempfile
@@ -25,12 +23,11 @@ from hivemind_core.protocol import (HiveMindClientConnection,
                                     HiveMindListenerProtocol)
 
 
-def _make_protocol(require_crypto):
+def _make_protocol():
     agent = MagicMock()
     agent.bus = MagicMock()
     db = MagicMock()
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=require_crypto)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _real_key_identity(pubkey, privkey_pem):
@@ -65,14 +62,14 @@ def _inner_bus():
 
 
 class TestUnauthenticatedIntercomRefused(unittest.TestCase):
-    """require_crypto=True: no signature, no delivery, no relay."""
+    """No signature, no delivery, no relay."""
 
     @classmethod
     def setUpClass(cls):
         cls.server_pub, cls.server_priv = create_RSA_key()
 
     def setUp(self):
-        self.proto = _make_protocol(require_crypto=True)
+        self.proto = _make_protocol()
         self.proto.identity = _real_key_identity(self.server_pub, self.server_priv)
         self.proto.handle_bus_message = MagicMock()
         self.proto._upstream_hm = MagicMock()
@@ -101,31 +98,6 @@ class TestUnauthenticatedIntercomRefused(unittest.TestCase):
         with patch("hivemind_core.protocol.LOG") as mock_log:
             handled = self.proto.handle_intercom_message(frame, self.client)
         self._assert_dropped(handled, mock_log)
-
-
-class TestPlaintextIntercomStillWorksWithoutCrypto(unittest.TestCase):
-    """require_crypto=False: the opt-out deployment keeps issue #117 behavior."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.server_pub, cls.server_priv = create_RSA_key()
-
-    def setUp(self):
-        self.proto = _make_protocol(require_crypto=False)
-        self.proto.identity = _real_key_identity(self.server_pub, self.server_priv)
-        self.proto.handle_bus_message = MagicMock()
-        self.client = _make_client(self.proto)
-
-    def test_hivemessage_payload_intercom_is_delivered(self):
-        frame = HiveMessage(HiveMessageType.INTERCOM, payload=_inner_bus())
-        assert self.proto.handle_intercom_message(frame, self.client) is True
-        self.proto.handle_bus_message.assert_called_once()
-
-    def test_plaintext_dict_intercom_is_delivered(self):
-        frame = HiveMessage(HiveMessageType.INTERCOM,
-                            payload=_inner_bus().serialize())
-        assert self.proto.handle_intercom_message(frame, self.client) is True
-        self.proto.handle_bus_message.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -29,10 +29,7 @@ from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
 from hivemind_bus_client.serialization import BINARY_ENCODABLE_TYPES, decode_bitstring, get_bitstring
 from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers,
-                                            decrypt_from_json, encrypt_as_json,
-                                            decrypt_bin, encrypt_bin,
-                                            hybrid_decrypt,
-                                            _norm_encoding, _norm_cipher)
+                                            hybrid_decrypt, _norm_encoding)
 try:
     from hivemind_bus_client.noise import (NOISE_SUPPORTED, NOISE_PATTERNS, NOISE_SUITES,
                                            NOISE_PATTERN_KK, NoiseTransport,
@@ -40,10 +37,11 @@ try:
                                            build_prologue, noise_protocol_name,
                                            start_noise_handshake, derive_psk)
 except ImportError:
-    # hivemind_bus_client without the protocol v3 noise module: the server
-    # degrades gracefully to the legacy (v2 and below) handshake and never
-    # advertises protocol v3. The stubs below are only referenced on code
-    # paths gated behind NOISE_SUPPORTED / an established v3 session.
+    # hivemind_bus_client without the protocol v3 noise module: this node has
+    # no transport crypto at all and rejects every connection, because the v3
+    # Noise handshake is the sole key exchange (HIVEMIND-CRYPTO-1 §3.4). The
+    # stubs below only exist so the module still imports; every code path that
+    # reaches them raises.
     NOISE_SUPPORTED = False
     NOISE_PATTERNS, NOISE_SUITES = [], []
     NOISE_PATTERN_KK = "KKpsk0"
@@ -154,23 +152,13 @@ def _non_negative_float(value, default: float) -> float:
     return parsed if parsed >= 0 else default
 
 
-def _configured_min_protocol_version() -> ProtocolVersion:
-    """The operator-configured protocol floor (HIVEMIND-WIRE-1 §2); default 2
-    refuses the oldest json-only / no-binary clients. An unparseable config
-    value falls back to that same default."""
-    try:
-        return ProtocolVersion(int(get_server_config().get("min_protocol_version", 2)))
-    except (TypeError, ValueError, KeyError):
-        return ProtocolVersion.TWO
-
-
 class UnencryptedMessageError(ValueError):
-    """Raised when a cleartext frame arrives on a connection that requires crypto.
+    """Raised when a cleartext frame arrives that is not part of key exchange.
 
-    Only HELLO and HANDSHAKE messages may travel unencrypted (they precede
-    session-key establishment); any other cleartext frame on a
-    ``crypto_required`` server is rejected and the client disconnected
-    (HIVEMIND-CRYPTO-1 §4).
+    Only HELLO and HANDSHAKE messages may travel unencrypted (they precede the
+    v3 Noise session); any other cleartext frame is rejected and the client
+    disconnected (HIVEMIND-CRYPTO-1 §4). A v3 Noise session is always
+    encrypted, so this only ever fires before the handshake completes.
     """
 
 
@@ -187,7 +175,6 @@ class HiveMindClientConnection:
     handshake: Optional[HandShake] = None
     pswd_handshake: Optional[PasswordHandShake] = None
 
-    crypto_key: Optional[str] = None
     pub_key: Optional[str] = None  # TODO add field to database
 
     # admission whitelist — list of ovos message_type values this client
@@ -209,13 +196,14 @@ class HiveMindClientConnection:
     cipher: Literal[SupportedCiphers] = SupportedCiphers.AES_GCM
     encoding: Literal[SupportedEncodings] = SupportedEncodings.JSON_HEX
 
-    # protocol v3 (Noise handshake) state — HIVEMIND-CRYPTO-1 §3.4. On a v3
-    # connection ``noise_transport`` replaces ``crypto_key`` as the session
-    # layer; both stay None on v2-and-below connections (legacy path untouched)
+    # protocol v3 (Noise handshake) state — HIVEMIND-CRYPTO-1 §3.4. The Noise
+    # transport is the sole transport-crypto layer; it is None until the
+    # handshake completes, and a connection that never establishes it is
+    # dropped (only HELLO/HANDSHAKE ever travel before it exists).
     noise_handshake: Optional[object] = field(default=None, repr=False)
     noise_transport: Optional[NoiseTransport] = field(default=None, repr=False)
     # exact payloads of the cleartext HELLO + parameter HANDSHAKE sent to this
-    # client, retained for Noise prologue binding (CRYPTO-1 §3.4.3)
+    # client, retained for Noise prologue binding (CRYPTO-1 §3.3)
     _hello_payload: Optional[dict] = field(default=None, init=False, repr=False)
     _handshake_payload: Optional[dict] = field(default=None, init=False, repr=False)
 
@@ -378,10 +366,10 @@ class HiveMindClientConnection:
         depend on the peer). Encryption still happens per peer below, since
         each connection has its own crypto state.
 
-        The lock is held across encrypt *and* enqueue. The Noise transport and
-        the AES counters are per-connection mutable state, so releasing it
-        between the two would let a second thread encrypt against the same
-        counter and interleave frames on the wire.
+        The lock is held across encrypt *and* enqueue. The Noise transport is
+        per-connection mutable state whose nonce advances per frame, so
+        releasing it between the two would let a second thread encrypt against
+        the same nonce and interleave frames on the wire.
         """
         with self._send_lock:
             is_bin = message.msg_type == HiveMessageType.BINARY
@@ -432,30 +420,12 @@ class HiveMindClientConnection:
                 self.send_msg(self.noise_transport.encrypt_frame(payload), True)
                 return
 
-            if self.crypto_key and message.msg_type not in [
-                HiveMessageType.HANDSHAKE,
-                HiveMessageType.HELLO,
-            ]:
-                if binarize:
-                    payload = get_bitstring(hive_type=message.msg_type,
-                                            payload=message.payload,
-                                            hivemeta=message.metadata,
-                                            binary_type=message.bin_type).bytes
-                    _log.debug("unencrypted binary payload size: %d bytes", len(payload))
-                    payload = encrypt_bin(key=self.crypto_key, plaintext=payload, cipher=self.cipher)
-                    is_bin = True
-                else:
-                    plaintext = plaintext if plaintext is not None else message.serialize()
-                    _log.debug("unencrypted payload size: %d bytes", len(plaintext))
-                    payload = encrypt_as_json(
-                        key=self.crypto_key, plaintext=plaintext,
-                        cipher=self.cipher, encoding=self.encoding
-                    )  # json string
-                _log.debug("encrypted payload size: %d bytes", len(payload))
-            else:
-                payload = plaintext if plaintext is not None else message.serialize()
-                _log.debug("sent unencrypted!")
-
+            # No v3 Noise session yet: only HELLO and HANDSHAKE are ever sent
+            # here, in the clear, since they precede key establishment. Every
+            # other message type only reaches a peer once the Noise transport
+            # above exists (HIVEMIND-CRYPTO-1 §3.4).
+            payload = plaintext if plaintext is not None else message.serialize()
+            _log.debug("sent unencrypted (pre-handshake)!")
             self.send_msg(payload, is_bin)
 
     def _unnat_outbound_session(self, message: HiveMessage) -> HiveMessage:
@@ -495,12 +465,14 @@ class HiveMindClientConnection:
 
     @property
     def crypto_required(self) -> bool:
-        """True when the listener this connection belongs to mandates encryption.
+        """Always True: the v3 Noise session is always encrypted.
 
-        Mirrors the ``crypto_required`` flag advertised to clients in the
-        HANDSHAKE payload (``HiveMindListenerProtocol.require_crypto``).
+        Only HELLO and HANDSHAKE ever travel in the clear (they precede the
+        session); any other cleartext frame is rejected in :meth:`decode`
+        (HIVEMIND-CRYPTO-1 §3.5). Kept as a property so a connection with no
+        attached listener (a bare unit-test fixture) still answers True.
         """
-        return bool(self.hm_protocol and self.hm_protocol.require_crypto)
+        return True
 
     def decode(self, payload: str) -> HiveMessage:
         encrypted = False
@@ -521,19 +493,6 @@ class HiveMindClientConnection:
                 raise
             # a decoded Noise transport frame is authenticated + encrypted
             encrypted = True
-        elif self.crypto_key:
-            # handle binary encryption
-            if isinstance(payload, bytes):
-                payload = decrypt_bin(key=self.crypto_key, ciphertext=payload,
-                                      cipher=self.cipher)
-                encrypted = True
-            # handle json encryption
-            elif "ciphertext" in payload:
-                payload = decrypt_from_json(key=self.crypto_key, ciphertext_json=payload,
-                                            encoding=self.encoding, cipher=self.cipher)
-                encrypted = True
-            else:
-                LOG.warning("Message was unencrypted")
 
         if isinstance(payload, bytes):
             message = decode_bitstring(payload)
@@ -542,7 +501,7 @@ class HiveMindClientConnection:
                 payload = json.loads(payload)
             message = HiveMessage(**payload)
 
-        # HIVEMIND-CRYPTO-1 §4 - when the server requires crypto, drop any
+        # HIVEMIND-CRYPTO-1 §3.5 - when the server requires crypto, drop any
         # cleartext frame that is not part of key establishment. HELLO and
         # HANDSHAKE MUST remain accepted in the clear (they precede the
         # session key); everything else is rejected and the client dropped.
@@ -632,8 +591,6 @@ class HiveMindListenerProtocol:
     # ``_node_id`` (the node public key) for provenance and addressing.
     peer: str = "master:0.0.0.0"
 
-    require_crypto: bool = True  # throw error if crypto key not available
-    handshake_enabled: bool = True  # generate a key per session if not pre-shared
     identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
@@ -1061,34 +1018,20 @@ class HiveMindListenerProtocol:
 
         self._emit_lifecycle(client, message)
 
-        crypto_min = (
-            ProtocolVersion.ONE
-            if client.crypto_key is None and self.require_crypto
-            else ProtocolVersion.ZERO
-        )
-        # The advertised minimum is the stricter of the configured floor and
-        # the crypto-derived minimum.
-        cfg_min = _configured_min_protocol_version()
-        min_version = ProtocolVersion(max(int(cfg_min), int(crypto_min)))
-
-        # protocol v3 (Noise handshake) needs the noise primitive and a shared
-        # password for the PSK; binary framing (v2) needs binarization enabled;
-        # otherwise the connection tops out at the legacy handshake (v1).
+        # The v3 Noise handshake is the sole key exchange (HIVEMIND-CRYPTO-1
+        # §3.4). A connection is v3-capable only when the Noise primitive is
+        # available and the client presented a password (its pswd_handshake,
+        # from which the Noise PSK is derived). Anything else — no Noise
+        # module, no password — cannot establish an encrypted session, so it
+        # is rejected outright with no legacy fallback.
         v3_capable = NOISE_SUPPORTED and client.pswd_handshake is not None
-        if v3_capable:
-            max_version = ProtocolVersion.THREE
-        elif get_server_config().get("binarize", False):
-            max_version = ProtocolVersion.TWO
-        else:
-            max_version = ProtocolVersion.ONE
-
-        if min_version > max_version:
+        if not v3_capable:
             LOG.warning(
-                f"rejecting {client.peer}: server requires protocol version "
-                f">= {int(min_version)} but this connection can offer at most "
-                f"{int(max_version)}"
+                f"rejecting {client.peer}: this node requires protocol v3 "
+                f"(the Noise handshake) and this connection cannot offer it"
             )
-            client.disconnect(1008, "server requires a protocol version this connection cannot offer")
+            self.handle_invalid_protocol_version(client)
+            client.disconnect(1008, "this node requires protocol v3 (the Noise handshake)")
             return
 
         hello_payload = {
@@ -1102,47 +1045,31 @@ class HiveMindListenerProtocol:
         LOG.debug(f"saying HELLO to: {client.peer}")
         client.send(msg)
 
-        # The handshake decision keys on the negotiated connection capability,
-        # never on a provisioning artifact. A v3-capable connection (client has
-        # a password -> pswd_handshake set) always handshakes when it is
-        # enabled, so a lingering DB crypto_key column cannot downgrade a v3
-        # transport (the stray key goes unused and is cleared post-handshake).
-        # A connection that is not v3-capable still uses the legacy crypto_key
-        # AES path its handshake actually negotiates.
-        needs_handshake = self.handshake_enabled and v3_capable
-
         cfg = get_server_config()
         allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
         allowed_encodings = cfg.get("allowed_encodings") or list(SupportedEncodings)
 
-        # request client to start handshake (by sending client pubkey)
+        # advertise supported Noise patterns/suites, preference ordered
+        # (CRYPTO-1 §3.1/§3.2). KKpsk0 only when this client's static key
+        # was pinned by a previous XXpsk2 handshake. ``encodings`` negotiate
+        # framing only — a v3 session is encrypted by the Noise CipherStates
+        # regardless (WIRE-1 §3).
+        patterns = list(NOISE_PATTERNS)
+        if not self._get_pinned_client_noise_key(client):
+            patterns = [p for p in patterns if p != NOISE_PATTERN_KK]
         payload = {
-            "handshake": needs_handshake,  # tell the client it must do a handshake or connection will be dropped
-            "min_protocol_version": min_version,
-            "max_protocol_version": max_version,
+            # v3 clients read max_protocol_version from this payload to select the Noise handshake
+            "max_protocol_version": ProtocolVersion.THREE,
             "binarize": cfg.get("binarize", False),  # report we support the binarization scheme
-            "preshared_key": client.crypto_key
-                             is not None,  # do we have a pre-shared key (V0 proto)
-            "password": client.pswd_handshake
-                        is not None,  # is password available (V1 proto, replaces pre-shared key)
-            "crypto_required": self.require_crypto,  # do we allow unencrypted payloads
             "encodings": allowed_encodings,
-            "ciphers": allowed_ciphers
+            "ciphers": allowed_ciphers,
+            "noise": {"patterns": patterns, "suites": list(NOISE_SUITES)},
         }
-        if v3_capable:
-            # advertise supported Noise patterns/suites, preference ordered
-            # (CRYPTO-1 §3.4.1/§3.4.2). KKpsk0 only when this client's static
-            # key was pinned by a previous XXpsk2 handshake.
-            patterns = list(NOISE_PATTERNS)
-            if not self._get_pinned_client_noise_key(client):
-                patterns = [p for p in patterns if p != NOISE_PATTERN_KK]
-            payload["noise"] = {"patterns": patterns, "suites": list(NOISE_SUITES)}
         client._handshake_payload = payload  # bound into the Noise prologue
         msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
         LOG.debug(f"starting {client.peer} HANDSHAKE: {payload}")
         client.send(msg)
-        # if client is in protocol V1 -> self.handle_handshake_message
-        # clients can rotate their pubkey or session_key by sending a new handshake
+        # the client answers with its first Noise message -> handle_handshake_message
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
@@ -1622,7 +1549,7 @@ class HiveMindListenerProtocol:
             LOG.exception("failed to pin client noise key")
 
     def _abort_noise_handshake(self, client: HiveMindClientConnection, reason: str):
-        """Fatal Noise handshake failure — reject the connection (§3.4.3)."""
+        """Fatal Noise handshake failure — reject the connection (§3.3)."""
         LOG.error(f"protocol v3 handshake with {client.peer} FAILED: {reason}")
         client.noise_handshake = None
         client.noise_transport = None
@@ -1632,7 +1559,7 @@ class HiveMindListenerProtocol:
     def handle_noise_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
-        """Server side of the protocol v3 Noise handshake (CRYPTO-1 §3.4.3).
+        """Server side of the protocol v3 Noise handshake (CRYPTO-1 §3.3).
 
         The node is the Noise initiator; this server is the responder. Noise
         message 1 names the selected pattern/suite and starts the handshake;
@@ -1645,6 +1572,13 @@ class HiveMindListenerProtocol:
             noise_msg = bytes.fromhex(noise_params["msg"])
         except (KeyError, TypeError, ValueError):
             self._abort_noise_handshake(client, "malformed Noise envelope")
+            return
+
+        if client.noise_transport is not None:
+            # Session already established; a client-controlled duplicate or
+            # replayed HANDSHAKE frame must not reach a None noise_handshake.
+            self._abort_noise_handshake(
+                client, "unexpected HANDSHAKE frame after the Noise session was established")
             return
 
         if client.noise_handshake is None:
@@ -1705,7 +1639,7 @@ class HiveMindListenerProtocol:
             self._abort_noise_handshake(client, str(e))
             return
 
-        # TOFU-then-pin the node's static key (§3.4.5)
+        # TOFU-then-pin the node's static key (§3.5)
         pinned = self._get_pinned_client_noise_key(client)
         if pinned and transport.remote_static_key != pinned:
             self._abort_noise_handshake(
@@ -1720,120 +1654,24 @@ class HiveMindListenerProtocol:
 
         client.noise_transport = transport
         client.noise_handshake = None
-        client.crypto_key = None  # v3 replaces the v2 session AEAD entirely
         LOG.info(f"protocol v3 Noise session established with {client.peer}")
 
     def handle_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
     ):
-        if "noise" in message.payload:
-            # protocol v3 negotiated (HIVEMIND-WIRE-1 §2)
-            if not NOISE_SUPPORTED or client.pswd_handshake is None or \
-                    not (client._handshake_payload or {}).get("noise"):
-                self._abort_noise_handshake(client, "protocol v3 not offered")
-                return
-            self.handle_noise_handshake_message(message, client)
+        # The v3 Noise handshake is the sole key exchange (HIVEMIND-CRYPTO-1
+        # §3.4): every HANDSHAKE frame carries a "noise" envelope. A frame
+        # without one is a legacy v1/v2 handshake this node no longer speaks,
+        # so it is rejected with no fallback.
+        if "noise" not in message.payload:
+            self._abort_noise_handshake(
+                client, "this node requires the v3 Noise handshake")
             return
-
-        # enforce the operator-configured protocol floor (HIVEMIND-CRYPTO-1
-        # §3.4 fail-closed floor semantics). The v3-capability check at HELLO
-        # time (min_version > max_version) only rejects clients that *cannot*
-        # reach the floor at all; it does not stop a v3-capable client
-        # (password handshake present) from completing a legacy v1/v2
-        # handshake instead of Noise, silently ignoring a raised floor. Noise
-        # ("noise" in payload) is handled above and always satisfies any
-        # floor, so only the legacy branches below need the check.
-        cfg_min = _configured_min_protocol_version()
-        if "pubkey" in message.payload and client.handshake is not None:
-            attempted_version = ProtocolVersion.ONE
-        elif client.pswd_handshake is not None and "envelope" in message.payload:
-            attempted_version = ProtocolVersion.TWO
-        else:
-            attempted_version = None
-        if attempted_version is not None and attempted_version < cfg_min:
-            LOG.warning(
-                f"rejecting {client.peer}: legacy handshake at protocol "
-                f"v{int(attempted_version)} is below the configured minimum "
-                f"v{int(cfg_min)}"
-            )
-            client.disconnect(1008, f"legacy handshake at protocol v{int(attempted_version)} "
-                                     f"is below the configured minimum v{int(cfg_min)}")
+        if not NOISE_SUPPORTED or client.pswd_handshake is None or \
+                not (client._handshake_payload or {}).get("noise"):
+            self._abort_noise_handshake(client, "protocol v3 not offered")
             return
-
-        LOG.debug("handshake received, generating session key")
-        if "pubkey" in message.payload and client.handshake is not None:
-            pub = message.payload.pop("pubkey")
-            envelope_out = client.handshake.generate_handshake(pub)
-            client.crypto_key = client.handshake.secret  # start using new key
-
-            # client side
-            # LOG.info("Received encryption key")
-            # pub = "pubkey from HELLO message"
-            # if pub:  # validate server from known trusted public key
-            #   self.handshake.receive_and_verify(payload["envelope"], pub)
-            # else:  # implicitly trust server
-            #   self.handshake.receive_handshake(payload["envelope"], pub)
-            # self.crypto_key = self.handshake.secret
-        elif client.pswd_handshake is not None and "envelope" in message.payload:
-            # sorted by preference from client
-            encodings = message.payload.get("encodings") or [SupportedEncodings.JSON_HEX]
-            encodings = [_norm_encoding(e) for e in encodings]
-            ciphers = message.payload.get("ciphers") or [SupportedCiphers.AES_GCM]
-            ciphers = [_norm_cipher(c) for c in ciphers]
-
-            # allowed ciphers/encodings defined in config
-            cfg = get_server_config()
-            allowed_encodings = cfg.get("allowed_encodings") or list(SupportedEncodings)
-            allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
-
-            encodings = [e for e in encodings if e in allowed_encodings]
-            ciphers = [c for c in ciphers if c in allowed_ciphers]
-            if not ciphers or not encodings:
-                LOG.warning("Client tried to connect with invalid cipher/encoding")
-                # TODO - invalid handshake handler
-                client.disconnect(1008, "invalid cipher/encoding negotiation")
-                return
-
-            # from the allowed options, select the one the client prefers
-            client.cipher = ciphers[0]
-            client.encoding = encodings[0]
-            client.binarize = message.payload.get("binarize", False)
-
-            envelope = message.payload["envelope"]
-            envelope_out = client.pswd_handshake.generate_handshake()
-            # fail-fast: verify the client's envelope was built with the same
-            # password before deriving a key (HIVEMIND-CRYPTO-1 §3.2
-            # RECOMMENDED explicit reject). A wrong password previously only
-            # surfaced as a decrypt failure on the first encrypted frame.
-            try:
-                verified = client.pswd_handshake.receive_and_verify(envelope)
-            except Exception:
-                verified = False
-            if not verified:
-                LOG.warning("Client password handshake verification failed")
-                self.handle_invalid_key_connected(client)
-                client.disconnect(1008, "password handshake verification failed")
-                return
-
-            # key is derived safely from password in both sides
-            # the handshake is validating both ends have the same password
-            # the key is never actually transmitted
-            client.crypto_key = client.pswd_handshake.secret
-
-            # client side
-            # LOG.info("Received password envelope")
-            # self.pswd_handshake.receive_and_verify(payload["envelope"])
-            # self.crypto_key = self.pswd_handshake.secret
-        else:
-            # TODO - invalid handshake handler
-            client.disconnect(1008, "invalid or unrecognized handshake")
-            return
-
-        msg = HiveMessage(HiveMessageType.HANDSHAKE,
-                          {"envelope": envelope_out,
-                           "encoding": client.encoding,
-                           "cipher": client.cipher })
-        client.send(msg)  # client can recreate crypto_key on his side now
+        self.handle_noise_handshake_message(message, client)
 
     def handle_hello_message(self, message: HiveMessage, client: HiveMindClientConnection):
         """
@@ -2982,24 +2820,15 @@ class HiveMindListenerProtocol:
                     return True
                 LOG.debug("failed to decrypt message, not for us")
                 return False
-        elif self.require_crypto:
+        else:
             # No signed envelope, so no origin signature to verify: this frame
             # carries no proof of who sent it. HIVEMIND-CRYPTO-1 §5 requires
-            # the origin signature, and this listener advertises
-            # "crypto_required" to its clients — honour it and drop.
-            # Dropping returns True: consumed here, not relayed nor escalated.
+            # the origin signature, and every session on this node is
+            # encrypted, so an unsigned INTERCOM is dropped. Dropping returns
+            # True: consumed here, not relayed nor escalated.
             LOG.warning(f"INTERCOM from {client.peer} is unencrypted and "
-                        f"unsigned, but this node requires crypto: dropping "
-                        f"unauthenticated message")
+                        f"unsigned: dropping unauthenticated message")
             return True
-        elif isinstance(pload, HiveMessage):
-            inner = pload
-        else:
-            # unencrypted intercom: the inner HiveMessage is carried as a
-            # plain dict. Deserialize it so it is dispatched on its OWN
-            # (inner) msg_type instead of the outer INTERCOM type, which
-            # matches no branch below and silently drops the message.
-            inner = HiveMessage.deserialize(pload)
 
         if inner.msg_type == HiveMessageType.BUS:
             self.handle_bus_message(inner, client)

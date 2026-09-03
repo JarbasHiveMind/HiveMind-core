@@ -36,8 +36,6 @@ def _make_protocol(identity_path):
     identity.private_key = identity_path
 
     return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False,
                                     identity=identity)
 
 

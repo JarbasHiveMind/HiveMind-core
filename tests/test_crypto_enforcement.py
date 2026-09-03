@@ -1,12 +1,12 @@
 """Crypto enforcement at the protocol layer (HIVEMIND-CRYPTO-1).
 
-Covers the additive, wire-compatible enforcement paths:
+The v3 Noise handshake is the sole transport crypto (§3.4), so every session
+is encrypted and the enforcement paths are:
 
-- ``crypto_required`` on receive (§4): a crypto-required server rejects any
-  cleartext frame that is not HELLO/HANDSHAKE and drops the client; a
-  non-required server keeps accepting cleartext; HELLO/HANDSHAKE are always
-  accepted in the clear (they precede key establishment). Encrypted frames
-  are unaffected.
+- crypto on receive (§4): a cleartext frame that is not HELLO/HANDSHAKE is
+  rejected and the client dropped. HELLO/HANDSHAKE are always accepted in the
+  clear (they precede the Noise session). A frame decrypted by the Noise
+  transport is accepted.
 - INTERCOM origin authentication (§5): signatures are verified against a
   TOFU-pinned public key (pin source = the pubkey presented in HELLO); a
   forged/mismatched signature after pinning is rejected; when no pubkey was
@@ -14,12 +14,11 @@ Covers the additive, wire-compatible enforcement paths:
   authenticated and the message is rejected (fail closed). A rejected
   INTERCOM is dropped at this node: it is not relayed to peers and not
   escalated to the upstream master.
-- Password handshake fail-fast (§3.2): a client envelope built with the
-  wrong password is rejected at handshake time instead of only failing to
-  decrypt the first encrypted frame.
+- Noise handshake abort (§3.4.3): every fatal handshake failure closes 1008,
+  so a client retrying on a non-1008 close cannot spin forever on a wrong
+  PSK, tampered negotiation, or a pinned-key contradiction.
 """
 
-import json
 import os
 import unittest
 from unittest.mock import MagicMock, patch
@@ -27,20 +26,16 @@ from unittest.mock import MagicMock, patch
 import pybase64
 import pytest
 from ovos_bus_client.message import Message
-from poorman_handshake import PasswordHandShake
 from poorman_handshake.asymmetric.utils import (create_RSA_key, encrypt_RSA,
                                                 sign_RSA)
 
 from hivemind_bus_client import HiveMessage, HiveMessageType
-from hivemind_bus_client.encryption import (SupportedCiphers,
-                                            SupportedEncodings,
-                                            encrypt_as_json)
 from hivemind_core.protocol import (HiveMindClientConnection,
                                     HiveMindListenerProtocol,
                                     UnencryptedMessageError)
 
 
-def _make_protocol(require_crypto=True):
+def _make_protocol():
     agent = MagicMock()
     agent.bus = MagicMock()
     agent.callbacks = MagicMock()
@@ -55,8 +50,7 @@ def _make_protocol(require_crypto=True):
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=require_crypto)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(protocol, **kwargs):
@@ -77,58 +71,32 @@ def _cleartext_bus_frame():
 
 
 class TestCryptoRequiredOnReceive(unittest.TestCase):
-    """Fix for: crypto_required advertised but not enforced on inbound frames."""
+    """A v3 session is always encrypted: only HELLO/HANDSHAKE travel clear."""
 
-    def test_cleartext_bus_rejected_when_crypto_required_post_handshake(self):
-        proto = _make_protocol(require_crypto=True)
-        client = _make_client(proto)
-        client.crypto_key = os.urandom(32)  # handshake done
-        with pytest.raises(UnencryptedMessageError):
-            client.decode(_cleartext_bus_frame())
-        client.disconnect.assert_called_once()
-
-    def test_cleartext_bus_rejected_when_crypto_required_pre_handshake(self):
-        proto = _make_protocol(require_crypto=True)
-        client = _make_client(proto)  # no crypto_key yet
+    def test_cleartext_bus_rejected_before_handshake(self):
+        proto = _make_protocol()
+        client = _make_client(proto)  # no noise_transport yet
         with pytest.raises(UnencryptedMessageError):
             client.decode(_cleartext_bus_frame())
         client.disconnect.assert_called_once()
 
     def test_cleartext_hello_and_handshake_always_accepted(self):
-        proto = _make_protocol(require_crypto=True)
+        proto = _make_protocol()
         client = _make_client(proto)
         hello = HiveMessage(HiveMessageType.HELLO,
                             payload={"pubkey": "xxx"}).serialize()
         shake = HiveMessage(HiveMessageType.HANDSHAKE,
-                            payload={"envelope": "yyy"}).serialize()
+                            payload={"noise": {"msg": "yy"}}).serialize()
         assert client.decode(hello).msg_type == HiveMessageType.HELLO
         assert client.decode(shake).msg_type == HiveMessageType.HANDSHAKE
         client.disconnect.assert_not_called()
 
-    def test_cleartext_bus_accepted_when_crypto_not_required(self):
-        proto = _make_protocol(require_crypto=False)
+    def test_noise_transport_frame_accepted(self):
+        proto = _make_protocol()
         client = _make_client(proto)
-        msg = client.decode(_cleartext_bus_frame())
-        assert msg.msg_type == HiveMessageType.BUS
-        client.disconnect.assert_not_called()
-
-    def test_cleartext_bus_accepted_without_listener_protocol(self):
-        # connection not attached to a listener: keep permissive behavior
-        client = HiveMindClientConnection(key="k", send_msg=MagicMock(),
-                                          disconnect=MagicMock(),
-                                          handshake=MagicMock())
-        msg = client.decode(_cleartext_bus_frame())
-        assert msg.msg_type == HiveMessageType.BUS
-
-    def test_encrypted_bus_accepted_when_crypto_required(self):
-        proto = _make_protocol(require_crypto=True)
-        client = _make_client(proto)
-        client.crypto_key = os.urandom(32)
-        ciphertext = encrypt_as_json(key=client.crypto_key,
-                                     plaintext=_cleartext_bus_frame(),
-                                     cipher=SupportedCiphers.AES_GCM,
-                                     encoding=SupportedEncodings.JSON_HEX)
-        msg = client.decode(ciphertext)
+        client.noise_transport = MagicMock()
+        client.noise_transport.decrypt_frame.return_value = _cleartext_bus_frame()
+        msg = client.decode(b"noise-frame-bytes")
         assert msg.msg_type == HiveMessageType.BUS
         client.disconnect.assert_not_called()
 
@@ -224,104 +192,6 @@ class TestIntercomSignatureVerification(unittest.TestCase):
         assert self.proto.trusted_pubkeys["test-key"] == self.client_pub
 
 
-class TestPasswordHandshakeFailFast(unittest.TestCase):
-    """Fix for: wrong password only failed via implicit key-confirmation."""
-
-    # High-entropy passphrases: poorman_handshake>=2.0 rejects weak passwords
-    # in PasswordHandShake, so these tests (which target handshake verification,
-    # not password strength) use secrets that clear the strength floor.
-    _RIGHT_PASSWORD = "correct-horse-battery-staple-92"
-    _WRONG_PASSWORD = "totally-different-quokka-melody-47"
-
-    def _handshake_msg(self, password):
-        peer_side = PasswordHandShake(password)
-        return HiveMessage(HiveMessageType.HANDSHAKE,
-                           payload={"envelope": peer_side.generate_handshake()})
-
-    def test_correct_password_handshake_succeeds(self):
-        proto = _make_protocol()
-        client = _make_client(proto)
-        client.pswd_handshake = PasswordHandShake(self._RIGHT_PASSWORD)
-        proto.handle_handshake_message(self._handshake_msg(self._RIGHT_PASSWORD), client)
-        assert client.crypto_key is not None
-        client.disconnect.assert_not_called()
-        # HANDSHAKE reply with our envelope was sent back
-        client.send_msg.assert_called_once()
-        reply = json.loads(client.send_msg.call_args[0][0])
-        assert reply["msg_type"] == HiveMessageType.HANDSHAKE
-        assert "envelope" in reply["payload"]
-
-    def test_wrong_password_rejected_at_handshake_time(self):
-        proto = _make_protocol()
-        client = _make_client(proto)
-        client.pswd_handshake = PasswordHandShake(self._RIGHT_PASSWORD)
-        proto.handle_handshake_message(self._handshake_msg(self._WRONG_PASSWORD), client)
-        assert client.crypto_key is None
-        client.disconnect.assert_called_once()
-        # a bare/1000 close tells the client the credentials were fine and it
-        # can just reconnect, so it retries the same wrong password forever;
-        # this MUST be a terminal 1008 auth rejection
-        assert client.disconnect.call_args.args[0] == 1008
-        client.send_msg.assert_not_called()
-
-    def test_garbage_envelope_rejected_at_handshake_time(self):
-        proto = _make_protocol()
-        client = _make_client(proto)
-        client.pswd_handshake = PasswordHandShake(self._RIGHT_PASSWORD)
-        msg = HiveMessage(HiveMessageType.HANDSHAKE,
-                          payload={"envelope": "not-a-real-envelope"})
-        proto.handle_handshake_message(msg, client)
-        assert client.crypto_key is None
-        client.disconnect.assert_called_once()
-        assert client.disconnect.call_args.args[0] == 1008
-
-
-class TestMinProtocolVersionFloor(unittest.TestCase):
-    """Fix for: min_protocol_version was advisory only.
-
-    A hub configured with a raised floor (e.g. 3, Noise-required) must
-    reject a client that completes a legacy v2 password handshake instead
-    of Noise, even though that same client is v3-*capable* (has a
-    pswd_handshake) and so was never caught by the min>max check done at
-    HELLO time. HIVEMIND-CRYPTO-1's floor is fail-closed: the hub MUST NOT
-    let a connection settle below the configured minimum.
-    """
-
-    _PASSWORD = "correct-horse-battery-staple-92"
-
-    def _handshake_msg(self):
-        peer_side = PasswordHandShake(self._PASSWORD)
-        return HiveMessage(HiveMessageType.HANDSHAKE,
-                           payload={"envelope": peer_side.generate_handshake()})
-
-    def test_v2_password_handshake_rejected_when_floor_is_3(self):
-        proto = _make_protocol()
-        client = _make_client(proto)
-        client.pswd_handshake = PasswordHandShake(self._PASSWORD)
-        with patch("hivemind_core.protocol.get_server_config",
-                  return_value={"min_protocol_version": 3}):
-            proto.handle_handshake_message(self._handshake_msg(), client)
-        assert client.crypto_key is None
-        client.disconnect.assert_called_once()
-        assert client.disconnect.call_args.args[0] == 1008
-        client.send_msg.assert_not_called()
-
-    def test_v2_password_handshake_accepted_when_floor_is_2(self):
-        proto = _make_protocol()
-        client = _make_client(proto)
-        client.pswd_handshake = PasswordHandShake(self._PASSWORD)
-        with patch("hivemind_core.protocol.get_server_config",
-                  return_value={"min_protocol_version": 2}):
-            proto.handle_handshake_message(self._handshake_msg(), client)
-        assert client.crypto_key is not None
-        client.disconnect.assert_not_called()
-        client.send_msg.assert_called_once()
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestRejectedIntercomIsNotRelayed(unittest.TestCase):
     """A refused INTERCOM must be dropped, never fanned out or escalated.
 
@@ -411,3 +281,7 @@ class TestNoiseHandshakeAbortCloseCode(unittest.TestCase):
         proto._abort_noise_handshake(client, "wrong PSK")
         client.disconnect.assert_called_once()
         assert client.disconnect.call_args.args == (1008, "wrong PSK")
+
+
+if __name__ == "__main__":
+    unittest.main()

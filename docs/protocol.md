@@ -2,19 +2,14 @@
 
 This document describes the server-side protocol classes that process HiveMind connections.
 
-## Protocol versions
+## Protocol version
 
-| Version | Features |
-|---|---|
-| `0` | JSON only, no handshake, no binary |
-| `1` | Password-based handshake, AES session encryption |
-| `2` | Binary serialisation support |
-| `3` | Noise handshake (XXpsk2/KKpsk0) with authenticated, forward-secret transport; falls back to v2 against older clients |
-
-The server admits a client only if the version it negotiates is at least
-`min_protocol_version` (default `2`) from `server.json`. The check runs when the handshake
-completes, not only when the server advertises the floor. The advertised floor is the
-higher of the configured value and the value the crypto settings need.
+The v3 Noise handshake (XXpsk2/KKpsk0) is the sole key exchange: it gives an
+authenticated, forward-secret, always-encrypted transport (HIVEMIND-CRYPTO-1
+§3.4). There is no legacy fallback. A connection that cannot complete the
+Noise handshake — no Noise support, or no password to derive the PSK — is
+rejected with a `1008` close. The access key admits the client; the password
+derives the Noise pre-shared key. Those are the only two credentials.
 
 ## Connection lifecycle
 
@@ -25,17 +20,16 @@ Client connects (network layer)
 HiveMindListenerProtocol.handle_new_client()
   ├─ moves the connection off the reserved "default" session
   ├─ emits hive.client.connect on agent bus
-  ├─ computes min/max protocol version, drops the client if they do not overlap
+  ├─ drops the client (1008) if it cannot do the v3 Noise handshake
   ├─ sends HELLO  (server pubkey + peer id)
-  └─ sends HANDSHAKE  (capabilities, crypto requirements)
+  └─ sends HANDSHAKE  (binarize, encodings, ciphers, offered Noise patterns/suites)
         │
         ▼
-Client sends HANDSHAKE (pubkey or password envelope)
+Client sends HANDSHAKE (Noise message 1)
         │
 HiveMindListenerProtocol.handle_handshake_message()
-  ├─ derives session AES key
-  ├─ drops the client if the agreed version is below min_protocol_version
-  └─ sends HANDSHAKE response (envelope + chosen cipher/encoding)
+  ├─ runs the Noise handshake (aborts 1008 on a non-Noise frame or wrong PSK)
+  └─ on completion, the Noise transport becomes the session crypto layer
         │
         ▼
 Client sends HELLO  (session, site_id, client pubkey)
@@ -71,8 +65,6 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 | `db` | `ClientDatabase` | Credential storage |
 | `identity` | `NodeIdentity` | This node's RSA keypair / peer ID |
 | `clients` | `dict[str, HiveMindClientConnection]` | Currently connected clients keyed by peer ID |
-| `require_crypto` | `bool` | Require proof of origin (default `True`). While it is true, an `INTERCOM` frame with no signed envelope is dropped, not relayed and not escalated. This is an attribute, not a `server.json` key |
-| `handshake_enabled` | `bool` | Negotiate a per-session key when no pre-shared key exists |
 
 ### Message handlers
 
@@ -95,7 +87,7 @@ from hivemind_core.protocol import HiveMindListenerProtocol
 | `handle_noise_handshake_message(message, client)` | A protocol v3 Noise handshake frame is received |
 | `handle_client_shared_bus(message, client)` | `HiveMessageType.SHARED_BUS` received |
 | `handle_invalid_key_connected(client)` | A client presents an access key that is not in the database |
-| `handle_invalid_protocol_version(client)` | A client negotiates below `min_protocol_version` |
+| `handle_invalid_protocol_version(client)` | A client cannot do the v3 Noise handshake |
 | `handle_unknown_message(message, client)` | The message type matches no handler |
 
 ### RENDEZVOUS mailboxes
@@ -184,14 +176,13 @@ from hivemind_core.protocol import HiveMindClientConnection
 | `key` | `str` | API access key used to look up this client in the database |
 | `peer` | `str` | Unique identifier (`name::session_id`) used in message routing. If another live connection already owns that string, the server appends a suffix to keep the two apart |
 | `sess` | `Session` | OVOS session associated with this client |
-| `crypto_key` | `str \| None` | AES session key (set after handshake) |
 | `is_admin` | `bool` | Whether this client has admin privileges |
 | `can_escalate` | `bool` | Client may send ESCALATE messages |
 | `can_propagate` | `bool` | Client may send PROPAGATE messages |
 | `allowed_types` | `list[str]` | OVOS message types this client may inject. The only ACL field on the connection |
 | `binarize` | `bool` | Use binary serialisation with this client |
 | `site_id` | `str` | Site this client belongs to |
-| `noise_transport` | `NoiseTransport \| None` | Session layer on a protocol v3 connection. Replaces `crypto_key` |
+| `noise_transport` | `NoiseTransport \| None` | The v3 Noise session crypto layer, set once the handshake completes. The sole transport-crypto layer |
 
 There is no message, skill, or intent blacklist on the connection. `allowed_types` is
 whitelist-only and deny-by-default. Skill and intent blacklists live in `Client.metadata`

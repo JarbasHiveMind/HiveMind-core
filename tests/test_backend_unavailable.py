@@ -6,7 +6,7 @@ denial. Lifecycle handlers log and continue instead, so a dead OVOS bus
 does not break connect/disconnect bookkeeping.
 """
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
@@ -29,9 +29,7 @@ def _make_protocol():
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(protocol):
@@ -44,7 +42,6 @@ def _make_client(protocol):
     )
     client.name = "test-client"
     client.allowed_types = ["recognizer_loop:utterance"]
-    client.crypto_key = None
     return client
 
 
@@ -108,8 +105,13 @@ class TestBackendUnavailable(unittest.TestCase):
     def test_new_client_survives_a_dead_backend(self):
         protocol = _make_protocol()
         client = _make_client(protocol)
+        # a v3-capable connection (password present) so handle_new_client runs
+        # the full HELLO/HANDSHAKE path rather than the sub-v3 rejection
+        client.pswd_handshake = MagicMock()
+        client.handshake = MagicMock(pubkey="PUB")
 
-        protocol.handle_new_client(client)  # must not raise
+        with patch("hivemind_core.protocol.NOISE_SUPPORTED", True):
+            protocol.handle_new_client(client)  # must not raise
 
         # the unreachable bus was tried, and the handler carried on
         protocol.agent_protocol.get_bus.assert_called_once_with(client)

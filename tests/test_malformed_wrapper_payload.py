@@ -46,9 +46,7 @@ def _make_protocol():
     db = MagicMock()
     db.get_client_by_api_key.return_value = db_user
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(protocol):
@@ -61,7 +59,6 @@ def _make_client(protocol):
     )
     client.name = "test-client"
     client.allowed_types = ["recognizer_loop:utterance"]
-    client.crypto_key = None
     return client
 
 
@@ -151,7 +148,14 @@ class TestMalformedFrameOnTheWire(unittest.TestCase):
     def _handle(self, raw: str):
         protocol = _make_protocol()
         client = _make_client(protocol)
-        message = client.decode(raw)  # must not raise
+        # a malformed frame arrives over an established v3 Noise session (the
+        # only way any non-HELLO/HANDSHAKE frame reaches decode): the Noise
+        # transport authenticates and decrypts it, then the payload guard runs
+        client.noise_transport = MagicMock()
+        client.noise_transport.decrypt_frame.return_value = raw
+        # echo the plaintext so _sent() can inspect the (encrypted) reply body
+        client.noise_transport.encrypt_frame.side_effect = lambda p: p
+        message = client.decode(b"noise-frame")  # must not raise
         protocol.handle_message(message, client)  # must not raise
         return client
 

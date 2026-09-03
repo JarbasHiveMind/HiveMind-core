@@ -117,10 +117,10 @@ class TestPartiallySpecifiedBlocksKeepTheirDefaults:
             "only the transports the operator configured may be present"
 
     def test_a_config_missing_a_whole_block_still_starts(self, tmp_path, monkeypatch):
-        cfg = self._config(tmp_path, monkeypatch, {"min_protocol_version": 2})
+        cfg = self._config(tmp_path, monkeypatch, {"binarize": True})
         assert cfg["agent_protocol"]["module"]
         assert "binary_protocol" in cfg
-        assert cfg["min_protocol_version"] == 2
+        assert cfg["binarize"] is True
 
     def test_binary_protocol_module_none_is_preserved_not_overwritten(
             self, tmp_path, monkeypatch):
