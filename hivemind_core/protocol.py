@@ -1046,7 +1046,14 @@ class HiveMindListenerProtocol:
         LOG.debug(f"saying HELLO to: {client.peer}")
         client.send(msg)
 
-        needs_handshake = not client.crypto_key and self.handshake_enabled
+        # The handshake decision keys on the negotiated connection capability,
+        # never on a provisioning artifact. A v3-capable connection (client has
+        # a password -> pswd_handshake set) always handshakes when it is
+        # enabled, so a lingering DB crypto_key column cannot downgrade a v3
+        # transport (the stray key goes unused and is cleared post-handshake).
+        # A connection that is not v3-capable still uses the legacy crypto_key
+        # AES path its handshake actually negotiates.
+        needs_handshake = self.handshake_enabled and v3_capable
 
         cfg = get_server_config()
         allowed_ciphers = cfg.get("allowed_ciphers") or [SupportedCiphers.AES_GCM]
