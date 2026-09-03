@@ -161,7 +161,7 @@ def test_revoked_admin_is_natted_after_slow_transformer():
 
     emitted = protocol.get_bus(client).emit.call_args[0][0]
     session_id = emitted.context["session"]["session_id"]
-    assert session_id == f"{client.conn_nonce}:default"
+    assert session_id == f"{client.session_namespace}:default"
     assert session_id != "default"
     assert client.is_admin is False
 

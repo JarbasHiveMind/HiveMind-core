@@ -2,6 +2,7 @@
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
 import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -254,16 +255,69 @@ class HiveMindClientConnection:
         return self._conn_nonce
 
     @property
+    def session_namespace(self) -> str:
+        """A DURABLE, identity-scoped namespace token for this client's
+        Layer-1 sessions (HIVEMIND-BRIDGE-1 §4).
+
+        Unlike :attr:`conn_nonce`, which is reminted on every reconnect,
+        this token is derived from the client's durable DB identity, so a
+        satellite that drops and reconnects keeps the same namespace: a
+        session minted before the drop stays routable afterwards, and a
+        scheduler-replayed message carrying that old session_id remains
+        deliverable.
+
+        The token is ``sha256(f"{hub_salt}:{client_id}")[:16]`` where
+        ``client_id`` is the durable DB row id (via :meth:`resolve_user`,
+        which already caches with a TTL) and ``hub_salt`` is the hub's
+        persistent node public key (:attr:`NodeIdentity.public_key`, the
+        same identity the node persists on disk), so the namespace also
+        survives a HUB restart. The token IDENTIFIES, it does not
+        AUTHENTICATE: possession grants nothing and admission still runs
+        the ACL. It is derived from the durable client identity, NOT the
+        secret access key (session_ids are visible to every bus observer),
+        and hub-salted so the same client is not linkable across hubs. The
+        salt also hides the small integer client_id, so the token is not
+        enumerable.
+
+        Falls back to :attr:`conn_nonce` when no DB is reachable or the
+        client_id cannot be resolved (unauthenticated/edge), so nothing
+        crashes — at the cost of losing reconnect durability for that
+        connection.
+        """
+        db = getattr(getattr(self, "hm_protocol", None), "db", None)
+        client_id = None
+        if db is not None:
+            try:
+                user = self.resolve_user(db)
+                client_id = getattr(user, "client_id", None)
+            except Exception:
+                LOG.debug("session_namespace: failed to resolve user; "
+                          "falling back to conn_nonce", exc_info=True)
+        if client_id is None:
+            LOG.debug("session_namespace: no durable client_id; "
+                      "falling back to per-connection nonce")
+            return self.conn_nonce
+        identity = getattr(getattr(self, "hm_protocol", None), "identity", None)
+        hub_salt = getattr(identity, "public_key", None) or ""
+        return hashlib.sha256(
+            f"{hub_salt}:{client_id}".encode()).hexdigest()[:16]
+
+    @property
     def layer1_session_id(self) -> str:
         """The orchestrator-side (Layer-1) session id for this connection's
-        CURRENT declared session — the connection nonce namespaces the
-        client-declared session_id, so two connections that chose the same
-        name get distinct Layer-1 sessions (HIVEMIND-BRIDGE-1 §4) while one
-        connection's distinct declared sessions (a re-HELLO, or a bridge like
-        baresip that mints a fresh session_id per call on one connection)
-        stay distinct too — session travels per message, the client
-        declares it."""
-        return f"{self.conn_nonce}:{self.sess.session_id}"
+        CURRENT declared session — the durable ``session_namespace``
+        namespaces the client-declared session_id, so two connections that
+        chose the same name get distinct Layer-1 sessions (HIVEMIND-BRIDGE-1
+        §4) while one connection's distinct declared sessions (a re-HELLO, or
+        a bridge like baresip that mints a fresh session_id per call on one
+        connection) stay distinct too — session travels per message, the
+        client declares it.
+
+        The namespace is identity-scoped (see ``session_namespace``), so this
+        id — and the disconnect notification that carries it — is stable
+        across a reconnect: it matches the id ``_install_client_session``
+        stamped on the connection's inbound bus messages."""
+        return f"{self.session_namespace}:{self.sess.session_id}"
 
     def resolve_user(self, db, ttl: float = 5.0,
                      force: bool = False) -> Optional[Client]:
@@ -2911,15 +2965,26 @@ class HiveMindListenerProtocol:
                            declared_id: str) -> str:
         """The Layer-1 (orchestrator) session id for a message declaring
         ``declared_id``: the raw declared id for an admin, or the
-        per-connection NATted id ``conn_nonce:declared_id`` for everyone else
-        (HIVEMIND-BRIDGE-1 §4). ``declared_id`` is the per-message session id
-        (session travels per message; the client declares it), falling back
-        to the connection's HELLO baseline when the message declares none.
-        Shared by ``_install_client_session`` and the post-transformer
-        re-stamp in ``handle_inject_agent_msg`` so both apply the exact same
-        decision to the same message.
+        identity-scoped NATted id ``session_namespace:declared_id`` for
+        everyone else (HIVEMIND-BRIDGE-1 §4). ``declared_id`` is the
+        per-message session id (session travels per message; the client
+        declares it), falling back to the connection's HELLO baseline when
+        the message declares none. Shared by ``_install_client_session`` and
+        the post-transformer re-stamp in ``handle_inject_agent_msg`` so both
+        apply the exact same decision to the same message.
+
+        BRIDGE-1 §4: the namespace token IDENTIFIES, it does not
+        AUTHENTICATE — possession grants nothing; admission still runs the
+        ACL. It is derived from the durable client identity (via
+        ``client.session_namespace``), not the secret access key, so a
+        session is a durable route that survives reconnect, and hub-salted
+        so it is not linkable across hubs. Using the durable identity rather
+        than the per-connection ``conn_nonce`` is what keeps a session
+        routable across a reconnect (a new connection reuses the same
+        namespace) and across a hub restart (the salt is the persistent node
+        identity).
         """
-        return declared_id if is_admin else f"{client.conn_nonce}:{declared_id}"
+        return declared_id if is_admin else f"{client.session_namespace}:{declared_id}"
 
     def _install_client_session(self, message: Message,
                                  client: HiveMindClientConnection):

@@ -9,14 +9,15 @@ state. ``_install_client_session`` must translate the client-chosen
 ``session_id`` to a per-connection Layer-1 id before the message reaches the
 OVOS bus, while leaving every other session field untouched.
 
-The Layer-1 id is derived as ``f"{conn_nonce}:{sess.session_id}"``, NOT
-cached once per connection: session travels per message and the client
+The Layer-1 id is derived as ``f"{session_namespace}:{sess.session_id}"``,
+NOT cached once per connection: session travels per message and the client
 declares it (a peer may re-HELLO with a new session_id, and a bridge like
 the baresip SIP gateway mints a fresh session_id per call on a single,
-long-lived connection). Namespacing by the connection's own nonce keeps two
-different connections that pick the same declared name apart, while letting
-one connection's distinct declared sessions (a fresh call, a re-HELLO) stay
-distinct from each other too.
+long-lived connection). The namespace is the client's durable, identity-
+scoped ``session_namespace`` (see ``test_session_namespace_durability``),
+which keeps two different connections that pick the same declared name apart
+while letting one connection's distinct declared sessions (a fresh call, a
+re-HELLO) stay distinct from each other too.
 """
 from unittest.mock import MagicMock
 
@@ -110,7 +111,7 @@ def test_redeclared_session_gets_a_distinct_layer1_session():
     assert sid1 != sid2
     nonce1, _, declared1 = sid1.partition(":")
     nonce2, _, declared2 = sid2.partition(":")
-    assert nonce1 == nonce2 == client.conn_nonce
+    assert nonce1 == nonce2 == client.session_namespace
     assert declared1 == "call-1"
     assert declared2 == "call-2"
 
@@ -144,11 +145,11 @@ def test_different_named_payload_gets_its_own_layer1_session():
     result = _install(client, message)
 
     sid = result.context["session"]["session_id"]
-    assert sid == f"{client.conn_nonce}:call-42"
+    assert sid == f"{client.session_namespace}:call-42"
     # the declared id is namespaced, never handed through raw
     assert sid != "call-42"
     # and it is NOT the baseline's id — the per-message session wins
-    assert sid != f"{client.conn_nonce}:baseline"
+    assert sid != f"{client.session_namespace}:baseline"
 
 
 def test_multiplexed_sessions_over_one_connection_stay_isolated():
@@ -166,8 +167,8 @@ def test_multiplexed_sessions_over_one_connection_stay_isolated():
     sid_a = a.context["session"]["session_id"]
     sid_b = b.context["session"]["session_id"]
 
-    assert sid_a == f"{client.conn_nonce}:sess-A"
-    assert sid_b == f"{client.conn_nonce}:sess-B"
+    assert sid_a == f"{client.session_namespace}:sess-A"
+    assert sid_b == f"{client.session_namespace}:sess-B"
     assert sid_a != sid_b
 
 
@@ -183,8 +184,8 @@ def test_message_without_declared_session_uses_baseline_id():
                                              {"utterances": ["hi"]},
                                              {"session": {"session_id": "baseline"}}))
 
-    assert none_declared.context["session"]["session_id"] == f"{client.conn_nonce}:baseline"
-    assert same_declared.context["session"]["session_id"] == f"{client.conn_nonce}:baseline"
+    assert none_declared.context["session"]["session_id"] == f"{client.session_namespace}:baseline"
+    assert same_declared.context["session"]["session_id"] == f"{client.session_namespace}:baseline"
 
 
 def test_rich_payload_location_overrides_baseline():
@@ -252,4 +253,4 @@ def test_thin_control_message_does_not_clobber_baseline_location():
     assert loc["timezone"]["code"] == "Europe/Berlin"
     assert loc["city"]["name"] == "Berlin"
     # and the message still got this connection's Layer-1 id
-    assert emitted.context["session"]["session_id"] == f"{client.conn_nonce}:sat-de"
+    assert emitted.context["session"]["session_id"] == f"{client.session_namespace}:sat-de"
