@@ -53,20 +53,22 @@ class TestIntercomTextOnBinarizeConnection(unittest.TestCase):
     def test_intercom_is_sent_as_text_on_a_noise_binarize_connection(self):
         client = _binarize_client()
         client.noise_transport = MagicMock()
-        client.noise_transport.encrypt_frame.return_value = b"noise-frame"
+        client.noise_transport.send_message.side_effect = (
+            lambda payload, raw_send: raw_send(b"noise-frame"))
         client.send(_intercom())
-        framed = client.noise_transport.encrypt_frame.call_args[0][0]
+        framed = client.noise_transport.send_message.call_args[0][0]
         assert HiveMessage.deserialize(framed).msg_type == HiveMessageType.INTERCOM
 
     def test_a_coded_type_still_binarizes_on_the_same_connection(self):
         # both forms coexist on one connection: BUS has a code, INTERCOM has not
         client = _binarize_client()
         client.noise_transport = MagicMock()
-        client.noise_transport.encrypt_frame.return_value = b"noise-frame"
+        client.noise_transport.send_message.side_effect = (
+            lambda payload, raw_send: raw_send(b"noise-frame"))
         client.send(HiveMessage(HiveMessageType.BUS,
                                 payload=Message("speak", {"utterance": "hi"})))
         # a coded type on a binarize connection is framed as binary bytes
-        framed = client.noise_transport.encrypt_frame.call_args[0][0]
+        framed = client.noise_transport.send_message.call_args[0][0]
         assert isinstance(framed, bytes)
         _, is_bin = client.send_msg.call_args[0]
         assert is_bin is True

@@ -153,8 +153,9 @@ class TestMalformedFrameOnTheWire(unittest.TestCase):
         # transport authenticates and decrypts it, then the payload guard runs
         client.noise_transport = MagicMock()
         client.noise_transport.decrypt_frame.return_value = raw
-        # echo the plaintext so _sent() can inspect the (encrypted) reply body
-        client.noise_transport.encrypt_frame.side_effect = lambda p: p
+        # echo the plaintext through raw_send so _sent() can inspect the reply
+        client.noise_transport.send_message.side_effect = (
+            lambda payload, raw_send: raw_send(payload))
         message = client.decode(b"noise-frame")  # must not raise
         protocol.handle_message(message, client)  # must not raise
         return client
