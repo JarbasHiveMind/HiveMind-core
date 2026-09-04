@@ -68,12 +68,12 @@ presence = ["hivemind-presence", "hivemind-ggwave"]
 test = [
     "pytest",
     "pytest-cov",
-    "hivescope>=0.8.2a1",
+    "hivescope>=0.8.4a1",
     # client-side Noise (hivemind_bus_client>=1.0.0a1) comes from the runtime
     # dependency above — no git ref, so the wheel stays PyPI-publishable.
 ]
 integration = [
-    "hivescope>=0.8.2a1",
+    "hivescope>=0.8.4a1",
     "ovoscope",
     "ovos-core>=2.1.6a1",
     "ovos-skill-hello-world",
