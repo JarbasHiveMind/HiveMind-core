@@ -69,8 +69,7 @@ Options:
 |---|---|---|
 | `--name TEXT` | auto-generated | Human-readable client name |
 | `--access-key TEXT` | random | API key the satellite presents on connect |
-| `--password TEXT` | random | Used for key derivation |
-| `--crypto-key TEXT` | random | Legacy encryption key (deprecated; only for old clients without password support) |
+| `--password TEXT` | random | Derives the client's Noise pre-shared key |
 | `--admin BOOL` | `False` | Mark the client as an administrator. Informational: it grants no admission bypass |
 | `--metadata JSON` | `{}` | Initial `Client.metadata` as a JSON object |
 | `--allow-weak-password` | off | Accept a password below `min_password_bits` |
@@ -247,7 +246,7 @@ no host, port, or password flags. The source database is left untouched.
 ## `export-clients`
 
 Write every client record to a CSV file. The columns are `client_id`, `name`, `is_admin`,
-`access_key`, `password`, and `crypto_key`.
+`access_key`, and `password`.
 
 ```bash
 hivemind-core export-clients --path /srv/backup/

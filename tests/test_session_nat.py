@@ -37,9 +37,7 @@ def _make_protocol():
 
     db = MagicMock()
 
-    return HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                    require_crypto=False,
-                                    handshake_enabled=False)
+    return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
 def _make_client(sess, key="test-key", name="test-client"):
@@ -226,9 +224,7 @@ def test_thin_control_message_does_not_clobber_baseline_location():
     agent = MagicMock()
     agent.bus = MagicMock()
     agent.get_bus.return_value = agent.bus
-    protocol = HiveMindListenerProtocol(agent_protocol=agent, db=db,
-                                        require_crypto=False,
-                                        handshake_enabled=False)
+    protocol = HiveMindListenerProtocol(agent_protocol=agent, db=db)
     protocol.policy_chain = MagicMock()
     protocol.policy_chain.review.return_value = MagicMock(denied=False)
 
@@ -246,11 +242,10 @@ def test_thin_control_message_does_not_clobber_baseline_location():
                                 client)
 
     # baseline was NOT mutated by the bus payload
-    assert client.sess.location_preferences["timezone"]["code"] == "Europe/Berlin"
+    assert client.sess.timezone == "Europe/Berlin"
 
     emitted = agent.bus.emit.call_args[0][0]
-    loc = emitted.context["session"]["location"]
-    assert loc["timezone"]["code"] == "Europe/Berlin"
-    assert loc["city"]["name"] == "Berlin"
+    emitted_sess = Session.deserialize(emitted.context["session"])
+    assert emitted_sess.timezone == "Europe/Berlin"
     # and the message still got this connection's Layer-1 id
     assert emitted.context["session"]["session_id"] == f"{client.session_namespace}:sat-de"

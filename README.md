@@ -188,8 +188,6 @@ Node ID: 3
 Friendly Name: HiveMind-Node-2
 Access Key: 42caf3d2405075fb9e7a4e1ff44e4c4f
 Password: 5ae486f7f1c26bd4645bd052e4af3ea3
-Encryption Key: f46351c54f61a715
-WARNING: Encryption Key is deprecated, only use if your client does not support password
 ```
 
 **NOTE**: You must provide this information on the client devices so they can connect.

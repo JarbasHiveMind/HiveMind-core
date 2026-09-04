@@ -30,7 +30,7 @@ HiveMind Core is fully **plugin-driven**:
 ## Documentation
 
 - [Architecture Guide](architecture.md): explains the Mind, Satellite, and Bridge components.
-- [Security and Encryption](security.md): covers handshakes, AES-256-GCM, and session keys.
+- [Security and Encryption](security.md): covers the Noise handshake, AES-256-GCM, and the encrypted transport.
 - [Authentication and Client Management](auth.md): covers adding clients and managing permissions.
 - [Installation](installation.md): gets you started with HiveMind Core.
 - [Configuration](configuration.md): covers configuring protocols and databases.

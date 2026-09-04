@@ -48,7 +48,6 @@ Node ID: 1
 Friendly Name: my-satellite
 Access Key: 42caf3d2405075fb9e7a4e1ff44e4c4f
 Password: 5ae486f7f1c26bd4645bd052e4af3ea3
-Encryption Key: f46351c54f61a715
 ```
 
 Provide the **Access Key** and **Password** to the satellite device's configuration.

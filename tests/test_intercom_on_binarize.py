@@ -12,7 +12,6 @@ with no code, so a server could not send an INTERCOM at all to a binarize
 client. These tests pin the server side of §4.3.
 """
 
-import os
 import unittest
 from unittest.mock import MagicMock
 
@@ -51,14 +50,6 @@ class TestIntercomTextOnBinarizeConnection(unittest.TestCase):
         assert is_bin is False
         assert HiveMessage.deserialize(payload).msg_type == HiveMessageType.INTERCOM
 
-    def test_intercom_is_sent_as_text_on_an_encrypted_binarize_connection(self):
-        client = _binarize_client()
-        client.crypto_key = os.urandom(16)
-        client.send(_intercom())
-        payload, is_bin = client.send_msg.call_args[0]
-        assert is_bin is False
-        assert isinstance(payload, str)
-
     def test_intercom_is_sent_as_text_on_a_noise_binarize_connection(self):
         client = _binarize_client()
         client.noise_transport = MagicMock()
@@ -70,8 +61,12 @@ class TestIntercomTextOnBinarizeConnection(unittest.TestCase):
     def test_a_coded_type_still_binarizes_on_the_same_connection(self):
         # both forms coexist on one connection: BUS has a code, INTERCOM has not
         client = _binarize_client()
-        client.crypto_key = os.urandom(16)
+        client.noise_transport = MagicMock()
+        client.noise_transport.encrypt_frame.return_value = b"noise-frame"
         client.send(HiveMessage(HiveMessageType.BUS,
                                 payload=Message("speak", {"utterance": "hi"})))
+        # a coded type on a binarize connection is framed as binary bytes
+        framed = client.noise_transport.encrypt_frame.call_args[0][0]
+        assert isinstance(framed, bytes)
         _, is_bin = client.send_msg.call_args[0]
         assert is_bin is True

@@ -900,8 +900,6 @@ class TestProtocolWiring(unittest.TestCase):
         proto.callbacks = MagicMock()
         proto.hive_mapper = MagicMock()
         proto.peer = "master:0.0.0.0"
-        proto.require_crypto = False
-        proto.handshake_enabled = False
         proto.escalate_callback = None
         proto.illegal_callback = None
         proto.propagate_callback = None

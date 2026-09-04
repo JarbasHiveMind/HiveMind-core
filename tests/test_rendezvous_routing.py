@@ -22,8 +22,6 @@ def _protocol(**kwargs):
     return HiveMindListenerProtocol(
         agent_protocol=agent,
         db=MagicMock(),
-        require_crypto=False,
-        handshake_enabled=True,
         policy_chain=MagicMock(),
         **kwargs,
     )

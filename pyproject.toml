@@ -49,7 +49,9 @@ dependencies = [
     "json-database>=0.10.2a1,<2.0.0",
     "hivemind-sqlite-database>=0.4.0a2",
     "hivemind-json-db-plugin>=0.0.3a2",
-    "hivemind-websocket-protocol>=0.2.10a1,<1.0.0",
+    # 1.0.0a1 drops the legacy crypto_key/handshake_enabled/require_crypto reads
+    # (v3-Noise-only companion); the pre-1.0 line reads fields this core removed.
+    "hivemind-websocket-protocol>=1.0.0a1,<2.0.0",
     "hivemind-ovos-agent-plugin>=0.4.0a1,<1.0.0",
     # transformer pipeline runner services on the text/bus path
     "ovos-plugin-manager>=2.10.0a1,<3.0.0",
@@ -61,12 +63,12 @@ presence = ["hivemind-presence", "hivemind-ggwave"]
 test = [
     "pytest",
     "pytest-cov",
-    "hivescope>=0.8.1a1",
+    "hivescope>=0.8.2a1",
     # client-side Noise (hivemind_bus_client>=1.0.0a1) comes from the runtime
     # dependency above — no git ref, so the wheel stays PyPI-publishable.
 ]
 integration = [
-    "hivescope>=0.8.1a1",
+    "hivescope>=0.8.2a1",
     "ovoscope",
     "ovos-core>=2.1.6a1",
     "ovos-skill-hello-world",

@@ -48,8 +48,7 @@ hivemind-core add-client [OPTIONS]
 |---|---|---|
 | `--name` | `str` | Friendly name for the client |
 | `--access-key` | `str` | API access key (auto-generated if omitted) |
-| `--password` | `str` | Password used for session key derivation (auto-generated if omitted) |
-| `--crypto-key` | `str` | **Deprecated.** Legacy 16-character encryption key. Use `--password` instead |
+| `--password` | `str` | Password that derives the client's Noise pre-shared key (auto-generated if omitted) |
 | `--admin` | `bool` | Mark the client as an administrator (default: `False`). Informational only: it grants no admission bypass |
 | `--metadata` | `str` | Initial `Client.metadata` as a JSON object |
 | `--allow-weak-password` | flag | Accept a password below `min_password_bits` |
@@ -64,7 +63,6 @@ Node ID: 1
 Friendly Name: living-room-pi
 Access Key: 42caf3d2405075fb9e7a4e1ff44e4c4f
 Password: 5ae486f7f1c26bd4645bd052e4af3ea3
-Encryption Key: f46351c54f61a715
 ```
 
 Provide the **Access Key** and **Password** to the client device.

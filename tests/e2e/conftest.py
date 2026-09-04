@@ -8,8 +8,6 @@ real ``~/.config/hivemind`` and every test starts from a clean identity
 (no stale key pins leaking between tests).
 """
 
-import json
-
 import pytest
 
 import hivemind_bus_client.identity as _identity_module
@@ -50,12 +48,4 @@ def isolated_xdg(monkeypatch, tmp_path):
     monkeypatch.setattr(_pm_symmetric, "check_password_strength",
                         lambda *args, **kwargs: None)
 
-    # Non-Noise connections top out at protocol v1, so the legacy-fallback
-    # matrix rows need the server's protocol floor below the production
-    # default (min_protocol_version=2). Only this isolated test config is
-    # lowered; the shipped default is unchanged.
-    server_cfg_dir = tmp_path / "config" / "hivemind-core"
-    server_cfg_dir.mkdir(parents=True, exist_ok=True)
-    (server_cfg_dir / "server.json").write_text(
-        json.dumps({"min_protocol_version": 0}))
     return tmp_path
