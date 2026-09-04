@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.0a2) (2026-09-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.0a1...5.1.0a2)
+
+**Merged pull requests:**
+
+- test: re-enable ping\_flood e2e, pin hivescope\>=0.8.4a1 [\#313](https://github.com/JarbasHiveMind/HiveMind-core/pull/313) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [5.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.0a1) (2026-09-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.0.0a1...5.1.0a1)
@@ -320,7 +328,6 @@
 
 - fix: send INTERCOM as text on a binarize connection \(WIRE-1 §4.3\) [\#220](https://github.com/JarbasHiveMind/HiveMind-core/pull/220) ([JarbasAl](https://github.com/JarbasAl))
 - fix: give bypass-constructed HiveMindListenerProtocol test fixtures real attribute defaults [\#219](https://github.com/JarbasHiveMind/HiveMind-core/pull/219) ([JarbasAl](https://github.com/JarbasAl))
-- fix: drop already-seen floods when forwarding, not only when answering [\#212](https://github.com/JarbasHiveMind/HiveMind-core/pull/212) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
@@ -333,7 +340,6 @@
 **Merged pull requests:**
 
 - fix: hold the send lock across encrypt and enqueue [\#217](https://github.com/JarbasHiveMind/HiveMind-core/pull/217) ([JarbasAl](https://github.com/JarbasAl))
-- fix: cascade thread races and TOFU pin leak [\#211](https://github.com/JarbasHiveMind/HiveMind-core/pull/211) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
@@ -342,8 +348,6 @@
 **Merged pull requests:**
 
 - fix: keep the node up when the agent backend or a listener fails [\#214](https://github.com/JarbasHiveMind/HiveMind-core/pull/214) ([JarbasAl](https://github.com/JarbasAl))
-- docs: drop misleading listener terminology [\#200](https://github.com/JarbasHiveMind/HiveMind-core/pull/200) ([JarbasAl](https://github.com/JarbasAl))
-- docs: remove THIRDPRTY from the message-type table [\#195](https://github.com/JarbasHiveMind/HiveMind-core/pull/195) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.0a1) (2026-08-10)
 
@@ -353,17 +357,9 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.6a1...4.11.6a2)
 
-**Merged pull requests:**
-
-- perf: cut per-peer cost in message fan-out [\#204](https://github.com/JarbasHiveMind/HiveMind-core/pull/204) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.11.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.6a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.5a1...4.11.6a1)
-
-**Merged pull requests:**
-
-- fix: a node emits at most one responsive PING flood per interval [\#208](https://github.com/JarbasHiveMind/HiveMind-core/pull/208) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.11.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.5a1) (2026-08-10)
 
@@ -385,10 +381,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.3a1...4.11.4a1)
 
-**Merged pull requests:**
-
-- fix\(deps\): allow hivemind-bus-client 1.x [\#199](https://github.com/JarbasHiveMind/HiveMind-core/pull/199) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.11.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.3a1) (2026-08-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.2a1...4.11.3a1)
@@ -401,93 +393,49 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a3...4.11.2a1)
 
-**Merged pull requests:**
-
-- fix: a node answers a PING flood exactly once [\#196](https://github.com/JarbasHiveMind/HiveMind-core/pull/196) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
-
-**Merged pull requests:**
-
-- perf: import the RSA identity key once per node [\#205](https://github.com/JarbasHiveMind/HiveMind-core/pull/205) ([JarbasAl](https://github.com/JarbasAl))
-
-## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
 
 ## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
 
-**Merged pull requests:**
+## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-- docs: recommend redis for large deployments [\#203](https://github.com/JarbasHiveMind/HiveMind-core/pull/203) ([JarbasAl](https://github.com/JarbasAl))
-- fix: throttle last\_seen writes by default [\#202](https://github.com/JarbasHiveMind/HiveMind-core/pull/202) ([JarbasAl](https://github.com/JarbasAl))
-- fix: iterate a snapshot of clients during fan-out [\#201](https://github.com/JarbasHiveMind/HiveMind-core/pull/201) ([JarbasAl](https://github.com/JarbasAl))
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.16a1...4.11.0a1)
 
-**Merged pull requests:**
-
-- feat: let a node be given an upstream in server.json [\#194](https://github.com/JarbasHiveMind/HiveMind-core/pull/194) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.10.16a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.16a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.15a1...4.10.16a1)
-
-**Merged pull requests:**
-
-- fix: reject malformed wrapper payloads instead of crashing [\#193](https://github.com/JarbasHiveMind/HiveMind-core/pull/193) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.15a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.14a1...4.10.15a1)
 
-**Merged pull requests:**
-
-- fix: key collected CASCADE responses by responder [\#190](https://github.com/JarbasHiveMind/HiveMind-core/pull/190) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.10.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.14a1) (2026-08-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.13a1...4.10.14a1)
-
-**Merged pull requests:**
-
-- fix: drop QUERY/CASCADE responses with no return path [\#189](https://github.com/JarbasHiveMind/HiveMind-core/pull/189) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.13a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.13a1) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.12a1...4.10.13a1)
 
-**Merged pull requests:**
-
-- fix: make-admin now reports Invalid Node ID like its sibling commands [\#182](https://github.com/JarbasHiveMind/HiveMind-core/pull/182) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
-
-**Merged pull requests:**
-
-- fix\(test\): give the broadcast fixture an identity [\#186](https://github.com/JarbasHiveMind/HiveMind-core/pull/186) ([JarbasAl](https://github.com/JarbasAl))
-
-## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
 
 ## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
 
-**Merged pull requests:**
+## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-- fix: stamp provenance with the node public key, not a shared constant [\#183](https://github.com/JarbasHiveMind/HiveMind-core/pull/183) ([JarbasAl](https://github.com/JarbasAl))
-- fix: honour the can\_broadcast grant on BROADCAST [\#181](https://github.com/JarbasHiveMind/HiveMind-core/pull/181) ([JarbasAl](https://github.com/JarbasAl))
-- refactor: readability and duplication pass over the CLI, service, database and config [\#180](https://github.com/JarbasHiveMind/HiveMind-core/pull/180) ([JarbasAl](https://github.com/JarbasAl))
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
