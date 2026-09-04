@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.0.0a1) (2026-09-04)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.15.0a1...5.0.0a1)
+
+**Breaking changes:**
+
+- feat!: v3 Noise is the sole transport crypto — remove legacy v1/v2 handshake, crypto\_key, and AES path \(flag-day\) [\#309](https://github.com/JarbasHiveMind/HiveMind-core/pull/309) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [4.15.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.15.0a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.2a1...4.15.0a1)
@@ -298,7 +306,7 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
 
 **Merged pull requests:**
 
@@ -306,13 +314,13 @@
 - fix: give bypass-constructed HiveMindListenerProtocol test fixtures real attribute defaults [\#219](https://github.com/JarbasHiveMind/HiveMind-core/pull/219) ([JarbasAl](https://github.com/JarbasAl))
 - fix: drop already-seen floods when forwarding, not only when answering [\#212](https://github.com/JarbasHiveMind/HiveMind-core/pull/212) ([JarbasAl](https://github.com/JarbasAl))
 
-## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
-
 ## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+
+## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
 
 **Merged pull requests:**
 
@@ -476,10 +484,6 @@
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a1...4.10.9a2)
-
-**Merged pull requests:**
-
-- docs: correct stale CLI, config, and protocol claims [\#177](https://github.com/JarbasHiveMind/HiveMind-core/pull/177) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.10.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a1) (2026-08-02)
 
