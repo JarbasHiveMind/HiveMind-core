@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hivemind-core"
+dynamic = ["version"]
+description = "Mesh Networking utilities for OpenVoiceOS"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [
+    {name = "jarbasAI", email = "jarbasai@mailfence.com"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "click",
+    "click_default_group",
+    "rich",
+    "pycryptodomex",
+    "poorman-handshake>=2.0.0a1,<3.0.0",
+    # 0.11.0a2 adds FloodIdCache and HiveMindSlaveProtocol.bind_flood_cache,
+    # which bind_upstream calls so a node with an upstream answers a PING
+    # flood exactly once (HIVEMIND-NODE-1 §4) — an in-process API, not wire
+    # compatibility. 1.0.3a1 raises the floor further: it adds the
+    # keyword-only ``psk`` argument to start_noise_handshake, which lets this
+    # node derive each Noise PSK once per (password, node_id) instead of once
+    # per connection (argon2id, ~217ms and 64 MiB each time). The server still
+    # degrades gracefully to the legacy handshake against older clients on the
+    # wire. 1.0.12a1 raises the floor further: this node now generates and
+    # uses one identity in both directions, and the client at that release
+    # stops copying a master's credentials onto that identity and rotating its
+    # Noise static key. An older client paired with this change rotates the
+    # node's server-side key on first upstream connect and breaks every pinned
+    # downstream peer, so the floor must move with it.
+    # 1.1.0a1 adds transparent multi-frame Noise chunking (send_message splits
+    # oversized payloads, the client reassembles them); the hub relies on this
+    # floor for its own hub-side reassembly of inbound multi-frame messages.
+    "hivemind_bus_client>=1.1.0a1,<2.0.0",
+    "ovos_utils>=0.0.33,<1.0.0",
+    "pybase64",
+    # 0.9.0a1 added AbstractDB.get_client_by_api_key, which ClientDatabase calls
+    "hivemind-plugin-manager>=0.9.0a1,<1.0.0",
+    "ovos-bus-client>=2.8.3a1",
+    "json-database>=0.10.2a1,<2.0.0",
+    "hivemind-sqlite-database>=0.4.0a2",
+    "hivemind-json-db-plugin>=0.0.3a2",
+    # 1.0.0a1 drops the legacy crypto_key/handshake_enabled/require_crypto reads
+    # (v3-Noise-only companion); the pre-1.0 line reads fields this core removed.
+    # 1.0.1a1 guards against a None frame during inbound multi-frame Noise
+    # reassembly; older releases can raise on a stray None chunk mid-reassembly.
+    "hivemind-websocket-protocol>=1.0.1a1,<2.0.0",
+    "hivemind-ovos-agent-plugin>=0.4.0a1,<1.0.0",
+    # transformer pipeline runner services on the text/bus path
+    "ovos-plugin-manager>=2.10.0a1,<3.0.0",
+    "setuptools",
+]
+
+[project.optional-dependencies]
+presence = ["hivemind-presence", "hivemind-ggwave"]
+test = [
+    "pytest",
+    "pytest-cov",
+    "hivescope>=0.8.4a1",
+    # client-side Noise (hivemind_bus_client>=1.0.0a1) comes from the runtime
+    # dependency above — no git ref, so the wheel stays PyPI-publishable.
+]
+integration = [
+    "hivescope>=0.8.4a1",
+    "ovoscope",
+    "ovos-core>=2.1.6a1",
+    "ovos-skill-hello-world",
+    # ovos-bus-client 2.x support currently exists only in OVOS pre-releases;
+    # pin pre-release floors so the resolver picks the 2.x-compatible alphas
+    # instead of the latest stables (which still cap ovos-bus-client<2.0.0).
+    "ovos-bus-client>=2.8.3a1",
+    "ovos-plugin-manager>=2.10.0a1",
+    "ovos-workshop>=8.0.0a1",
+    "ovos-utils>=0.11.1a1",
+]
+
+[project.urls]
+Homepage = "https://github.com/JarbasHiveMind/HiveMind-core"
+
+[project.scripts]
+hivemind-core = "hivemind_core.scripts:hmcore_cmds"
+
+[project.entry-points."hivemind.policy"]
+"hivemind-message-type-acl-policy" = "hivemind_core.policy:MessageTypeACLPolicy"
+"hivemind-deny-all-policy" = "hivemind_core.policy:DenyAllPolicy"
+
+[tool.setuptools]
+packages = ["hivemind_core"]
+
+[tool.setuptools.dynamic]
+version = {attr = "hivemind_core.version.__version__"}
