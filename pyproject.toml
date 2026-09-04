@@ -40,7 +40,10 @@ dependencies = [
     # Noise static key. An older client paired with this change rotates the
     # node's server-side key on first upstream connect and breaks every pinned
     # downstream peer, so the floor must move with it.
-    "hivemind_bus_client>=1.0.16a1,<2.0.0",
+    # 1.1.0a1 adds transparent multi-frame Noise chunking (send_message splits
+    # oversized payloads, the client reassembles them); the hub relies on this
+    # floor for its own hub-side reassembly of inbound multi-frame messages.
+    "hivemind_bus_client>=1.1.0a1,<2.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
     # 0.9.0a1 added AbstractDB.get_client_by_api_key, which ClientDatabase calls
@@ -51,7 +54,9 @@ dependencies = [
     "hivemind-json-db-plugin>=0.0.3a2",
     # 1.0.0a1 drops the legacy crypto_key/handshake_enabled/require_crypto reads
     # (v3-Noise-only companion); the pre-1.0 line reads fields this core removed.
-    "hivemind-websocket-protocol>=1.0.0a1,<2.0.0",
+    # 1.0.1a1 guards against a None frame during inbound multi-frame Noise
+    # reassembly; older releases can raise on a stray None chunk mid-reassembly.
+    "hivemind-websocket-protocol>=1.0.1a1,<2.0.0",
     "hivemind-ovos-agent-plugin>=0.4.0a1,<1.0.0",
     # transformer pipeline runner services on the text/bus path
     "ovos-plugin-manager>=2.10.0a1,<3.0.0",
