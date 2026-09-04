@@ -220,14 +220,15 @@ def test_replayed_v3_transport_message_is_rejected():
 
         # capture the exact ciphertext of one legitimate transport message
         captured = []
-        original_encrypt = client.noise_transport.encrypt_frame
+        original_send = client.noise_transport.send_message
 
-        def capturing_encrypt(payload):
-            ct = original_encrypt(payload)
-            captured.append(ct)
-            return ct
+        def capturing_send(payload, raw_send):
+            def wrap(frame):
+                captured.append(frame)
+                raw_send(frame)
+            original_send(payload, wrap)
 
-        client.noise_transport.encrypt_frame = capturing_encrypt
+        client.noise_transport.send_message = capturing_send
         client.emit(HiveMessage(
             HiveMessageType.BUS,
             payload=Message("recognizer_loop:utterance",

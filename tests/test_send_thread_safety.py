@@ -27,13 +27,16 @@ class FakeNoiseTransport:
         self._nonce = 0
         self._yield_after_encrypt = yield_after_encrypt
 
-    def encrypt_frame(self, payload):
+    def send_message(self, payload, raw_send):
+        # mirror NoiseTransport.send_message: the nonce is assigned AND the
+        # frame reaches the wire under the same lock, so a whole message's
+        # frames stay contiguous and strictly ordered even under contention
         with self._send_lock:
             nonce = self._nonce
             self._nonce += 1
-        if self._yield_after_encrypt:
-            time.sleep(0)
-        return nonce
+            if self._yield_after_encrypt:
+                time.sleep(0)
+            raw_send(nonce)
 
 
 class TestConcurrentSendOrdering(unittest.TestCase):

@@ -417,7 +417,10 @@ class HiveMindClientConnection:
                                             binary_type=message.bin_type).bytes
                 else:
                     payload = plaintext if plaintext is not None else message.serialize()
-                self.send_msg(self.noise_transport.encrypt_frame(payload), True)
+                # send_message chunks an oversize payload across several Noise
+                # transport messages; a message that fits stays a single frame
+                self.noise_transport.send_message(
+                    payload, lambda b: self.send_msg(b, True))
                 return
 
             # No v3 Noise session yet: only HELLO and HANDSHAKE are ever sent
@@ -474,7 +477,7 @@ class HiveMindClientConnection:
         """
         return True
 
-    def decode(self, payload: str) -> HiveMessage:
+    def decode(self, payload: str) -> Optional[HiveMessage]:
         encrypted = False
         if self.noise_transport is not None:
             # protocol v3 session: only valid Noise transport messages are
@@ -491,6 +494,11 @@ class HiveMindClientConnection:
                           "disconnecting")
                 self.disconnect(1008, "invalid Noise transport message (tampered, replayed or out-of-order)")
                 raise
+            if payload is None:
+                # an in-progress multi-frame message: this chunk was buffered
+                # for reassembly, so there is no HiveMessage yet. Callers must
+                # treat a None return as "keep receiving" and not dispatch it.
+                return None
             # a decoded Noise transport frame is authenticated + encrypted
             encrypted = True
 
