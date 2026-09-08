@@ -20,6 +20,7 @@ The file is created with defaults on first run if absent.
   "runtime_password_strength_check": true,
 
   "ping_flood_interval": 30,
+  "max_flood_hops": 0,
   "last_seen_update_interval": 60,
 
   "presence": {
@@ -101,6 +102,7 @@ The file is created with defaults on first run if absent.
 | `runtime_password_strength_check` | bool | `true` | Re-check password strength at handshake time. Set to `false`, or set `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1`, to skip the backstop |
 | `last_seen_update_interval` | int | `60` | Seconds to debounce the `last_seen` write, which runs on every inbound message. `0` writes on every message |
 | `ping_flood_interval` | int | `30` | Minimum seconds between two mesh-wide `PING` floods emitted by this node. Inside the window the node answers only the peer that pinged it |
+| `max_flood_hops` | int | `0` | Hop ceiling for `BROADCAST`, `PROPAGATE` and `CASCADE` (HIVEMIND-NODE-1 §4): a message whose `route` already carries more hops than this is handled locally but not forwarded. `0` leaves floods unbounded, which suits one server and its satellites; set it on a large or densely cross-connected mesh |
 | `utterance_transformers` | dict | `{}` | OVOS utterance transformer plugins to load, keyed by plugin name. |
 | `metadata_transformers` | dict | `{}` | OVOS metadata transformer plugins to load, keyed by plugin name |
 | `dialog_transformers` | dict | `{}` | OVOS dialog transformer plugins to load, keyed by plugin name. They rewrite `QUERY`/`CASCADE` answer chunks before they go back to clients |

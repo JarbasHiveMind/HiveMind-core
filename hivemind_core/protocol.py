@@ -218,6 +218,13 @@ class HiveMindClientConnection:
     # ``name::session_id`` string. See ``handle_hello_message``.
     _peer_suffix: str = field(default="", init=False, repr=False)
 
+    # NODE-1 §4: set once this connection has had a BROADCAST/PROPAGATE/CASCADE
+    # refused for crossing ``max_flood_hops``. Resets to False on reconnect
+    # because each connection is a fresh ``HiveMindClientConnection`` instance
+    # (see ``handle_hello_message``), so a first refusal on the new connection
+    # is visible again instead of staying silent forever.
+    _flood_ceiling_warned: bool = field(default=False, init=False, repr=False)
+
     # Per-connection nonce, minted lazily once and stable for the
     # connection's life. Namespaces the client-declared session_id — see
     # ``layer1_session_id`` below (HIVEMIND-BRIDGE-1 §4).
@@ -660,6 +667,13 @@ class HiveMindListenerProtocol:
     # so a test fixture built with ``object.__new__`` still finds a working
     # value here instead of raising AttributeError.
     last_seen_update_interval: float = field(default=0.0, init=False)
+    max_flood_hops: int = field(default=0, init=False)
+    # NODE-1 §4: set once a message from the upstream master has been refused
+    # for crossing ``max_flood_hops`` on the way back down to satellites (see
+    # ``_log_master_relay_ceiling_refusal``). There is exactly one upstream
+    # link per node, so a single instance flag is the analogue of the
+    # per-connection flag on ``HiveMindClientConnection``.
+    _master_relay_ceiling_warned: bool = field(default=False, init=False, repr=False)
     # Cache for the node's RSA identity key (see identity_rsa_key property).
     # Stays None here: constructing HiveMindListenerProtocol must stay cheap
     # and must not touch the key file, since embedders and tests routinely
@@ -729,6 +743,10 @@ class HiveMindListenerProtocol:
             get_server_config().get("ping_flood_interval", 30),
             30.0,
         )
+        self.max_flood_hops = int(_non_negative_float(
+            get_server_config().get("max_flood_hops", 0),
+            0.0,
+        ))
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -1821,6 +1839,10 @@ class HiveMindListenerProtocol:
             if site and site == self.identity.site_id:
                 self.handle_bus_message(message.payload, client)
 
+        if self._over_hop_ceiling(message):
+            self._log_hop_ceiling_refusal(client, "BROADCAST", message)
+            return
+
         # broadcast message to other peers (NODE-1 §3.3: keep the envelope)
         fwd = self._rewrap(message, payload)
         # snapshot: disconnects/reconnects mutate self.clients from other threads
@@ -1884,6 +1906,56 @@ class HiveMindListenerProtocol:
         several nodes may share one site.
         """
         return self.identity.public_key
+
+    def _over_hop_ceiling(self, message: HiveMessage) -> bool:
+        """NODE-1 §4 scale boundary: True when ``max_flood_hops`` is set and
+        the message already carries more hops in its ``route`` than that.
+        Checked against the route as received, before this node names
+        itself in it. Local delivery still happens; only forwarding stops.
+        """
+        return 0 < self.max_flood_hops < len(message.route or [])
+
+    def _log_hop_ceiling_refusal(self, client: HiveMindClientConnection,
+                                  msg_type: str, message: HiveMessage) -> None:
+        """NODE-1 §4: log a forwarding refusal caused by ``max_flood_hops``.
+
+        The first refusal on a given connection logs at info, naming the
+        message type, the peer it came from, the configured ceiling and the
+        route length an operator needs to tell which direction is being cut.
+        Later refusals on the same connection stay at debug: a flooding loop
+        refuses on every arrival, and logging each one at info would trade a
+        silent failure for a flooded log.
+        """
+        if client._flood_ceiling_warned:
+            LOG.debug(f"not forwarding {msg_type} from {client.peer} past the "
+                      f"hop ceiling max_flood_hops={self.max_flood_hops} "
+                      f"(NODE-1 §4); route={message.route}")
+            return
+        client._flood_ceiling_warned = True
+        LOG.info(f"not forwarding {msg_type} from {client.peer} past the hop "
+                 f"ceiling max_flood_hops={self.max_flood_hops} (NODE-1 §4); "
+                 f"route has {len(message.route or [])} hops")
+
+    def _log_master_relay_ceiling_refusal(self, msg_type: str,
+                                           message: HiveMessage) -> None:
+        """NODE-1 §4: log a relay-side refusal caused by ``max_flood_hops``,
+        for a message arriving from this node's own upstream master.
+
+        There is exactly one upstream link, so a single instance flag stands
+        in for the per-connection flag used on the client-facing side. The
+        first refusal logs at info, naming the message type, the ceiling and
+        the route length; later refusals on the same relay stay at debug, for
+        the same reason as :meth:`_log_hop_ceiling_refusal`.
+        """
+        if self._master_relay_ceiling_warned:
+            LOG.debug(f"not relaying {msg_type} from master relay past the hop "
+                      f"ceiling max_flood_hops={self.max_flood_hops} "
+                      f"(NODE-1 §4); route={message.route}")
+            return
+        self._master_relay_ceiling_warned = True
+        LOG.info(f"not relaying {msg_type} from master relay past the hop "
+                 f"ceiling max_flood_hops={self.max_flood_hops} (NODE-1 §4); "
+                 f"route has {len(message.route or [])} hops")
 
     def _is_routing_loop(self, message: HiveMessage) -> bool:
         """HIVEMIND-MSG-1 §5 loop suppression.
@@ -2056,6 +2128,10 @@ class HiveMindListenerProtocol:
         if looped:
             LOG.debug("not re-forwarding PROPAGATE already routed through this "
                       f"node {self._node_id} (MSG-1 §5); route={message.route}")
+            return
+
+        if self._over_hop_ceiling(message):
+            self._log_hop_ceiling_refusal(client, "PROPAGATE", message)
             return
 
         # MSG-1 §4: a flood crosses each node once. Local delivery above already
@@ -2273,6 +2349,9 @@ class HiveMindListenerProtocol:
             LOG.debug(f"not relaying {message.msg_type} for already seen "
                       f"flood_id={self._flood_id(message)} (MSG-1 §4)")
             return
+        if self._over_hop_ceiling(message):
+            self._log_master_relay_ceiling_refusal(message.msg_type, message)
+            return
         self._append_self_hop(message)
         plaintext = message.serialize()
         for conn in list(self.clients.values()):
@@ -2289,6 +2368,9 @@ class HiveMindListenerProtocol:
         directly connected downstream nodes, never re-broadcast by recipients.
         It only ever travels upstream-to-downstream, so it cannot cycle.
         """
+        if self._over_hop_ceiling(message):
+            self._log_master_relay_ceiling_refusal("BROADCAST", message)
+            return
         plaintext = message.serialize()
         for conn in list(self.clients.values()):
             try:
@@ -2681,6 +2763,10 @@ class HiveMindListenerProtocol:
         if looped:
             LOG.debug("not re-forwarding CASCADE already routed through this "
                       f"node {self._node_id} (MSG-1 §5); route={message.route}")
+            return
+
+        if self._over_hop_ceiling(message):
+            self._log_hop_ceiling_refusal(client, "CASCADE", message)
             return
 
         cascade_fwd = self._rewrap(message, payload, metadata)

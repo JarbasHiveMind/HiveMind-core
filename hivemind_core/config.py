@@ -117,6 +117,15 @@ _DEFAULT = {
     # satellites' own ping period, or a node's entry in remote maps goes stale.
     "ping_flood_interval": 30,
 
+    # NODE-1 §4 scale boundary: refuse to forward a BROADCAST, PROPAGATE or
+    # CASCADE whose route already carries more than this many hops. The route
+    # is the only hop record on the wire, so this is the only ceiling that can
+    # be expressed. 0 leaves floods unbounded, which is right for one server
+    # and its satellites; set it on a large or densely cross-connected mesh.
+    # Local delivery is unaffected: the node still handles the message, it
+    # only stops fanning it out.
+    "max_flood_hops": 0,
+
     # Debounce for the synchronous client-db last_seen write. update_last_seen
     # runs on every inbound message, inline on the tornado IOLoop thread; the
     # JSON backend's commit() rewrites the entire client store on each call.
