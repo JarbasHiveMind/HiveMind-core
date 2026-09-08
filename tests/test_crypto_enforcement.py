@@ -179,6 +179,69 @@ class TestIntercomSignatureVerification(unittest.TestCase):
         assert mock_log.warning.called
         assert "no signature" in mock_log.warning.call_args[0][0]
 
+    def test_pin_survives_a_listener_restart(self):
+        """CRYPTO-1 §4: the pin belongs to the access credential, not to the
+        listener process. A second protocol instance over the same client
+        database must see the first instance's pin, and a HELLO presenting a
+        different key after the restart must not seize it."""
+        db_user = self.proto.db.get_client_by_api_key.return_value
+        db_user.metadata = {}
+        self.client.is_admin = True
+        self.proto.handle_hello_message(
+            HiveMessage(HiveMessageType.HELLO, payload={"pubkey": self.client_pub}),
+            self.client)
+        assert db_user.metadata["intercom_pubkey"] == self.client_pub
+        self.proto.db.update_item.assert_called_with(db_user)
+
+        restarted = _make_protocol()
+        restarted.db.get_client_by_api_key.return_value = db_user
+        restarted.identity = self.proto.identity
+        client = _make_client(restarted)
+        client.is_admin = True
+        assert "test-key" not in restarted.trusted_pubkeys
+        restarted.handle_hello_message(
+            HiveMessage(HiveMessageType.HELLO, payload={"pubkey": self.forger_pub}),
+            client)
+        assert restarted.trusted_pubkeys["test-key"] == self.client_pub
+        assert db_user.metadata["intercom_pubkey"] == self.client_pub
+        restarted.handle_client_shared_bus = MagicMock()
+        assert restarted.handle_intercom_message(
+            self._intercom(self.forger_priv), client) is True
+        restarted.handle_client_shared_bus.assert_not_called()
+
+    def test_a_failed_pin_lookup_pins_nothing_and_refuses_intercom(self):
+        """A database outage must not be read as "no pin yet": a peer holding
+        the credential could otherwise seize the pin with its own key. The
+        HELLO pins nothing and the forger's INTERCOM is dropped."""
+        self.proto.db.get_client_by_api_key.side_effect = OSError("db down")
+        self.client.is_admin = True
+        with patch("hivemind_core.protocol.LOG") as mock_log:
+            self.proto.handle_hello_message(
+                HiveMessage(HiveMessageType.HELLO, payload={"pubkey": self.forger_pub}),
+                self.client)
+        assert "test-key" not in self.proto.trusted_pubkeys
+        assert mock_log.error.called
+        self.proto.handle_client_shared_bus = MagicMock()
+        assert self.proto.handle_intercom_message(
+            self._intercom(self.forger_priv), self.client) is True
+        self.proto.handle_client_shared_bus.assert_not_called()
+        assert "test-key" not in self.proto.trusted_pubkeys
+
+    def test_a_failed_pin_write_leaves_no_pin_in_memory(self):
+        """A pin that did not reach the database is no pin: memory must not
+        say otherwise, and the failure is reported."""
+        db_user = self.proto.db.get_client_by_api_key.return_value
+        db_user.metadata = {}
+        self.proto.db.update_item.side_effect = OSError("disk full")
+        self.client.is_admin = True
+        with patch("hivemind_core.protocol.LOG") as mock_log:
+            self.proto.handle_hello_message(
+                HiveMessage(HiveMessageType.HELLO, payload={"pubkey": self.client_pub}),
+                self.client)
+        assert "test-key" not in self.proto.trusted_pubkeys
+        assert mock_log.error.called
+        assert "persist" in mock_log.error.call_args[0][0]
+
     def test_hello_pins_pubkey_and_keeps_first_pin(self):
         hello = HiveMessage(HiveMessageType.HELLO,
                             payload={"pubkey": self.client_pub})

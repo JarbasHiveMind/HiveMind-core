@@ -103,6 +103,10 @@ WRAPPER_TYPES = (HiveMessageType.PROPAGATE, HiveMessageType.BROADCAST,
                  HiveMessageType.CASCADE)
 
 
+
+class IntercomPinUnavailable(RuntimeError):
+    """The INTERCOM pin store could not be read or written; callers fail closed."""
+
 class ProtocolVersion(IntEnum):
     ZERO = 0  # json only, no handshake, no binary
     ONE = 1  # handshake https://github.com/JarbasHiveMind/HiveMind-core/pull/29
@@ -1527,6 +1531,57 @@ class HiveMindListenerProtocol:
         else:
             LOG.warning(f"Ignoring received untyped binary data: {len(bin_data)} bytes")
 
+    # ------------------------------------------------- INTERCOM pin store
+    def _pinned_intercom_key(self, client: HiveMindClientConnection) -> Optional[str]:
+        """The RSA public key pinned for this client identity, or None when
+        the row holds no pin yet.
+
+        CRYPTO-1 §4: the pin is per access credential and outlives the
+        connection, so it lives in the client database row's metadata and is
+        cached in ``trusted_pubkeys`` once read. A listener restart therefore
+        keeps the pin; a HELLO after the restart cannot seize it.
+
+        Raises IntercomPinUnavailable when the row cannot be read. That is
+        not "no pin": a caller that treated it so would let a peer pin its
+        own key during a database outage, so callers fail closed instead.
+        """
+        pinned = self.trusted_pubkeys.get(client.key)
+        if pinned is not None:
+            return pinned
+        try:
+            with self.db:
+                user = self.db.get_client_by_api_key(client.key)
+        except Exception as e:
+            raise IntercomPinUnavailable(
+                f"cannot read the INTERCOM pin for {client.peer}: {e}") from e
+        if user is None or not isinstance(user.metadata, dict):
+            return None
+        pinned = user.metadata.get("intercom_pubkey")
+        if pinned:
+            self.trusted_pubkeys[client.key] = pinned
+        return pinned
+
+    def _pin_intercom_key(self, client: HiveMindClientConnection, pubkey: str) -> None:
+        """Pin ``pubkey`` for this client identity in the database, then in
+        memory. A pin that did not reach the database is no pin at all, so a
+        failed write raises IntercomPinUnavailable and leaves memory alone."""
+        try:
+            with self.db:
+                user = self.db.get_client_by_api_key(client.key)
+                if user is None:
+                    raise IntercomPinUnavailable(
+                        f"no client row for {client.peer} to pin against")
+                if not isinstance(user.metadata, dict):
+                    user.metadata = {}
+                user.metadata["intercom_pubkey"] = pubkey
+                self.db.update_item(user)
+        except IntercomPinUnavailable:
+            raise
+        except Exception as e:
+            raise IntercomPinUnavailable(
+                f"cannot persist the INTERCOM pin for {client.peer}: {e}") from e
+        self.trusted_pubkeys[client.key] = pubkey
+
     # ------------------------------------------------- protocol v3 (Noise)
     def _get_pinned_client_noise_key(self, client: HiveMindClientConnection) -> Optional[str]:
         """Pinned Noise static public key for this client identity, if any.
@@ -1707,11 +1762,19 @@ class HiveMindListenerProtocol:
             # TOFU pin: first pubkey seen for this access key becomes the
             # trust anchor for INTERCOM signature verification. A later HELLO
             # presenting a different key does NOT overwrite the pin.
-            pinned = self.trusted_pubkeys.get(client.key)
-            if pinned is None:
-                self.trusted_pubkeys[client.key] = client.pub_key
-                LOG.debug(f"pinned public key for {client.peer}")
-            elif pinned != client.pub_key:
+            try:
+                pinned = self._pinned_intercom_key(client)
+                if pinned is None:
+                    self._pin_intercom_key(client, client.pub_key)
+                    LOG.debug(f"pinned public key for {client.peer}")
+                    pinned = client.pub_key
+            except IntercomPinUnavailable as e:
+                # Fail closed: without the row we cannot know whether a pin
+                # exists, so this HELLO pins nothing and its INTERCOM frames
+                # stay unverifiable until the database is back.
+                LOG.error(f"not pinning {client.peer}: {e}")
+                pinned = client.pub_key
+            if pinned != client.pub_key:
                 LOG.warning(f"client {client.peer} presented a public key that "
                             f"does not match its pinned key; keeping the pin")
         else:
@@ -2778,7 +2841,11 @@ class HiveMindListenerProtocol:
                 # fail closed and drop rather than dispatch unverified.
                 # A rejection returns True: the frame is consumed here, it is
                 # not relayed to peers nor escalated upstream.
-                pub = self.trusted_pubkeys.get(client.key) or client.pub_key
+                try:
+                    pub = self._pinned_intercom_key(client) or client.pub_key
+                except IntercomPinUnavailable as e:
+                    LOG.error(f"INTERCOM from {client.peer} dropped: {e}")
+                    return True
                 if not pub:
                     LOG.warning(f"INTERCOM from {client.peer} has no pinned/known "
                                 f"public key: dropping unverifiable origin")
@@ -2796,8 +2863,15 @@ class HiveMindListenerProtocol:
                     LOG.error(f"INTERCOM signature verification failed for "
                               f"{client.peer}: dropping forged/mismatched message")
                     return True
-                # first verified sighting pins the key for this listener's lifetime
-                self.trusted_pubkeys.setdefault(client.key, pub)
+                # first verified sighting pins the key for this identity; a
+                # pin that cannot be persisted is no pin, so the frame is
+                # dropped rather than dispatched on a promise
+                if client.key not in self.trusted_pubkeys:
+                    try:
+                        self._pin_intercom_key(client, pub)
+                    except IntercomPinUnavailable as e:
+                        LOG.error(f"INTERCOM from {client.peer} dropped: {e}")
+                        return True
 
                 private_key = load_RSA_key(self.identity.private_key)
 
