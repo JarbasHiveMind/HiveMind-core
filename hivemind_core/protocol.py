@@ -1,6 +1,7 @@
 # hivemind-core
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 import copy
 import dataclasses
 import hashlib
@@ -11,9 +12,10 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Union, List, Dict, Optional, Callable, Literal
+from typing import Union, List, Dict, Optional, Callable, Literal, Tuple
 
 import pybase64
 from ovos_bus_client import MessageBusClient
@@ -202,6 +204,13 @@ class HiveMindClientConnection:
     # dropped (only HELLO/HANDSHAKE ever travel before it exists).
     noise_handshake: Optional[object] = field(default=None, repr=False)
     noise_transport: Optional[NoiseTransport] = field(default=None, repr=False)
+    # Noise message 1 is parked while this connection's pre-shared key is
+    # derived off the IOLoop; a second HANDSHAKE frame meanwhile is rejected
+    noise_psk_pending: bool = field(default=False, init=False, repr=False)
+    # set once this connection is being torn down (a handshake abort, the
+    # transport reporting the peer gone) so work parked on it, a PSK
+    # derivation in flight, knows not to resume it
+    disconnected: bool = field(default=False, init=False, repr=False)
     # exact payloads of the cleartext HELLO + parameter HANDSHAKE sent to this
     # client, retained for Noise prologue binding (CRYPTO-1 §3.3)
     _hello_payload: Optional[dict] = field(default=None, init=False, repr=False)
@@ -907,34 +916,263 @@ class HiveMindListenerProtocol:
 
     # how many distinct passwords keep a derived PSK in memory at once
     NOISE_PSK_CACHE_SIZE = 256
+    # Threads deriving PSKs off the IOLoop. argon2-cffi releases the GIL, but
+    # every derivation holds a 64 MiB arena, so keep this small. The pool is
+    # never shut down: the listener has no stop method, and at interpreter
+    # exit the worker threads finish their current derivation (well under a
+    # second each) and drop anything still queued.
+    NOISE_PSK_WORKERS = 2
+    # Client-row metadata keys holding the persisted PSK and the binding
+    # that says which (node id, password) pair it was derived for. They live
+    # beside the TOFU pin, noise_pubkey, in the row that already holds the
+    # password the key derives from. The key is password-equivalent for the
+    # protocol v3 handshake: anything that redacts ``password`` when it
+    # serializes a row must redact ``metadata.noise_psk`` the same way.
+    NOISE_PSK_METADATA_KEY = "noise_psk"
+    NOISE_PSK_BINDING_METADATA_KEY = "noise_psk_for"
+    # lazily created; class defaults keep a bypass-built instance safe.
+    # init=False/repr=False like the other backing fields: this is a
+    # dataclass, and the futures are keyed by the client password.
+    _noise_psk_executor: Optional[ThreadPoolExecutor] = field(
+        default=None, init=False, repr=False)
+    _noise_psk_futures: Optional[dict] = field(default=None, init=False, repr=False)
+    # api keys whose row is known to carry the persisted key already, so a
+    # memory hit does not re-read the row; bounded by the number of client
+    # rows, and only ever grows within one process
+    _noise_psk_persisted_keys: Optional[set] = field(default=None, init=False, repr=False)
+    # Guards the memory cache and the persisted-keys set: the websocket and
+    # HTTP transports call in on the IOLoop thread, the MQTT transport from
+    # its own, and both reach the cache.
+    _noise_psk_lock: Optional[threading.Lock] = field(default=None, init=False, repr=False)
 
-    def noise_psk(self, password: Union[str, bytes]) -> bytes:
+    @property
+    def _psk_lock(self) -> threading.Lock:
+        if self._noise_psk_lock is None:
+            self._noise_psk_lock = threading.Lock()
+        return self._noise_psk_lock
+
+    def _noise_psk_key(self, password: Union[str, bytes]) -> Tuple[bytes, str]:
+        if isinstance(password, str):
+            password = password.encode("utf-8")
+        return (password, self._node_id)
+
+    def _noise_psk_binding(self, password: bytes) -> str:
+        """What a persisted key is bound to: this node's id and the password.
+
+        A digest rather than the values themselves so the binding is one
+        short field; not a secret in its own right, since the row it sits in
+        holds the password in the clear and the key it guards is
+        password-equivalent already. It makes staleness a deterministic
+        check: a key persisted under a different password or node id simply
+        does not match and is derived afresh.
+        """
+        material = b"hivemind-noise-psk-binding\x00" + self._node_id.encode("utf-8") \
+            + b"\x00" + password
+        return hashlib.sha256(material).hexdigest()
+
+    def _remember_noise_psk(self, key: Tuple[bytes, str], psk: bytes) -> None:
+        with self._psk_lock:
+            self._noise_psks[key] = psk
+            self._noise_psks.move_to_end(key)
+            while len(self._noise_psks) > self.NOISE_PSK_CACHE_SIZE:
+                self._noise_psks.popitem(last=False)
+
+    def _recall_noise_psk(self, key: Tuple[bytes, str]) -> Optional[bytes]:
+        with self._psk_lock:
+            psk = self._noise_psks.get(key)
+            if psk is not None:
+                self._noise_psks.move_to_end(key)
+            return psk
+
+    def noise_psk(self, password: Union[str, bytes],
+                  client: Optional[HiveMindClientConnection] = None) -> bytes:
         """The Noise pre-shared key for ``password``, derived at most once.
 
-        derive_psk runs argon2id (time_cost=3, 64 MiB) and measured
-        152-333ms per call on the single IOLoop thread that serves every
-        connected client. It is cacheable because its salt is
-        SHA-256(node_id): the result depends only on the password and this
-        node's id, both constant for the life of the node, so the same pair
-        always yields the same key.
+        derive_psk runs argon2id (time_cost=3, 64 MiB): 152-333ms on a
+        developer machine, ~750ms on a half-core container. It is cacheable
+        because its salt is SHA-256(node_id): the result depends only on the
+        password and this node's id, both constant for the life of the node,
+        so the same pair always yields the same key.
 
         Keyed on the password (and this node's id) rather than on the node
         id alone: Client rows carry their own password, so two clients may
         legitimately present different ones, and handing a client another
         client's PSK would silently break its handshake.
+
+        Lookup order: the in-memory LRU, then the key persisted in
+        ``client``'s database row (so a restart re-derives nothing for a
+        client seen before), then a fresh derivation, which is persisted.
+        This form derives inline; the handshake path prefers
+        ``_derive_noise_psk_async`` so the IOLoop keeps serving everyone
+        else while argon2id runs.
         """
-        if isinstance(password, str):
-            password = password.encode("utf-8")
-        key = (password, self._node_id)
-        psk = self._noise_psks.get(key)
+        key = self._noise_psk_key(password)
+        psk = self._cached_noise_psk(key, client)
         if psk is None:
-            psk = derive_psk(password, node_id=self._node_id)
-            self._noise_psks[key] = psk
-            while len(self._noise_psks) > self.NOISE_PSK_CACHE_SIZE:
-                self._noise_psks.popitem(last=False)
-        else:
-            self._noise_psks.move_to_end(key)
+            psk = derive_psk(key[0], node_id=self._node_id)
+            self._remember_noise_psk(key, psk)
+            self._persist_noise_psk(client, key, psk)
         return psk
+
+    def _cached_noise_psk(self, key: Tuple[bytes, str],
+                          client: Optional[HiveMindClientConnection]) -> Optional[bytes]:
+        """The PSK for ``key`` without deriving: memory, then the client row."""
+        psk = self._recall_noise_psk(key)
+        if psk is not None:
+            # another client with the same password derived it; make sure
+            # this client's own row carries it too, once per process
+            if client is not None and client.key not in self._persisted_noise_psk_keys():
+                self._persist_noise_psk(client, key, psk)
+            return psk
+        psk = self._load_persisted_noise_psk(client, key)
+        if psk is not None:
+            self._remember_noise_psk(key, psk)
+        return psk
+
+    def _persisted_noise_psk_keys(self) -> set:
+        with self._psk_lock:
+            if self._noise_psk_persisted_keys is None:
+                self._noise_psk_persisted_keys = set()
+            return self._noise_psk_persisted_keys
+
+    def _noise_psk_row(self, client: HiveMindClientConnection) -> Optional[Client]:
+        """The client's DB row, through the connection's short-lived cache.
+
+        The handshake already resolved the row for admission moments ago;
+        a second uncached lookup per connection on the IOLoop is what this
+        avoids.
+        """
+        try:
+            return client.resolve_user(self.db)
+        except Exception:
+            LOG.exception("failed to look up the client row for the Noise PSK")
+            return None
+
+    def _load_persisted_noise_psk(self, client: Optional[HiveMindClientConnection],
+                                  key: Tuple[bytes, str]) -> Optional[bytes]:
+        """The PSK persisted in ``client``'s row, if bound to this node and password."""
+        if client is None:
+            return None
+        user = self._noise_psk_row(client)
+        metadata = getattr(user, "metadata", None)
+        if not isinstance(metadata, dict):
+            return None
+        if metadata.get(self.NOISE_PSK_BINDING_METADATA_KEY) != self._noise_psk_binding(key[0]):
+            return None
+        raw = metadata.get(self.NOISE_PSK_METADATA_KEY)
+        if not isinstance(raw, str):
+            return None
+        try:
+            psk = bytes.fromhex(raw)
+        except ValueError:
+            return None
+        if len(psk) != 32:
+            return None
+        self._persisted_noise_psk_keys().add(client.key)
+        return psk
+
+    def _persist_noise_psk(self, client: Optional[HiveMindClientConnection],
+                           key: Tuple[bytes, str], psk: bytes) -> None:
+        """Store ``psk`` in ``client``'s row so a restart need not re-derive it.
+
+        The value is a pure function of the row's own password and this
+        node's id, so a peer presenting the wrong password causes at most
+        one idempotent write of the right key.
+        """
+        if client is None:
+            return
+        try:
+            binding = self._noise_psk_binding(key[0])
+            with self.db:
+                user = self._noise_psk_row(client)
+                if user is None:
+                    return
+                metadata = user.metadata if isinstance(user.metadata, dict) else {}
+                if metadata.get(self.NOISE_PSK_METADATA_KEY) != psk.hex() or \
+                        metadata.get(self.NOISE_PSK_BINDING_METADATA_KEY) != binding:
+                    metadata[self.NOISE_PSK_METADATA_KEY] = psk.hex()
+                    metadata[self.NOISE_PSK_BINDING_METADATA_KEY] = binding
+                    user.metadata = metadata
+                    self.db.update_item(user)
+            self._persisted_noise_psk_keys().add(client.key)
+        except Exception:
+            LOG.exception("failed to persist the derived Noise PSK")
+
+    def _derive_noise_psk_async(
+            self, password: Union[str, bytes],
+            client: Optional[HiveMindClientConnection]) -> Optional[asyncio.Future]:
+        """Derive the PSK for ``password`` on a worker thread.
+
+        Returns a future resolving to the key, shared by every caller asking
+        for the same password while it is in flight; the LRU and the client
+        row are filled when it completes. Returns None when no event loop is
+        running on this thread (a transport that calls in from its own
+        thread, e.g. MQTT), in which case the caller derives inline.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return None
+        key = self._noise_psk_key(password)
+        if self._noise_psk_futures is None:
+            self._noise_psk_futures = {}
+        futures = self._noise_psk_futures
+        future = futures.get(key)
+        if future is not None:
+            if future.get_loop().is_closed():
+                # bound to a loop that is gone: it can never complete
+                futures.pop(key, None)
+            elif not future.done():
+                return future
+            elif not future.cancelled() and future.exception() is None:
+                # Finished, but its completion callback has not run yet
+                # (the callback is queued behind whoever is asking now).
+                # The key exists: hand it over instead of deriving again.
+                self._remember_noise_psk(key, future.result())
+                return future
+        if self._noise_psk_executor is None:
+            self._noise_psk_executor = ThreadPoolExecutor(
+                max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
+        future = asyncio.wrap_future(
+            self._noise_psk_executor.submit(derive_psk, key[0], node_id=self._node_id),
+            loop=loop)
+        futures[key] = future
+
+        def _derived(done: asyncio.Future) -> None:
+            # only this future's own entry: a same-key caller may already
+            # have replaced it, and that replacement must stay shared
+            if futures.get(key) is done:
+                futures.pop(key, None)
+            if done.cancelled():
+                return
+            error = done.exception()
+            if error is not None:
+                # the key never existed, so nothing here can leak it
+                LOG.error(f"Noise PSK derivation failed: "
+                          f"{type(error).__name__}: {error}")
+                return
+            self._remember_noise_psk(key, done.result())
+            self._persist_noise_psk(client, key, done.result())
+
+        future.add_done_callback(_derived)
+        return future
+
+    def _prewarm_noise_psk(self, client: HiveMindClientConnection) -> None:
+        """Start deriving ``client``'s PSK as soon as the offer goes out.
+
+        The node derives the same key on its side before it can send Noise
+        message 1, so this overlaps the two derivations instead of
+        serializing them; by the time message 1 arrives the key is usually
+        ready. Off the IOLoop; a no-op when the key is already known.
+        """
+        if client.pswd_handshake is None:
+            return
+        password = client.pswd_handshake.password
+        try:
+            if self._cached_noise_psk(self._noise_psk_key(password), client) is None:
+                self._derive_noise_psk_async(password, client)
+        except Exception:
+            LOG.exception("failed to start the Noise PSK derivation")
 
     def _with_builtin_policies(self, chain: PolicyChain) -> PolicyChain:
         """Return ``chain`` with the non-removable builtin policies first.
@@ -1077,7 +1315,9 @@ class HiveMindListenerProtocol:
         msg = HiveMessage(HiveMessageType.HANDSHAKE, payload)
         LOG.debug(f"starting {client.peer} HANDSHAKE: {payload}")
         client.send(msg)
-        # the client answers with its first Noise message -> handle_handshake_message
+        # the client answers with its first Noise message -> handle_handshake_message;
+        # meanwhile derive its PSK so the two derivations overlap
+        self._prewarm_noise_psk(client)
 
     def update_last_seen(self, client: HiveMindClientConnection):
         """track timestamps of last client interaction"""
@@ -1102,6 +1342,7 @@ class HiveMindListenerProtocol:
                 self._last_seen_updates[client.key] = mono_now
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
+        client.disconnected = True
         try:
             self.callbacks.on_disconnect(client)
         except:
@@ -1561,6 +1802,10 @@ class HiveMindListenerProtocol:
         LOG.error(f"protocol v3 handshake with {client.peer} FAILED: {reason}")
         client.noise_handshake = None
         client.noise_transport = None
+        # the transport reports the close a few loop turns later; a PSK
+        # derivation parked on this connection must not resume in between
+        client.disconnected = True
+        client.noise_psk_pending = False
         self.handle_invalid_key_connected(client)
         client.disconnect(1008, reason)
 
@@ -1606,10 +1851,46 @@ class HiveMindListenerProtocol:
             name = noise_protocol_name(pattern, suite)
             prologue = build_prologue(client._hello_payload or {},
                                       client._handshake_payload or {}, name)
+            if client.noise_psk_pending:
+                # message 1 is parked on this connection already; a second
+                # frame is a client-controlled duplicate, rejected before it
+                # can start a handshake of its own
+                self._abort_noise_handshake(
+                    client, "unexpected HANDSHAKE frame while the Noise "
+                            "pre-shared key is being derived")
+                return
+            password = client.pswd_handshake.password
+            psk = self._cached_noise_psk(self._noise_psk_key(password), client)
+            if psk is None:
+                # Not known yet: derive off the IOLoop and park message 1
+                # until the key arrives, so argon2id never stalls the loop
+                # that serves every other connected client.
+                pending = self._derive_noise_psk_async(password, client)
+                if pending is not None:
+                    client.noise_psk_pending = True
+
+                    def _resume(done: asyncio.Future) -> None:
+                        if not client.noise_psk_pending:
+                            return  # aborted while parked
+                        client.noise_psk_pending = False
+                        if client.disconnected or client.noise_transport is not None \
+                                or client.noise_handshake is not None:
+                            return
+                        if done.cancelled() or done.exception() is not None:
+                            self._abort_noise_handshake(
+                                client, "handshake failure: the Noise "
+                                        "pre-shared key could not be derived")
+                            return
+                        self.handle_noise_handshake_message(message, client)
+
+                    pending.add_done_callback(_resume)
+                    return
+                # no event loop on this thread: derive inline
+                psk = self.noise_psk(password, client)
             try:
                 client.noise_handshake = start_noise_handshake(
                     initiator=False, pattern=pattern, suite=suite,
-                    psk=self.noise_psk(client.pswd_handshake.password),
+                    psk=psk,
                     password=None,
                     node_id=self._node_id, prologue=prologue,
                     key_path=self.identity.noise_key,
