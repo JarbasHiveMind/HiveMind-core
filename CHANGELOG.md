@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.1a2) (2026-09-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.1a1...5.1.1a2)
+
+**Merged pull requests:**
+
+- docs: cite the governing specification in the module docstring [\#320](https://github.com/JarbasHiveMind/HiveMind-core/pull/320) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.1a1) (2026-09-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.0a2...5.1.1a1)
@@ -369,17 +377,9 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.4a2...4.11.5a1)
 
-**Merged pull requests:**
-
-- fix: three races and a missing relay announcement in the PING and CASCADE paths [\#216](https://github.com/JarbasHiveMind/HiveMind-core/pull/216) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.11.4a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.4a2) (2026-08-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.4a1...4.11.4a2)
-
-**Merged pull requests:**
-
-- perf: derive the noise PSK once per password and node [\#215](https://github.com/JarbasHiveMind/HiveMind-core/pull/215) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.11.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.4a1) (2026-08-04)
 
@@ -427,15 +427,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
-
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
