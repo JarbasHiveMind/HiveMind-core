@@ -1498,36 +1498,54 @@ class HiveMindListenerProtocol:
 
         message.update_hop_data()
 
-        if message.msg_type == HiveMessageType.HANDSHAKE:
-            self.handle_handshake_message(message, client)
-        elif message.msg_type == HiveMessageType.HELLO:
-            self.handle_hello_message(message, client)
+        # A handler exception must not propagate into the transport: the
+        # websocket layer (and every other transport built on top of this
+        # dispatcher) aborts the raw connection with no close frame on an
+        # uncaught exception, which is indistinguishable from a network drop
+        # to the peer and makes a satellite reconnect forever into the same
+        # fault instead of surfacing it. The invalid-key path already closes
+        # with an explicit code and reason for exactly this reason; a
+        # handler fault gets the same treatment here, once, at the fan-out
+        # shared by every transport.
+        try:
+            if message.msg_type == HiveMessageType.HANDSHAKE:
+                self.handle_handshake_message(message, client)
+            elif message.msg_type == HiveMessageType.HELLO:
+                self.handle_hello_message(message, client)
 
-        # mycroft Message handlers
-        elif message.msg_type == HiveMessageType.BUS:
-            self.handle_bus_message(message, client)
-        elif message.msg_type == HiveMessageType.SHARED_BUS:
-            self.handle_client_shared_bus(message.payload, client)
+            # mycroft Message handlers
+            elif message.msg_type == HiveMessageType.BUS:
+                self.handle_bus_message(message, client)
+            elif message.msg_type == HiveMessageType.SHARED_BUS:
+                self.handle_client_shared_bus(message.payload, client)
 
-        # HiveMessage handlers
-        elif message.msg_type == HiveMessageType.PROPAGATE:
-            self.handle_propagate_message(message, client)
-        elif message.msg_type == HiveMessageType.BROADCAST:
-            self.handle_broadcast_message(message, client)
-        elif message.msg_type == HiveMessageType.ESCALATE:
-            self.handle_escalate_message(message, client)
-        elif message.msg_type == HiveMessageType.QUERY:
-            self.handle_query_message(message, client)
-        elif message.msg_type == HiveMessageType.CASCADE:
-            self.handle_cascade_message(message, client)
-        elif message.msg_type == HiveMessageType.INTERCOM:
-            self.handle_intercom_message(message, client)
-        elif message.msg_type == HiveMessageType.BINARY:
-            self.handle_binary_message(message, client)
-        elif message.msg_type == HiveMessageType.RENDEZVOUS:
-            self.handle_rendezvous_message(message, client)
-        else:
-            self.handle_unknown_message(message, client)
+            # HiveMessage handlers
+            elif message.msg_type == HiveMessageType.PROPAGATE:
+                self.handle_propagate_message(message, client)
+            elif message.msg_type == HiveMessageType.BROADCAST:
+                self.handle_broadcast_message(message, client)
+            elif message.msg_type == HiveMessageType.ESCALATE:
+                self.handle_escalate_message(message, client)
+            elif message.msg_type == HiveMessageType.QUERY:
+                self.handle_query_message(message, client)
+            elif message.msg_type == HiveMessageType.CASCADE:
+                self.handle_cascade_message(message, client)
+            elif message.msg_type == HiveMessageType.INTERCOM:
+                self.handle_intercom_message(message, client)
+            elif message.msg_type == HiveMessageType.BINARY:
+                self.handle_binary_message(message, client)
+            elif message.msg_type == HiveMessageType.RENDEZVOUS:
+                self.handle_rendezvous_message(message, client)
+            else:
+                self.handle_unknown_message(message, client)
+        except Exception:
+            # msg_type is a HiveMessageType enum when built in-process but a
+            # plain str on the wire (HiveMessage.deserialize); format both the same way.
+            msg_type = getattr(message.msg_type, "value", message.msg_type)
+            LOG.exception(f"handle_message: unhandled error in the "
+                           f"{msg_type} handler for {client.peer}")
+            client.disconnect(1011, f"internal error handling {msg_type}")
+            return
 
         self.update_last_seen(client)
 
