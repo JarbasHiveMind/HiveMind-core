@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.1.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.2a1) (2026-09-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.1a2...5.1.2a1)
+
+**Merged pull requests:**
+
+- fix: contain handler exceptions in handle\_message so a satellite gets a close frame [\#321](https://github.com/JarbasHiveMind/HiveMind-core/pull/321) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- fix: derive the Noise PSK off the IOLoop, early, and persist it per client [\#318](https://github.com/JarbasHiveMind/HiveMind-core/pull/318) ([goldyfruit](https://github.com/goldyfruit))
+
 ## [5.1.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.1a2) (2026-09-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.1a1...5.1.1a2)
@@ -338,24 +347,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
-
-**Merged pull requests:**
-
-- fix: send INTERCOM as text on a binarize connection \(WIRE-1 §4.3\) [\#220](https://github.com/JarbasHiveMind/HiveMind-core/pull/220) ([JarbasAl](https://github.com/JarbasAl))
-- fix: give bypass-constructed HiveMindListenerProtocol test fixtures real attribute defaults [\#219](https://github.com/JarbasHiveMind/HiveMind-core/pull/219) ([JarbasAl](https://github.com/JarbasAl))
-
-## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
 
 ## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
 
-**Merged pull requests:**
+## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
-- fix: hold the send lock across encrypt and enqueue [\#217](https://github.com/JarbasHiveMind/HiveMind-core/pull/217) ([JarbasAl](https://github.com/JarbasAl))
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
