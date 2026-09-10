@@ -1,7 +1,9 @@
 # hivemind-core
 # Copyright (C) 2026 Casimiro Ferreira
 # SPDX-License-Identifier: Apache-2.0
-"""Policy admission chain — consumer side of the primitives shipped in
+"""Implements the policy chain of HIVEMIND-POLICY-1.
+
+Policy admission chain — consumer side of the primitives shipped in
 hivemind-plugin-manager (PolicyPlugin / Verdict / Mutation).
 
 Spec: https://github.com/JarbasHiveMind/HiveMind-core/issues/85
