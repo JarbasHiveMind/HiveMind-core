@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.1a1) (2026-09-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.0a2...5.1.1a1)
+
+**Merged pull requests:**
+
+- fix: persist the INTERCOM origin pin in the client database [\#317](https://github.com/JarbasHiveMind/HiveMind-core/pull/317) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [5.1.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.0a2) (2026-09-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.0a1...5.1.0a2)
@@ -345,10 +353,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.0a1...4.12.1a1)
 
-**Merged pull requests:**
-
-- fix: keep the node up when the agent backend or a listener fails [\#214](https://github.com/JarbasHiveMind/HiveMind-core/pull/214) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.12.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.0a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.6a2...4.12.0a1)
@@ -384,10 +388,6 @@
 ## [4.11.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.3a1) (2026-08-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.2a1...4.11.3a1)
-
-**Merged pull requests:**
-
-- fix: correct the misleading admin-bypass note in add-client output [\#213](https://github.com/JarbasHiveMind/HiveMind-core/pull/213) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.11.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.2a1) (2026-08-03)
 
