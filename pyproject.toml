@@ -74,7 +74,7 @@ test = [
 ]
 integration = [
     "hivescope>=0.8.4a1",
-    "ovoscope",
+    "ovoscope>=1.8.5a1",
     "ovos-core>=2.1.6a1",
     "ovos-skill-hello-world",
     # ovos-bus-client 2.x support currently exists only in OVOS pre-releases;
