@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.1.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.3a1) (2026-09-11)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.2a1...5.1.3a1)
+
+**Closed issues:**
+
+- handle\_binary\_message: a raising binary-data plugin kills the connection with no close code [\#316](https://github.com/JarbasHiveMind/HiveMind-core/issues/316)
+
+**Merged pull requests:**
+
+- fix: pin a prerelease floor for ovoscope in the integration extra [\#326](https://github.com/JarbasHiveMind/HiveMind-core/pull/326) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.2a1) (2026-09-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.1a2...5.1.2a1)
@@ -347,15 +359,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
-
-## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
 
 ## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+
+## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
