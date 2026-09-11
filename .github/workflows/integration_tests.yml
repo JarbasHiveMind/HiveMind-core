@@ -1,0 +1,15 @@
+name: Integration Tests (live OVOS)
+
+on:
+  pull_request:
+    branches: [dev, master]
+  workflow_dispatch:
+
+jobs:
+  ovoscope:
+    uses: OpenVoiceOS/gh-automations/.github/workflows/build-tests.yml@dev
+    with:
+      python_versions: '["3.11"]'
+      system_deps: 'python3-dev swig'
+      install_extras: 'integration'
+      test_path: 'tests/e2e/test_query_ovoscope_e2e.py'
