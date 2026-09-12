@@ -17,6 +17,22 @@ from hivemind_core.service import HiveMindService
 from hivemind_core.config import get_server_config
 
 
+#: Upward message types the ser9 QA rig measured an OVOS voice satellite
+#: sending and the hub admitting (333 utterance forwards, see
+#: knowledge/wiki/audits/hivemind/satellite-allowed-types.md). The gate is
+#: not yet twin-aware (T-1023), so the list carries BOTH spellings of the
+#: migration pair: a satellite on an older stack emits the legacy spelling
+#: alone, a modern one the ovos.* form. The sibling pairs (record/volume/
+#: sound/mic) stay out until a measurement shows the satellite sending
+#: them — see the doc's unmeasured-rows rule. `speak`/`speak:b64_audio`
+#: are excluded: they travel master→satellite and the gate stops there
+#: once the downward removal merges.
+VOICE_SATELLITE_DEFAULT_ALLOW = [
+    "recognizer_loop:utterance",
+    "ovos.utterance.handle",
+]
+
+
 def parse_client_metadata(metadata):
     """Parse client metadata from a JSON object string."""
     if metadata is None:
@@ -139,12 +155,25 @@ def derive_psk(password, node_id):
 @click.option("--allow-weak-password", is_flag=True, default=False,
               help="Skip the password-strength check (not recommended). By default a "
                    "guessable/low-entropy --password is refused.")
-def add_client(name, access_key, password, admin, metadata, allow_weak_password):
+@click.option("--allow", "allow_types", multiple=True, required=False, type=str,
+              metavar="<type>",
+              help="Message type the new client MAY send upward. Repeatable. "
+                   "Without it the client gets the measured OVOS voice-satellite "
+                   "defaults (recognizer_loop:utterance + ovos.utterance.handle); "
+                   "grant more with allow-msg afterwards.")
+def add_client(name, access_key, password, admin, metadata, allow_weak_password,
+               allow_types):
     """Add a client, generating any credential the operator did not supply.
 
     The access key admits the client; the password derives the v3 Noise PSK
     (HIVEMIND-CRYPTO-1 §3.4). Those are the only two credentials — the Noise
     handshake is the sole key exchange, so there is no pre-shared crypto key.
+
+    A new client without --allow gets the measured voice-satellite
+    whitelist (both spellings of the utterance pair). The admission gate
+    itself stays deny-by-default (HIVEMIND-POLICY-1 §3); this default
+    lives in the provisioning layer only — pass --allow to inject
+    exactly the types your client needs.
     """
     # Ban low-entropy, guessable passwords at ingestion time. Only a
     # user-supplied password is checked — an auto-generated one is always
@@ -178,8 +207,13 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password)
                 )
         name = name or f"HiveMind-Node-{db.total_clients()}"
         print(f"Database backend: {db.db.__class__.__name__}")
+        # No --allow given: provision the voice-satellite defaults. The
+        # gate itself is never touched — this is the operator's starting
+        # point, and allow-msg/blacklist-msg edit it afterwards.
+        granted = list(allow_types) or list(VOICE_SATELLITE_DEFAULT_ALLOW)
         success = db.add_client(name, access_key, password=password,
-                                admin=admin, metadata=client_metadata)
+                                admin=admin, metadata=client_metadata,
+                                allowed_types=granted)
         if not success:
             raise ValueError(f"Error adding User to database: {name}")
 
@@ -197,6 +231,7 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password)
         if client_metadata is not None:
             print("Metadata:", json.dumps(user.metadata, sort_keys=True, ensure_ascii=False))
 
+        print("Allowed Message Types:", ", ".join(user.allowed_types) or "(none — the client is DENIED on every message)")
         if not user.allowed_types:
             print(
                 "\nNOTE: Allowed message types is empty — this client will be DENIED on every message.\n"
@@ -375,21 +410,44 @@ def export_clients(path):
         print(CSV)
 
 
-@hmcore_cmds.command(help="Allow a message type to be sent from a client.", name="allow-msg")
-@click.argument("msg_type", required=True, type=str)
-@click.argument("node_id", required=False, type=str)
-def allow_msg(msg_type, node_id):
+@hmcore_cmds.command(help="Allow message types to be sent from a client.", name="allow-msg")
+@click.argument("args", required=True, type=str, nargs=-1)
+def allow_msg(args):
+    """Grant message types to a client. Accepts several types in one call.
+
+    ``allow-msg <type>... [node_id]`` — the last argument is the client
+    target when it resolves to a known client id or access key; every
+    other argument is a message type. That keeps the single-type form
+    ``allow-msg recognizer_loop:utterance 17`` and lets an operator grant
+    the full voice pair in one call:
+    ``allow-msg recognizer_loop:utterance ovos.utterance.handle 17``.
+    With no target argument resolve_client prompts, as before.
+    """
     with ClientDatabase() as db:
-        client = resolve_client(db, node_id)
+        types = list(args)
+        node_id = None
+        client = None
+        # the last argument names a known client, it is the target;
+        # resolve it once and keep it, the probe has already found it
+        if types:
+            client = resolve_client(db, types[-1])
+            if client is not None:
+                node_id = types.pop()
+        if client is None:
+            client = resolve_client(db, node_id)
         if client is None:
             print("Invalid Node ID!")
             return
-        if msg_type in client.allowed_types:
-            print(f"Client {client.name} already allowed '{msg_type}'")
-            exit()
-        client.allowed_types.append(msg_type)
+        new = [t for t in types if t not in client.allowed_types]
+        for t in new:
+            client.allowed_types.append(t)
         db.update_item(client)
-        print(f"Allowed '{msg_type}' for {client.name}")
+        name = client.name
+        for t in new:
+            print(f"Allowed '{t}' for {name}")
+        for t in types:
+            if t not in new:
+                print(f"Client {name} already allowed '{t}'")
 
 
 @hmcore_cmds.command(help="Blacklist a message type from a client.", name="blacklist-msg")

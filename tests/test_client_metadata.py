@@ -359,7 +359,10 @@ def test_cli_blacklist_skill_writes_metadata_without_deprecation():
     assert fake_db.get_client_by_api_key("ak").metadata["skill_blacklist"] == ["skill-weather"]
 
 
-def test_cli_add_client_warns_on_empty_allowed_types_even_for_admin():
+def test_cli_add_client_give_admin_the_same_defaults_as_a_satellite():
+    # an admin client is provisioned with the voice-satellite defaults too:
+    # an admin that cannot speak is not useful, and a silently denied admin
+    # was exactly the bug this fixed (T-0887)
     runner = CliRunner()
     fake_db = make_client_db()
     with patch("hivemind_core.scripts.ClientDatabase", return_value=_patched_db_ctx(fake_db)):
@@ -369,5 +372,8 @@ def test_cli_add_client_warns_on_empty_allowed_types_even_for_admin():
              "--allow-weak-password", "--admin", "true"],
         )
     assert result.exit_code == 0, result.output
-    assert "will be DENIED on every message" in result.output
-    assert "admin status does not exempt" in result.output
+    db_client = fake_db.get_client_by_api_key("k")
+    assert db_client.allowed_types == ["recognizer_loop:utterance",
+                                       "ovos.utterance.handle"]
+    assert "Allowed Message Types: recognizer_loop:utterance, ovos.utterance.handle" \
+        in result.output
