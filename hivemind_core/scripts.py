@@ -139,13 +139,25 @@ def derive_psk(password, node_id):
 @click.option("--allow-weak-password", is_flag=True, default=False,
               help="Skip the password-strength check (not recommended). By default a "
                    "guessable/low-entropy --password is refused.")
-def add_client(name, access_key, password, admin, metadata, allow_weak_password):
+@click.option("--allow", "allow_types", multiple=True, required=False, type=str,
+              metavar="<type>",
+              help="Message type the new client MAY send upward. Repeatable. "
+                   "Without it the client starts with an empty whitelist and is "
+                   "denied on every message until types are granted.")
+def add_client(name, access_key, password, admin, metadata, allow_weak_password,
+               allow_types):
     """Add a client, generating any credential the operator did not supply.
 
     The access key admits the client; the password derives the v3 Noise PSK
     (HIVEMIND-CRYPTO-1 §3.4). Those are the only two credentials — the Noise
     handshake is the sole key exchange, so there is no pre-shared crypto key.
+
+    A new client, admin or not, starts with an empty allowed_types whitelist
+    (deny-by-default, HIVEMIND-POLICY-1 §4) unless --allow names the types it
+    may send. --allow grants exactly the types given, and nothing else.
     """
+    if any(not t.strip() for t in allow_types):
+        raise click.BadParameter("a message type cannot be empty", param_hint="--allow")
     # Ban low-entropy, guessable passwords at ingestion time. Only a
     # user-supplied password is checked — an auto-generated one is always
     # high-entropy. The runtime handshake re-checks as a backstop (see
@@ -178,8 +190,11 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password)
                 )
         name = name or f"HiveMind-Node-{db.total_clients()}"
         print(f"Database backend: {db.db.__class__.__name__}")
+        # exactly the types the operator passed; none means an empty whitelist
+        granted = list(allow_types)
         success = db.add_client(name, access_key, password=password,
-                                admin=admin, metadata=client_metadata)
+                                admin=admin, metadata=client_metadata,
+                                allowed_types=granted)
         if not success:
             raise ValueError(f"Error adding User to database: {name}")
 
@@ -197,6 +212,7 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password)
         if client_metadata is not None:
             print("Metadata:", json.dumps(user.metadata, sort_keys=True, ensure_ascii=False))
 
+        print("Allowed Message Types:", ", ".join(user.allowed_types) or "(none — the client is DENIED on every message)")
         if not user.allowed_types:
             print(
                 "\nNOTE: Allowed message types is empty — this client will be DENIED on every message.\n"
@@ -375,21 +391,41 @@ def export_clients(path):
         print(CSV)
 
 
-@hmcore_cmds.command(help="Allow a message type to be sent from a client.", name="allow-msg")
-@click.argument("msg_type", required=True, type=str)
-@click.argument("node_id", required=False, type=str)
-def allow_msg(msg_type, node_id):
+@hmcore_cmds.command(help="Allow message types to be sent from a client.", name="allow-msg")
+@click.argument("args", required=True, type=str, nargs=-1)
+def allow_msg(args):
+    """Grant message types to a client. Accepts several types in one call.
+
+    ``allow-msg <type> [node_id]`` grants one type; with no node_id it
+    prompts for the client, as before. ``allow-msg <type> <type>... <node_id>``
+    grants several: with two or more arguments the last one MUST be a known
+    client id or access key. If it is not, nothing is granted. This command
+    writes permissions, so a mistyped target fails closed instead of falling
+    back to the prompt, which on a one-client hub picks that client without
+    asking and would store the typo as a message type.
+    """
+    types = list(args)
+    if any(not t.strip() for t in types):
+        print("A message type cannot be empty; nothing was granted.")
+        return
     with ClientDatabase() as db:
-        client = resolve_client(db, node_id)
+        if len(types) == 1:
+            client = resolve_client(db, None)
+        else:
+            client = resolve_client(db, types.pop())
         if client is None:
             print("Invalid Node ID!")
             return
-        if msg_type in client.allowed_types:
-            print(f"Client {client.name} already allowed '{msg_type}'")
-            exit()
-        client.allowed_types.append(msg_type)
+        new = [t for t in types if t not in client.allowed_types]
+        for t in new:
+            client.allowed_types.append(t)
         db.update_item(client)
-        print(f"Allowed '{msg_type}' for {client.name}")
+        name = client.name
+        for t in new:
+            print(f"Allowed '{t}' for {name}")
+        for t in types:
+            if t not in new:
+                print(f"Client {name} already allowed '{t}'")
 
 
 @hmcore_cmds.command(help="Blacklist a message type from a client.", name="blacklist-msg")
