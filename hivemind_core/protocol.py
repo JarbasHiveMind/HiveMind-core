@@ -707,7 +707,7 @@ class HiveMindListenerProtocol:
         self._noise_psks: "OrderedDict[tuple, bytes]" = OrderedDict()
         self.clients = {}
         # TOFU pinning store for INTERCOM origin authentication
-        # (HIVEMIND-CRYPTO-1 §5). Maps a client's access key to the PEM
+        # (HIVEMIND-CRYPTO-1 §4). Maps a client's access key to the PEM
         # public key it presented; once pinned, INTERCOM signatures from that
         # client MUST verify against the pinned key. In-memory for now — pins
         # last for the lifetime of this listener (the Client DB model has no
@@ -779,7 +779,7 @@ class HiveMindListenerProtocol:
 
     @property
     def trusted_pubkeys(self) -> dict:
-        """TOFU pin store for INTERCOM origin authentication (CRYPTO-1 §5).
+        """TOFU pin store for INTERCOM origin authentication (CRYPTO-1 §4).
 
         Maps a client's access key to the PEM public key first seen for it.
         Lazily created so the field default can be ``None`` — a class
@@ -3133,7 +3133,7 @@ class HiveMindListenerProtocol:
                 ciphertext = pybase64.b64decode(pload["ciphertext"])
                 signature = pload.get("signature")
 
-                # HIVEMIND-CRYPTO-1 §5 - the origin signature MUST verify
+                # HIVEMIND-CRYPTO-1 §4 - the origin signature MUST verify
                 # against the TOFU-pinned public key (pinned from the
                 # client's HELLO). Without a pinned/known pubkey, or without
                 # a signature, the origin cannot be authenticated at all -
@@ -3203,7 +3203,7 @@ class HiveMindListenerProtocol:
                 return False
         else:
             # No signed envelope, so no origin signature to verify: this frame
-            # carries no proof of who sent it. HIVEMIND-CRYPTO-1 §5 requires
+            # carries no proof of who sent it. HIVEMIND-CRYPTO-1 §4 requires
             # the origin signature, and every session on this node is
             # encrypted, so an unsigned INTERCOM is dropped. Dropping returns
             # True: consumed here, not relayed nor escalated.
