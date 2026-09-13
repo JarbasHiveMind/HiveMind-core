@@ -1944,9 +1944,22 @@ class HiveMindListenerProtocol:
         except Exception:
             LOG.exception("failed to pin client noise key")
 
-    def _abort_noise_handshake(self, client: HiveMindClientConnection, reason: str):
-        """Fatal Noise handshake failure — reject the connection (§3.3)."""
+    # RFC 6455 §5.5: a control frame payload is at most 125 bytes, and the
+    # close code takes 2 of them; tornado raises ValueError above that, and
+    # the client never sees the close
+    MAX_CLOSE_REASON_BYTES = 123
+
+    def _abort_noise_handshake(self, client: HiveMindClientConnection, reason: str,
+                               close_reason: Optional[str] = None):
+        """Fatal Noise handshake failure — reject the connection (§3.3).
+
+        ``reason`` goes to the node log. The client gets ``close_reason``
+        (default: ``reason``), cut to the close frame limit.
+        """
         LOG.error(f"protocol v3 handshake with {client.peer} FAILED: {reason}")
+        close_reason = reason if close_reason is None else close_reason
+        close_reason = close_reason.encode("utf-8")[:self.MAX_CLOSE_REASON_BYTES]
+        close_reason = close_reason.decode("utf-8", errors="ignore")
         client.noise_handshake = None
         client.noise_transport = None
         # the transport reports the close a few loop turns later; a PSK
@@ -1957,7 +1970,7 @@ class HiveMindListenerProtocol:
         # ring gets a stable code; a caller with a sharper code records first
         self.record_rejection(client, 1008, "noise_handshake_failed")
         self.handle_invalid_key_connected(client)
-        client.disconnect(1008, reason)
+        client.disconnect(1008, close_reason)
 
     def handle_noise_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
@@ -2086,12 +2099,16 @@ class HiveMindListenerProtocol:
         pinned = self._get_pinned_client_noise_key(client)
         if pinned and transport.remote_static_key != pinned:
             self.record_rejection(client, 1008, "noise_pin_mismatch")
+            # name the client by its row id, never by its access key
+            client_id = getattr(client._resolved_user, "client_id", None)
+            node_id = client_id if client_id is not None else "<client id>"
             self._abort_noise_handshake(
                 client,
                 "client Noise static key contradicts the pinned key. If this "
                 "client was reinstalled or moved to new hardware, clear the "
-                f"pin with 'hivemind-core reset-noise-pin {client.key}' and "
-                "let it pair again; otherwise another node is answering for it")
+                f"pin with 'hivemind-core reset-noise-pin {node_id}' and "
+                "let it pair again; otherwise another node is answering for it",
+                close_reason="client Noise static key contradicts the pinned key")
             return
         if not pinned and transport.remote_static_key:
             self._pin_client_noise_key(client, transport.remote_static_key)
