@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.4a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a3) (2026-09-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a2...5.1.4a3)
+
+**Merged pull requests:**
+
+- docs: cite CRYPTO-1 §4 for the INTERCOM origin pin, not §5 [\#332](https://github.com/JarbasHiveMind/HiveMind-core/pull/332) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.4a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a2) (2026-09-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a1...5.1.4a2)
