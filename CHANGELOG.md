@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.1.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a1) (2026-09-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.3a1...5.1.4a1)
+
+**Closed issues:**
+
+- v3-Noise flag-day tail: crypto\_key still referenced across the ecosystem \(some real dev-red\) [\#315](https://github.com/JarbasHiveMind/HiveMind-core/issues/315)
+
+**Merged pull requests:**
+
+- fix: name a missing network transport, and enable only installed ones [\#333](https://github.com/JarbasHiveMind/HiveMind-core/pull/333) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.3a1) (2026-09-11)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.2a1...5.1.3a1)
