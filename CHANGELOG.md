@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.4a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a4) (2026-09-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a3...5.1.4a4)
+
+**Merged pull requests:**
+
+- docs: correct fifteen CRYPTO-1 citations that name the wrong section [\#335](https://github.com/JarbasHiveMind/HiveMind-core/pull/335) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.4a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a3) (2026-09-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a2...5.1.4a3)
@@ -377,10 +385,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.5a1...4.12.5a2)
 
-**Merged pull requests:**
-
-- chore\(ci\): drop the broken, redundant Dependabot config [\#232](https://github.com/JarbasHiveMind/HiveMind-core/pull/232) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.12.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.5a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.4a1...4.12.5a1)
@@ -435,15 +439,15 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
-
-## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
 
 ## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+
+## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
