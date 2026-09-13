@@ -1,6 +1,6 @@
 """reset-noise-pin — the recovery path for a client that lost its Noise key.
 
-CRYPTO-1 §3.4.5 pins a client's static key on first use and the node then
+CRYPTO-1 §3.5 pins a client's static key on first use and the node then
 refuses any v3 handshake presenting a different one. That is the right default
 and it is also a total lockout for a satellite that was reinstalled, reflashed
 or moved to new hardware: the key legitimately changed, and until this command

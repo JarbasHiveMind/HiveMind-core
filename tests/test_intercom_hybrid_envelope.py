@@ -1,4 +1,4 @@
-"""INTERCOM addressed to the hub must decrypt (HIVEMIND-CRYPTO-1 §5).
+"""INTERCOM addressed to the hub must decrypt (HIVEMIND-CRYPTO-1 §4).
 
 ``HiveMessageBusClient.emit_intercom`` produces a **hybrid** envelope: a random
 AES-256-GCM key encrypts the payload and RSA encrypts only that key, because raw
@@ -144,7 +144,7 @@ class TestPlainRsaEnvelopeStillAccepted:
 
 
 class TestOriginStillAuthenticated:
-    """The fix must not weaken CRYPTO-1 §5."""
+    """The fix must not weaken CRYPTO-1 §4."""
 
     def test_a_hybrid_envelope_signed_by_the_wrong_key_is_dropped(self):
         node_key, node_pub = _keypair()

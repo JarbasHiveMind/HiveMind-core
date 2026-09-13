@@ -1,10 +1,10 @@
 """Unauthenticated INTERCOM must be refused when the hub requires crypto.
 
-``handle_intercom_message`` verifies the origin RSA signature (CRYPTO-1 §5)
+``handle_intercom_message`` verifies the origin RSA signature (CRYPTO-1 §4)
 only on the signed-envelope branch (``{"ciphertext": ...}``). The two sibling
 branches — an inner ``HiveMessage`` payload, and a plain dict payload — used
 to dispatch the inner message to the bus with no origin authentication at
-all, so omitting the ``ciphertext`` field walked straight past the §5 check.
+all, so omitting the ``ciphertext`` field walked straight past the §4 check.
 
 Every session on the hub is encrypted (the v3 Noise handshake is the sole
 transport crypto), so an unauthenticated INTERCOM is always dropped — and,
