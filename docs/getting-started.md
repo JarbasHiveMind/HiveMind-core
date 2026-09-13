@@ -13,8 +13,14 @@
 ## Install
 
 ```bash
-pip install hivemind-core
+pip install --pre hivemind-core
 ```
+
+hivemind-core is published as pre-releases, so pass `--pre`. Without it, pip installs
+the last stable release, 4.0.0, and its dependencies. That release predates the
+protocol v3 (Noise) handshake these docs describe and lacks commands such as
+`reset-noise-pin` and `derive-psk`. With uv, the same install is
+`uv pip install --prerelease=allow hivemind-core`.
 
 This installs the HiveMind Core server and the `hivemind-core` CLI. The default transport (WebSocket)
 and the default database backend (SQLite) are pulled in automatically.

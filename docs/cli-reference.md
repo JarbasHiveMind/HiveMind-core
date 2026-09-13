@@ -32,6 +32,7 @@ Commands:
   migrate-db          Copy all clients from one database backend to another
   export-clients      Export clients and credentials to a CSV file
   derive-psk          Derive a pre-shared key from a site password and node id
+  reset-noise-pin     Forget a client's pinned Noise static key
   print-config        Print the server configuration as JSON
   policy list         Print the loaded policy chain
   policy test         Dry-run a message through the policy chain
@@ -269,6 +270,38 @@ hivemind-core derive-psk --password "site-secret" --node-id "kitchen-pi"
 ```
 
 Both flags are mandatory.
+
+---
+
+## `reset-noise-pin`
+
+Forget a client's pinned Noise static key, so that its next connection pins the key it
+presents.
+
+```bash
+hivemind-core reset-noise-pin [NODE_ID]
+```
+
+The node pins a client's Noise static key on its first protocol v3 handshake and refuses
+a later handshake whose key does not match. The refusal says `client Noise static key
+contradicts the pinned key` and names this command. To the client it looks like a
+rejected handshake, much like a wrong key or password.
+
+Run the command only when that client really changed: it was reinstalled, reflashed,
+moved to new hardware, or lost its identity file. The pin is the check that catches
+an impostor.
+
+The pin belongs to the client entry, and so to its access key. Give each device its
+own access key. Two devices that use one access key have two different static keys,
+so each one's handshake contradicts the other's pin, and a reset only helps the device
+that connects next.
+
+Output:
+
+```
+sat-a has no pinned Noise key — nothing to reset
+Forgot the pinned Noise key for sat-a. Its next connection will pin the key it presents.
+```
 
 ---
 
