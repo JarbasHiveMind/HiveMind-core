@@ -123,7 +123,7 @@ def derive_psk(password, node_id):
     """Print the hex-encoded 32-byte Noise PSK to flash onto a constrained device.
 
     Equals ``argon2id(password, SHA-256(node_id))`` — identical to what a capable
-    peer derives at connect time (HIVEMIND-CRYPTO-1 §3.4.4), so the two
+    peer derives at connect time (HIVEMIND-CRYPTO-1 §3.4), so the two
     interoperate with no server-side distinction.
     """
     from poorman_handshake.noise import derive_psk as _derive
@@ -244,7 +244,7 @@ def reset_noise_pin(node_id):
     """Clear the TOFU-pinned Noise static key for one client.
 
     The pin is what stops an unknown key answering for a known client
-    (CRYPTO-1 §3.4.5), so the node refuses any protocol v3 handshake whose
+    (CRYPTO-1 §3.5), so the node refuses any protocol v3 handshake whose
     static key contradicts it. A client that legitimately lost its key —
     reinstalled, reflashed, moved to new hardware, or rebuilt its identity
     file — therefore cannot reconnect at all, and before this command the

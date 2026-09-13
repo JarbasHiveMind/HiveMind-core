@@ -163,7 +163,7 @@ class UnencryptedMessageError(ValueError):
 
     Only HELLO and HANDSHAKE messages may travel unencrypted (they precede the
     v3 Noise session); any other cleartext frame is rejected and the client
-    disconnected (HIVEMIND-CRYPTO-1 §4). A v3 Noise session is always
+    disconnected (HIVEMIND-CRYPTO-1 §3.5). A v3 Noise session is always
     encrypted, so this only ever fires before the handshake completes.
     """
 
@@ -422,7 +422,7 @@ class HiveMindClientConnection:
 
             if self.noise_transport is not None:
                 # protocol v3: every message (HELLO/HANDSHAKE included) is a Noise
-                # transport message — there is no cleartext v3 session (§3.4.5)
+                # transport message — there is no cleartext v3 session (CRYPTO-1 §3.5)
                 if binarize:
                     payload = get_bitstring(hive_type=message.msg_type,
                                             payload=message.payload,
@@ -1846,7 +1846,7 @@ class HiveMindListenerProtocol:
         """Pinned Noise static public key for this client identity, if any.
 
         Pins live in the client database row's metadata (TOFU-then-pin,
-        CRYPTO-1 §3.4.5). Failures are treated as 'not pinned'.
+        CRYPTO-1 §3.5). Failures are treated as 'not pinned'.
         """
         try:
             with self.db:

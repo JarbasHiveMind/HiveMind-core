@@ -240,7 +240,7 @@ def test_replayed_v3_transport_message_is_rejected():
         # replay the captured ciphertext verbatim on the raw websocket:
         # the server's receive nonce has moved on, AEAD fails, the message
         # is rejected and the server tears the session down (CRYPTO-1
-        # §3.4.5). The client then auto-reconnects and completes a FRESH
+        # §3.5). The client then auto-reconnects and completes a FRESH
         # handshake, so observe the teardown as a replaced Noise transport
         # (new CipherStates), not as a permanently absent peer.
         old_transport = client.noise_transport

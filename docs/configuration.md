@@ -110,7 +110,7 @@ The file is created with defaults on first run if absent.
 > **Every session is encrypted.** The v3 Noise handshake is the sole key
 > exchange, so there is no "require crypto" switch. An `INTERCOM` frame that
 > carries no signed envelope proves nothing about its origin, so the server
-> drops it rather than relaying or escalating it (HIVEMIND-CRYPTO-1 §5).
+> drops it rather than relaying or escalating it (HIVEMIND-CRYPTO-1 §4).
 
 ---
 

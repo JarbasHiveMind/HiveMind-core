@@ -7,14 +7,14 @@ is encrypted and the enforcement paths are:
   rejected and the client dropped. HELLO/HANDSHAKE are always accepted in the
   clear (they precede the Noise session). A frame decrypted by the Noise
   transport is accepted.
-- INTERCOM origin authentication (§5): signatures are verified against a
+- INTERCOM origin authentication (CRYPTO-1 §4): signatures are verified against a
   TOFU-pinned public key (pin source = the pubkey presented in HELLO); a
   forged/mismatched signature after pinning is rejected; when no pubkey was
   ever presented, or no signature is carried, the origin cannot be
   authenticated and the message is rejected (fail closed). A rejected
   INTERCOM is dropped at this node: it is not relayed to peers and not
   escalated to the upstream master.
-- Noise handshake abort (§3.4.3): every fatal handshake failure closes 1008,
+- Noise handshake abort (CRYPTO-1 §3.3): every fatal handshake failure closes 1008,
   so a client retrying on a non-1008 close cannot spin forever on a wrong
   PSK, tampered negotiation, or a pinned-key contradiction.
 """
@@ -160,7 +160,7 @@ class TestIntercomSignatureVerification(unittest.TestCase):
 
     def test_no_pubkey_rejects_unverifiable_origin(self):
         # peer never presented a pubkey: origin cannot be authenticated,
-        # fail closed and drop rather than dispatch unverified (CRYPTO-1 §5)
+        # fail closed and drop rather than dispatch unverified (CRYPTO-1 §4)
         self.client.pub_key = None
         with patch("hivemind_core.protocol.LOG") as mock_log:
             assert self.proto.handle_intercom_message(
