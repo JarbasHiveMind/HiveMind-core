@@ -11,7 +11,7 @@ import os
 import threading
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
@@ -211,6 +211,9 @@ class HiveMindClientConnection:
     # Noise message 1 is parked while this connection's pre-shared key is
     # derived off the IOLoop; a second HANDSHAKE frame meanwhile is rejected
     noise_psk_pending: bool = field(default=False, init=False, repr=False)
+    # set once this connection's rejection is in the listener's
+    # recent_rejections ring, so a later hook does not record it twice
+    rejection_recorded: bool = field(default=False, init=False, repr=False)
     # set once this connection is being torn down (a handshake abort, the
     # transport reporting the peer gone) so work parked on it, a PSK
     # derivation in flight, knows not to resume it
@@ -490,13 +493,20 @@ class HiveMindClientConnection:
         """
         return True
 
+    def _reject(self, code: int, reason: str, reason_code: str):
+        """Record ``reason_code`` on the listener, then close with code and reason."""
+        if self.hm_protocol is not None:
+            self.hm_protocol.record_rejection(self, code, reason_code)
+        self.disconnect(code, reason)
+
     def decode(self, payload: str) -> Optional[HiveMessage]:
         encrypted = False
         if self.noise_transport is not None:
             # protocol v3 session: only valid Noise transport messages are
             # accepted; tampering/replay/reordering fails AEAD and is fatal
             if not isinstance(payload, bytes):
-                self.disconnect(1008, "non-Noise message received on a protocol v3 session")
+                self._reject(1008, "non-Noise message received on a protocol v3 session",
+                             "non_noise_frame")
                 raise NoiseTransportFailed(
                     "non-Noise message received on a protocol v3 session")
             try:
@@ -505,7 +515,8 @@ class HiveMindClientConnection:
                 LOG.error(f"rejecting invalid Noise transport message from "
                           f"{self.peer} (tampered, replayed or out-of-order), "
                           "disconnecting")
-                self.disconnect(1008, "invalid Noise transport message (tampered, replayed or out-of-order)")
+                self._reject(1008, "invalid Noise transport message (tampered, replayed or out-of-order)",
+                             "invalid_noise_frame")
                 raise
             if payload is None:
                 # an in-progress multi-frame message: this chunk was buffered
@@ -532,7 +543,8 @@ class HiveMindClientConnection:
                                              HiveMessageType.HANDSHAKE)):
             LOG.error(f"Dropping unencrypted {message.msg_type} message from "
                       f"{self.peer}: server requires crypto")
-            self.disconnect(1008, "unencrypted message rejected: crypto is required")
+            self._reject(1008, "unencrypted message rejected: crypto is required",
+                         "unencrypted_frame")
             raise UnencryptedMessageError(
                 f"unencrypted {message.msg_type} message rejected: "
                 f"crypto is required")
@@ -698,6 +710,21 @@ class HiveMindListenerProtocol:
     shared_bus_callback = None  # passive sharing of slave device bus (info)
     _upstream_hm = None  # HiveMessageBusClient to the upstream master when this node relays
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
+    # size of the recent_rejections ring the node's own operator reads
+    rejection_history_size = 100
+    # The only reasons the ring stores. A close reason can interpolate an
+    # access key or an exception text, so the ring never keeps free text:
+    # any other value is stored as "other".
+    REJECTION_REASONS = frozenset({
+        "invalid_key", "protocol_v3_required", "noise_handshake_failed",
+        "noise_pin_mismatch", "non_noise_frame", "invalid_noise_frame",
+        "unencrypted_frame", "internal_error", "other",
+    })
+    # backing store for ``recent_rejections``; None so a bypass-built
+    # instance still sees a class default. One lock for every instance:
+    # appends are rare and short.
+    _recent_rejections = None
+    _rejections_lock = threading.Lock()
     query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
     default_lang = "en-US"
 
@@ -776,6 +803,17 @@ class HiveMindListenerProtocol:
         # every chain is normalized, including one handed to the constructor
         # by an embedder \u2014 the builtin gates are not opt-out
         self.policy_chain = self._with_builtin_policies(self.policy_chain)
+
+    @property
+    def recent_rejections(self) -> deque:
+        """Recent rejected connections, newest last: time, peer, close code
+        and reason. For this node's operator only (the admin surface); the
+        rejected client gets the close frame and nothing from this ring.
+        """
+        with self._rejections_lock:
+            if self._recent_rejections is None:
+                self._recent_rejections = deque(maxlen=self.rejection_history_size)
+            return self._recent_rejections
 
     @property
     def trusted_pubkeys(self) -> dict:
@@ -1281,6 +1319,7 @@ class HiveMindListenerProtocol:
                 f"(the Noise handshake) and this connection cannot offer it"
             )
             self.handle_invalid_protocol_version(client)
+            self.record_rejection(client, 1008, "protocol_v3_required")
             client.disconnect(1008, "this node requires protocol v3 (the Noise handshake)")
             return
 
@@ -1408,7 +1447,41 @@ class HiveMindListenerProtocol:
         message = Message("hive.client.disconnect", {"key": client.key}, context)
         self._emit_lifecycle(client, message)
 
+    def record_rejection(self, client: HiveMindClientConnection, code: int, reason: str):
+        """Add one rejected connection to the bounded ``recent_rejections`` ring.
+
+        The entry carries the time, the peer, the close code and a stable
+        reason from ``REJECTION_REASONS``. Free text is never stored: a close
+        reason can carry the access key (the pin-mismatch hint) or exception
+        text, so an unknown reason is stored as ``"other"``.
+        """
+        if client.rejection_recorded:
+            return
+        client.rejection_recorded = True
+        if reason not in self.REJECTION_REASONS:
+            reason = "other"
+        entry = {"time": time.time(), "peer": client.peer,
+                 "code": code, "reason": reason}
+        ring = self.recent_rejections
+        with self._rejections_lock:
+            ring.append(entry)
+
+    def get_recent_rejections(self, max_age: Optional[float] = None) -> List[dict]:
+        """Return copies of the recorded rejections, newest first.
+
+        Args:
+            max_age: when set, only entries younger than this many seconds.
+        """
+        now = time.time()
+        ring = self.recent_rejections
+        with self._rejections_lock:
+            entries = [dict(e) for e in ring]
+        if max_age is not None:
+            entries = [e for e in entries if now - e["time"] <= max_age]
+        return list(reversed(entries))
+
     def handle_invalid_key_connected(self, client: HiveMindClientConnection):
+        self.record_rejection(client, 1008, "invalid_key")
         try:
             self.callbacks.on_invalid_key(client)
         except:
@@ -1544,6 +1617,7 @@ class HiveMindListenerProtocol:
             msg_type = getattr(message.msg_type, "value", message.msg_type)
             LOG.exception(f"handle_message: unhandled error in the "
                            f"{msg_type} handler for {client.peer}")
+            self.record_rejection(client, 1011, "internal_error")
             client.disconnect(1011, f"internal error handling {msg_type}")
             return
 
@@ -1879,6 +1953,9 @@ class HiveMindListenerProtocol:
         # derivation parked on this connection must not resume in between
         client.disconnected = True
         client.noise_psk_pending = False
+        # the close reason is free text and can name the access key, so the
+        # ring gets a stable code; a caller with a sharper code records first
+        self.record_rejection(client, 1008, "noise_handshake_failed")
         self.handle_invalid_key_connected(client)
         client.disconnect(1008, reason)
 
@@ -1994,6 +2071,10 @@ class HiveMindListenerProtocol:
                 self._abort_noise_handshake(client, f"handshake failure: {e}")
                 return
 
+        self._finish_noise_handshake(client)
+
+    def _finish_noise_handshake(self, client: HiveMindClientConnection):
+        """Split() the finished handshake, check the pinned key, start the transport."""
         # handshake complete -> Split(); transport CipherStates take over
         try:
             transport = NoiseTransport(client.noise_handshake)
@@ -2004,6 +2085,7 @@ class HiveMindListenerProtocol:
         # TOFU-then-pin the node's static key (§3.5)
         pinned = self._get_pinned_client_noise_key(client)
         if pinned and transport.remote_static_key != pinned:
+            self.record_rejection(client, 1008, "noise_pin_mismatch")
             self._abort_noise_handshake(
                 client,
                 "client Noise static key contradicts the pinned key. If this "
