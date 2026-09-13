@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.4a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a2) (2026-09-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a1...5.1.4a2)
+
+**Merged pull requests:**
+
+- docs: pre-release install, several nodes on one machine, reset-noise-pin [\#334](https://github.com/JarbasHiveMind/HiveMind-core/pull/334) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a1) (2026-09-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.3a1...5.1.4a1)
@@ -419,15 +427,15 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
-
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
