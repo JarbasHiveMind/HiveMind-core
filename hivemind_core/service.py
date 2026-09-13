@@ -25,6 +25,22 @@ from hivemind_core.protocol import HiveMindListenerProtocol, ClientCallbacks
 from hivemind_plugin_manager import AgentProtocolFactory, NetworkProtocolFactory, BinaryDataHandlerProtocolFactory
 from hivemind_plugin_manager.protocols import BinaryDataHandlerProtocol
 
+#: The package that provides each network transport hivemind-core enables by
+#: default. The entry point name is not the name a user installs.
+_TRANSPORT_PACKAGES = {
+    "hivemind-websocket-plugin": "hivemind-websocket-protocol",
+    "hivemind-http-plugin": "hivemind-http-protocol",
+}
+
+
+def _missing_transport_message(name: str) -> str:
+    """The one log line for a transport that is enabled but not installed."""
+    package = _TRANSPORT_PACKAGES.get(name)
+    install = f"install {package}" if package else "install the package that provides it"
+    return (f"network transport '{name}' is enabled in server.json "
+            f"(network_protocol) but is not installed: {install}, or remove "
+            f"'{name}' from network_protocol. The other transports still start.")
+
 
 def get_agent_protocol():
     config = get_server_config()["agent_protocol"]
@@ -450,6 +466,15 @@ class HiveMindService:
         for plug_name, plug_conf in get_server_config()["network_protocol"].items():
             try:
                 network_class = NetworkProtocolFactory.get_class(plug_name)
+            except KeyError:
+                # not installed: the factory's KeyError is expected here, and a
+                # traceback would read as a crash; say what to install instead
+                LOG.error(_missing_transport_message(plug_name))
+                continue
+            except Exception:  # noqa: BLE001 - any other load failure keeps its traceback
+                LOG.exception(f"Failed to load plugin '{plug_name}'")
+                continue
+            try:
                 LOG.info(f"Network protocol: {network_class.__name__}")
                 protos.append(network_class(hm_protocol=hm_protocol, config=plug_conf))
             except Exception:

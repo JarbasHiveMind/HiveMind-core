@@ -222,6 +222,13 @@ Multiple plugins run simultaneously (e.g. WebSocket + HTTP).
 | `hivemind-websocket-plugin` | `hivemind-websocket-protocol` | 5678 |
 | `hivemind-http-plugin` | `hivemind-http-protocol` | 5679 |
 
+hivemind-core depends only on `hivemind-websocket-protocol`. On the first run it
+writes this block with only the transports that are installed, so
+`hivemind-http-plugin` is included only when `hivemind-http-protocol` is
+installed. To add it later, install the package and add the block by hand.
+A transport named here that is not installed is skipped at startup: the log
+names the package to install, and the other transports still start.
+
 **TLS example** (generate a self-signed cert first):
 
 ```json

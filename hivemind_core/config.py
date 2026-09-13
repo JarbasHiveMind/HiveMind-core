@@ -4,6 +4,7 @@
 import os.path
 from typing import Mapping, Optional
 
+from hivemind_plugin_manager import HiveMindPluginTypes, find_plugins
 from json_database import JsonStorageXDG
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_config_home, xdg_data_home
@@ -148,6 +149,32 @@ def _default_database() -> dict:
             module: {"name": "clients", "subfolder": "hivemind-core"}}
 
 
+def _first_run_defaults(defaults: dict) -> dict:
+    """The defaults written to server.json on the first run.
+
+    ``network_protocol`` keeps only the transports that are installed. Its
+    sub-keys are the set of enabled transports, and hivemind-core depends only
+    on the WebSocket one: writing ``hivemind-http-plugin`` without
+    ``hivemind-http-protocol`` installed made every start log a missing
+    transport. ``_DEFAULT`` and an existing server.json are not changed.
+    """
+    try:
+        installed = find_plugins(HiveMindPluginTypes.NETWORK_PROTOCOL)
+    except Exception:  # noqa: BLE001 - never block the first write
+        LOG.exception("could not list the installed network transports; "
+                      "writing every default transport")
+        return defaults
+    enabled = {name: conf for name, conf in defaults["network_protocol"].items()
+               if name in installed}
+    if not enabled:
+        return defaults
+    skipped = [name for name in defaults["network_protocol"] if name not in enabled]
+    if skipped:
+        LOG.info(f"first run: not enabling network transports that are not "
+                 f"installed: {skipped}")
+    return {**defaults, "network_protocol": enabled}
+
+
 def get_server_config() -> JsonStorageXDG:
     """from ~/.config/hivemind-core/server.json """
     defaults = {**_DEFAULT, "database": _default_database()}
@@ -155,7 +182,7 @@ def get_server_config() -> JsonStorageXDG:
                           xdg_folder=xdg_config_home(),
                           subfolder="hivemind-core")
     if not os.path.isfile(db.path):
-        db.merge(defaults)
+        db.merge(_first_run_defaults(defaults))
         db.store()
     # ensure all top level keys are present
     for k, v in defaults.items():
