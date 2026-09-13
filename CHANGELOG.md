@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.1.4a5](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a5) (2026-09-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a4...5.1.4a5)
+
+**Merged pull requests:**
+
+- chore: raise hivescope floor to \>=0.8.6a1 [\#339](https://github.com/JarbasHiveMind/HiveMind-core/pull/339) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.1.4a4](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.4a4) (2026-09-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a3...5.1.4a4)
@@ -355,7 +363,6 @@
 **Merged pull requests:**
 
 - fix: accept the hybrid INTERCOM envelope the client actually sends [\#236](https://github.com/JarbasHiveMind/HiveMind-core/pull/236) ([JarbasAl](https://github.com/JarbasAl))
-- docs: correct claims that no longer match the code [\#234](https://github.com/JarbasHiveMind/HiveMind-core/pull/234) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.8a1) (2026-08-10)
 
@@ -376,10 +383,6 @@
 ## [4.12.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.6a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.5a2...4.12.6a1)
-
-**Merged pull requests:**
-
-- fix: give \_forwarded\_flood\_ids a bypass-safe default [\#235](https://github.com/JarbasHiveMind/HiveMind-core/pull/235) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.5a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.5a2) (2026-08-10)
 
