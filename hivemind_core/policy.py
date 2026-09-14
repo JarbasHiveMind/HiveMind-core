@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 from hivemind_plugin_manager import (DenyCodes, PolicyPlugin,
                                      PolicyPluginFactory, Verdict)
 from ovos_bus_client.message import Message
+from ovos_spec_tools import migration_counterpart
 from ovos_utils.log import LOG
 
 if TYPE_CHECKING:
@@ -345,14 +346,21 @@ class MessageTypeACLPolicy(PolicyPlugin):
             )
 
         msg_type = message.msg_type
-        if msg_type not in allowed:
-            return Verdict.deny(
-                DenyCodes.ACL_DISALLOWED_TYPE,
-                f"{msg_type} not in allowed_types",
-                msg_type=msg_type,
-                allowed=allowed,
-            )
-        return Verdict.allow()
+        if msg_type in allowed:
+            return Verdict.allow()
+        # The outbound gate ( OVOSAgentProtocol._type_allowed ) admits either
+        # spelling of a migrated (legacy vs ovos.*) pair; the inbound gate on
+        # the same allowed_types list must agree, or a satellite granted the
+        # legacy spelling is denied the spec spelling of the same message.
+        twin = migration_counterpart(msg_type)
+        if twin is not None and twin in allowed:
+            return Verdict.allow()
+        return Verdict.deny(
+            DenyCodes.ACL_DISALLOWED_TYPE,
+            f"{msg_type} not in allowed_types",
+            msg_type=msg_type,
+            allowed=allowed,
+        )
 
     def review_binary(self, payload: bytes,
                       client: "HiveMindClientConnection") -> Verdict:
