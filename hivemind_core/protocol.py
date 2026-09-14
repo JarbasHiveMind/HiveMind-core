@@ -959,10 +959,9 @@ class HiveMindListenerProtocol:
     # how many distinct passwords keep a derived PSK in memory at once
     NOISE_PSK_CACHE_SIZE = 256
     # Threads deriving PSKs off the IOLoop. argon2-cffi releases the GIL, but
-    # every derivation holds a 64 MiB arena, so keep this small. The pool is
-    # never shut down: the listener has no stop method, and at interpreter
-    # exit the worker threads finish their current derivation (well under a
-    # second each) and drop anything still queued.
+    # every derivation holds a 64 MiB arena, so keep this small. ``shutdown()``
+    # releases the pool; a process that never calls it keeps two idle threads
+    # until interpreter exit, which is what a long-lived server wants anyway.
     NOISE_PSK_WORKERS = 2
     # Client-row metadata keys holding the persisted PSK and the binding
     # that says which (node id, password) pair it was derived for. They live
@@ -992,6 +991,28 @@ class HiveMindListenerProtocol:
         if self._noise_psk_lock is None:
             self._noise_psk_lock = threading.Lock()
         return self._noise_psk_lock
+
+    def shutdown(self) -> None:
+        """Release the PSK derivation pool.
+
+        The pool is lazily created and its worker threads outlive the protocol
+        object, because nothing holds a reference back to them. A long-lived
+        server never notices: two idle threads cost nothing and the process
+        ends with them. A process that builds and drops listeners — an
+        embedded hub, a test suite, an integration that unloads and reloads —
+        accumulates two threads per listener instead, and a test harness that
+        checks for lingering threads at teardown reports the leak as a
+        failure of whatever ran last.
+
+        Queued derivations are cancelled and running ones are not waited for:
+        a derivation whose listener is gone has nobody to hand a key to, and
+        each one holds a 64 MiB arena for about a second.
+
+        Idempotent, and safe on a listener that never derived a PSK.
+        """
+        executor, self._noise_psk_executor = self._noise_psk_executor, None
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def _noise_psk_key(self, password: Union[str, bytes]) -> Tuple[bytes, str]:
         if isinstance(password, str):
