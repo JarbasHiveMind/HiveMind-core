@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.1a1) (2026-09-14)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.0a1...5.2.1a1)
+
+**Merged pull requests:**
+
+- fix\(noise\): short pin-mismatch close reason, no access key in the log [\#345](https://github.com/JarbasHiveMind/HiveMind-core/pull/345) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.0a1) (2026-09-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.4a5...5.2.0a1)
@@ -379,10 +387,6 @@
 ## [4.12.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.7a1) (2026-08-10)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.6a1...4.12.7a1)
-
-**Merged pull requests:**
-
-- fix: keep defaults for a partially specified config block [\#238](https://github.com/JarbasHiveMind/HiveMind-core/pull/238) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.6a1) (2026-08-10)
 
