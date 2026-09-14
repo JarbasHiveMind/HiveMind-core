@@ -2099,8 +2099,9 @@ class HiveMindListenerProtocol:
         pinned = self._get_pinned_client_noise_key(client)
         if pinned and transport.remote_static_key != pinned:
             self.record_rejection(client, 1008, "noise_pin_mismatch")
-            # name the client by its row id, never by its access key
-            client_id = getattr(client._resolved_user, "client_id", None)
+            # name the client by its row id, never by its access key. A warm
+            # PSK cache skips the row lookup, so resolve the row here.
+            client_id = getattr(self._noise_psk_row(client), "client_id", None)
             node_id = client_id if client_id is not None else "<client id>"
             self._abort_noise_handshake(
                 client,
