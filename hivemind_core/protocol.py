@@ -715,10 +715,15 @@ class HiveMindListenerProtocol:
     # The only reasons the ring stores. A close reason can interpolate an
     # access key or an exception text, so the ring never keeps free text:
     # any other value is stored as "other".
+    # "invalid_authorization" is recorded by a network protocol plugin, not
+    # by this class: a connection whose credential cannot be decoded is
+    # refused before a HiveMindClientConnection exists, so the plugin gives
+    # record_rejection a stand-in peer. The name is registered here so the
+    # operator reads that rejection as itself and not as "other".
     REJECTION_REASONS = frozenset({
-        "invalid_key", "protocol_v3_required", "noise_handshake_failed",
-        "noise_pin_mismatch", "non_noise_frame", "invalid_noise_frame",
-        "unencrypted_frame", "internal_error", "other",
+        "invalid_key", "invalid_authorization", "protocol_v3_required",
+        "noise_handshake_failed", "noise_pin_mismatch", "non_noise_frame",
+        "invalid_noise_frame", "unencrypted_frame", "internal_error", "other",
     })
     # backing store for ``recent_rejections``; None so a bypass-built
     # instance still sees a class default. One lock for every instance:

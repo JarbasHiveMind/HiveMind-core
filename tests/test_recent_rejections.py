@@ -151,6 +151,36 @@ class TestRecentRejections(unittest.TestCase):
         self.assertEqual([e["peer"] for e in proto.get_recent_rejections(max_age=60)],
                          [new.peer])
 
+    def test_a_pre_authorization_rejection_keeps_its_name(self):
+        """A network protocol plugin records this one with a stand-in peer.
+
+        A websocket whose ``authorization`` argument cannot be decoded is
+        refused before a HiveMindClientConnection exists, so the plugin gives
+        record_rejection an object that carries only ``peer`` and
+        ``rejection_recorded``. The reason must survive as itself, so the
+        operator can tell it from every other unclassified failure.
+        """
+
+        class _UnauthenticatedPeer:
+            __slots__ = ("peer", "rejection_recorded")
+
+            def __init__(self, peer):
+                self.peer = peer
+                self.rejection_recorded = False
+
+        proto = _make_protocol()
+        proto.record_rejection(
+            _UnauthenticatedPeer("203.0.113.9"), 1008, "invalid_authorization")
+        entries = proto.get_recent_rejections()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["reason"], "invalid_authorization")
+        self.assertEqual(entries[0]["peer"], "203.0.113.9")
+
+    def test_an_unknown_reason_is_still_stored_as_other(self):
+        proto = _make_protocol()
+        proto.record_rejection(_make_client(proto), 1008, "invented_reason")
+        self.assertEqual(proto.get_recent_rejections()[0]["reason"], "other")
+
     def test_nothing_sent_to_client(self):
         proto = _make_protocol()
         client = _make_client(proto)
