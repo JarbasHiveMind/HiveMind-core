@@ -615,6 +615,10 @@ class CascadeCollector:
         return resp
 
 
+# Serialises the lazy creation of each listener's PSK lock.
+_PSK_LOCK_CREATION = threading.Lock()
+
+
 @dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
@@ -989,7 +993,10 @@ class HiveMindListenerProtocol:
     @property
     def _psk_lock(self) -> threading.Lock:
         if self._noise_psk_lock is None:
-            self._noise_psk_lock = threading.Lock()
+            # two threads can ask first at once; each must get the same lock
+            with _PSK_LOCK_CREATION:
+                if self._noise_psk_lock is None:
+                    self._noise_psk_lock = threading.Lock()
         return self._noise_psk_lock
 
     def shutdown(self) -> None:
@@ -1010,7 +1017,10 @@ class HiveMindListenerProtocol:
 
         Idempotent, and safe on a listener that never derived a PSK.
         """
-        executor, self._noise_psk_executor = self._noise_psk_executor, None
+        # under the lock: a transport IOLoop thread can be between the pool
+        # check and submit() in _derive_noise_psk_async
+        with self._psk_lock:
+            executor, self._noise_psk_executor = self._noise_psk_executor, None
         if executor is not None:
             executor.shutdown(wait=False, cancel_futures=True)
 
@@ -1193,12 +1203,15 @@ class HiveMindListenerProtocol:
                 # The key exists: hand it over instead of deriving again.
                 self._remember_noise_psk(key, future.result())
                 return future
-        if self._noise_psk_executor is None:
-            self._noise_psk_executor = ThreadPoolExecutor(
-                max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
-        future = asyncio.wrap_future(
-            self._noise_psk_executor.submit(derive_psk, key[0], node_id=self._node_id),
-            loop=loop)
+        # the check and the submit under one lock: shutdown() on another
+        # thread would otherwise clear the pool between them
+        with self._psk_lock:
+            if self._noise_psk_executor is None:
+                self._noise_psk_executor = ThreadPoolExecutor(
+                    max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
+            submitted = self._noise_psk_executor.submit(
+                derive_psk, key[0], node_id=self._node_id)
+        future = asyncio.wrap_future(submitted, loop=loop)
         futures[key] = future
 
         def _derived(done: asyncio.Future) -> None:

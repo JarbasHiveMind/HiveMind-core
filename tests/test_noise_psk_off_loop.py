@@ -553,5 +553,67 @@ class TestShutdownReleasesThePool(unittest.TestCase):
         self.proto.shutdown()
 
 
+    def test_shutdown_during_a_derivation_on_another_thread_does_not_break_it(self):
+        """A transport IOLoop thread and shutdown() must not race on the pool.
+
+        The derivation thread is paused, by a trace function, at the submit()
+        call: after it has checked that a pool exists and before it uses it.
+        shutdown() then runs on a second thread. Without a shared lock it
+        clears the pool in that gap and the resumed derivation raises
+        AttributeError, which aborts the connection.
+        """
+        import linecache
+        import sys
+
+        at_submit = threading.Event()
+        resume = threading.Event()
+        errors = []
+        code = HiveMindListenerProtocol._derive_noise_psk_async.__code__
+
+        def tracer(frame, event, arg):
+            if frame.f_code is not code:
+                return None
+
+            def local(frame, event, arg):
+                line = linecache.getline(code.co_filename, frame.f_lineno)
+                if event == "line" and ".submit(" in line and not at_submit.is_set():
+                    at_submit.set()
+                    resume.wait(timeout=10)
+                return local
+            return local
+
+        def derivation():
+            async def scenario():
+                future = self.proto._derive_noise_psk_async(PASSWORD, None)
+                try:
+                    await future
+                except asyncio.CancelledError:
+                    pass  # shutdown() may cancel it: that is the clean path
+
+            sys.settrace(tracer)
+            try:
+                with patch.object(protocol_module, "derive_psk", return_value=PSK):
+                    asyncio.run(scenario())
+            except BaseException as error:  # noqa: BLE001 - the test reports it
+                errors.append(error)
+            finally:
+                sys.settrace(None)
+
+        deriving = threading.Thread(target=derivation)
+        deriving.start()
+        self.assertTrue(at_submit.wait(timeout=10), "the derivation never reached submit()")
+
+        stopping = threading.Thread(target=self.proto.shutdown)
+        stopping.start()
+        stopping.join(timeout=0.5)  # returns at once without the lock, blocks with it
+        resume.set()
+        deriving.join(timeout=10)
+        stopping.join(timeout=10)
+
+        self.assertFalse(deriving.is_alive())
+        self.assertFalse(stopping.is_alive(), "shutdown() did not return")
+        self.assertEqual(errors, [])
+        self.proto.shutdown()
+
 if __name__ == "__main__":
     unittest.main()
