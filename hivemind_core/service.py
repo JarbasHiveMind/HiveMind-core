@@ -494,4 +494,5 @@ class HiveMindService:
 
         self._stop_presence()
         self._stop_upstream()
+        hm_protocol.shutdown()
         self._status.set_stopping()

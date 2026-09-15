@@ -615,6 +615,10 @@ class CascadeCollector:
         return resp
 
 
+# Serialises the lazy creation of each listener's PSK lock.
+_PSK_LOCK_CREATION = threading.Lock()
+
+
 @dataclass
 class HiveMindListenerProtocol:
     agent_protocol: Optional[AgentProtocol] = None
@@ -964,10 +968,9 @@ class HiveMindListenerProtocol:
     # how many distinct passwords keep a derived PSK in memory at once
     NOISE_PSK_CACHE_SIZE = 256
     # Threads deriving PSKs off the IOLoop. argon2-cffi releases the GIL, but
-    # every derivation holds a 64 MiB arena, so keep this small. The pool is
-    # never shut down: the listener has no stop method, and at interpreter
-    # exit the worker threads finish their current derivation (well under a
-    # second each) and drop anything still queued.
+    # every derivation holds a 64 MiB arena, so keep this small. ``shutdown()``
+    # releases the pool; a process that never calls it keeps two idle threads
+    # until interpreter exit, which is what a long-lived server wants anyway.
     NOISE_PSK_WORKERS = 2
     # Client-row metadata keys holding the persisted PSK and the binding
     # that says which (node id, password) pair it was derived for. They live
@@ -995,8 +998,36 @@ class HiveMindListenerProtocol:
     @property
     def _psk_lock(self) -> threading.Lock:
         if self._noise_psk_lock is None:
-            self._noise_psk_lock = threading.Lock()
+            # two threads can ask first at once; each must get the same lock
+            with _PSK_LOCK_CREATION:
+                if self._noise_psk_lock is None:
+                    self._noise_psk_lock = threading.Lock()
         return self._noise_psk_lock
+
+    def shutdown(self) -> None:
+        """Release the PSK derivation pool.
+
+        The pool is lazily created and its worker threads outlive the protocol
+        object, because nothing holds a reference back to them. A long-lived
+        server never notices: two idle threads cost nothing and the process
+        ends with them. A process that builds and drops listeners — an
+        embedded hub, a test suite, an integration that unloads and reloads —
+        accumulates two threads per listener instead, and a test harness that
+        checks for lingering threads at teardown reports the leak as a
+        failure of whatever ran last.
+
+        Queued derivations are cancelled and running ones are not waited for:
+        a derivation whose listener is gone has nobody to hand a key to, and
+        each one holds a 64 MiB arena for about a second.
+
+        Idempotent, and safe on a listener that never derived a PSK.
+        """
+        # under the lock: a transport IOLoop thread can be between the pool
+        # check and submit() in _derive_noise_psk_async
+        with self._psk_lock:
+            executor, self._noise_psk_executor = self._noise_psk_executor, None
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
 
     def _noise_psk_key(self, password: Union[str, bytes]) -> Tuple[bytes, str]:
         if isinstance(password, str):
@@ -1177,12 +1208,15 @@ class HiveMindListenerProtocol:
                 # The key exists: hand it over instead of deriving again.
                 self._remember_noise_psk(key, future.result())
                 return future
-        if self._noise_psk_executor is None:
-            self._noise_psk_executor = ThreadPoolExecutor(
-                max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
-        future = asyncio.wrap_future(
-            self._noise_psk_executor.submit(derive_psk, key[0], node_id=self._node_id),
-            loop=loop)
+        # the check and the submit under one lock: shutdown() on another
+        # thread would otherwise clear the pool between them
+        with self._psk_lock:
+            if self._noise_psk_executor is None:
+                self._noise_psk_executor = ThreadPoolExecutor(
+                    max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
+            submitted = self._noise_psk_executor.submit(
+                derive_psk, key[0], node_id=self._node_id)
+        future = asyncio.wrap_future(submitted, loop=loop)
         futures[key] = future
 
         def _derived(done: asyncio.Future) -> None:

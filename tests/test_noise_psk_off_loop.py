@@ -487,5 +487,133 @@ class TestBackingFields(unittest.TestCase):
         self.assertEqual(proto._noise_psks, {})
 
 
+class TestShutdownReleasesThePool(unittest.TestCase):
+    """The derivation pool must not outlive the listener that made it.
+
+    Nothing holds a reference from the worker threads back to the protocol, so
+    a dropped listener leaves its two threads running. A long-lived server
+    never notices; a process that builds and drops listeners accumulates two
+    threads each time, and a harness that checks for lingering threads at
+    teardown fails on whatever ran last.
+    """
+
+    def setUp(self):
+        self.proto, self.patcher = _make_protocol(_Row({}))
+        self.addCleanup(self.patcher.stop)
+
+    def test_shutdown_on_a_listener_that_never_derived_is_a_no_op(self):
+        self.assertIsNone(self.proto._noise_psk_executor)
+        self.proto.shutdown()
+        self.assertIsNone(self.proto._noise_psk_executor)
+
+    def test_shutdown_ends_the_worker_threads(self):
+        before = {t for t in threading.enumerate()}
+
+        async def scenario():
+            with patch.object(protocol_module, "derive_psk", return_value=PSK):
+                await self.proto._derive_noise_psk_async(PASSWORD, None)
+                await _settle()
+
+        asyncio.run(scenario())
+        started = [t for t in threading.enumerate()
+                   if t not in before and t.name.startswith("noise-psk")]
+        self.assertTrue(started, "the derivation ran on no worker thread")
+        self.assertIsNotNone(self.proto._noise_psk_executor)
+
+        self.proto.shutdown()
+        for thread in started:
+            thread.join(timeout=10)
+            self.assertFalse(thread.is_alive(), f"{thread.name} outlived shutdown()")
+        self.assertIsNone(self.proto._noise_psk_executor)
+
+    def test_shutdown_is_idempotent(self):
+        async def scenario():
+            with patch.object(protocol_module, "derive_psk", return_value=PSK):
+                await self.proto._derive_noise_psk_async(PASSWORD, None)
+                await _settle()
+
+        asyncio.run(scenario())
+        self.proto.shutdown()
+        self.proto.shutdown()
+
+    def test_a_listener_derives_again_after_shutdown(self):
+        """Shutdown releases the pool; it does not poison the listener."""
+
+        async def scenario():
+            with patch.object(protocol_module, "derive_psk", return_value=PSK):
+                await self.proto._derive_noise_psk_async(PASSWORD, None)
+                await _settle()
+
+        asyncio.run(scenario())
+        self.proto.shutdown()
+        self.proto._noise_psks = {}
+        self.proto._noise_psk_futures = None
+        asyncio.run(scenario())
+        self.assertIsNotNone(self.proto._noise_psk_executor)
+        self.proto.shutdown()
+
+
+    def test_shutdown_during_a_derivation_on_another_thread_does_not_break_it(self):
+        """A transport IOLoop thread and shutdown() must not race on the pool.
+
+        The derivation thread is paused, by a trace function, at the submit()
+        call: after it has checked that a pool exists and before it uses it.
+        shutdown() then runs on a second thread. Without a shared lock it
+        clears the pool in that gap and the resumed derivation raises
+        AttributeError, which aborts the connection.
+        """
+        import linecache
+        import sys
+
+        at_submit = threading.Event()
+        resume = threading.Event()
+        errors = []
+        code = HiveMindListenerProtocol._derive_noise_psk_async.__code__
+
+        def tracer(frame, event, arg):
+            if frame.f_code is not code:
+                return None
+
+            def local(frame, event, arg):
+                line = linecache.getline(code.co_filename, frame.f_lineno)
+                if event == "line" and ".submit(" in line and not at_submit.is_set():
+                    at_submit.set()
+                    resume.wait(timeout=10)
+                return local
+            return local
+
+        def derivation():
+            async def scenario():
+                future = self.proto._derive_noise_psk_async(PASSWORD, None)
+                try:
+                    await future
+                except asyncio.CancelledError:
+                    pass  # shutdown() may cancel it: that is the clean path
+
+            sys.settrace(tracer)
+            try:
+                with patch.object(protocol_module, "derive_psk", return_value=PSK):
+                    asyncio.run(scenario())
+            except BaseException as error:  # noqa: BLE001 - the test reports it
+                errors.append(error)
+            finally:
+                sys.settrace(None)
+
+        deriving = threading.Thread(target=derivation)
+        deriving.start()
+        self.assertTrue(at_submit.wait(timeout=10), "the derivation never reached submit()")
+
+        stopping = threading.Thread(target=self.proto.shutdown)
+        stopping.start()
+        stopping.join(timeout=0.5)  # returns at once without the lock, blocks with it
+        resume.set()
+        deriving.join(timeout=10)
+        stopping.join(timeout=10)
+
+        self.assertFalse(deriving.is_alive())
+        self.assertFalse(stopping.is_alive(), "shutdown() did not return")
+        self.assertEqual(errors, [])
+        self.proto.shutdown()
+
 if __name__ == "__main__":
     unittest.main()
