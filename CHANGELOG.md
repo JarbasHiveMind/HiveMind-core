@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.2.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.3a1) (2026-09-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.2a1...5.2.3a1)
+
+**Merged pull requests:**
+
+- Guarantee each shutdown action independently [\#353](https://github.com/JarbasHiveMind/HiveMind-core/pull/353) ([goldyfruit](https://github.com/goldyfruit))
+- fix: keep the tests out of the developer's own XDG data directory [\#351](https://github.com/JarbasHiveMind/HiveMind-core/pull/351) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- fix: a failed v3 handshake is not an invalid access key [\#350](https://github.com/JarbasHiveMind/HiveMind-core/pull/350) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.2a1) (2026-09-14)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.1a1...5.2.2a1)
@@ -348,10 +358,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.2a1...4.13.3a1)
 
-**Closed issues:**
-
-- PING flood dedup: core and the conformance harness disagree on what a flood is \(nodes below a relay never learn the rest of the hive\) [\#245](https://github.com/JarbasHiveMind/HiveMind-core/issues/245)
-
 **Merged pull requests:**
 
 - fix: dedup PING floods per announcement, so nodes below a relay see the hive [\#250](https://github.com/JarbasHiveMind/HiveMind-core/pull/250) ([JarbasAl](https://github.com/JarbasAl))
@@ -375,10 +381,6 @@
 ## [4.13.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.0a1) (2026-08-11)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.9a1...4.13.0a1)
-
-**Merged pull requests:**
-
-- feat: route RENDEZVOUS to an optional store-and-forward mailbox [\#243](https://github.com/JarbasHiveMind/HiveMind-core/pull/243) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.12.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.9a1) (2026-08-11)
 
