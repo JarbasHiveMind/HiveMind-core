@@ -489,9 +489,20 @@ class HiveMindService:
 
         self._run_network_protocols(protos)
 
-        self._start_presence()
-        wait_for_exit_signal()  # block until ctrl+c
-
-        self._stop_presence()
-        self._stop_upstream()
-        self._status.set_stopping()
+        try:
+            self._start_presence()
+            wait_for_exit_signal()  # block until ctrl+c
+        finally:
+            # Nested, so each cleanup action happens whatever the one before it
+            # did. As three bare statements, a raising _stop_presence() skipped
+            # both the upstream disconnect and the status transition -- and
+            # without a `finally` at all, anything raised by wait_for_exit_signal
+            # or _start_presence skipped all three, leaving a service that still
+            # advertised itself and still reported ready while it was gone.
+            try:
+                self._stop_presence()
+            finally:
+                try:
+                    self._stop_upstream()
+                finally:
+                    self._status.set_stopping()
