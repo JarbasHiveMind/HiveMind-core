@@ -262,8 +262,9 @@ class TestOffLoopHandshake(unittest.TestCase):
             client.send.assert_not_called()
             self.assertIsNone(client.noise_handshake)
             self.assertEqual(len(self.executor.pending), 1)
-            self.executor.finish(result=real_psk)
-            await self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)]
+            shared = asyncio.wrap_future(self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)])
+            self.executor.finish(result=real_psk)  # drops the entry the instant it completes
+            await shared
             await _settle()
 
         asyncio.run(scenario())
@@ -296,9 +297,11 @@ class TestOffLoopHandshake(unittest.TestCase):
     def test_concurrent_connections_share_one_derivation(self):
         async def scenario():
             futures = [self.proto._derive_noise_psk_async(PASSWORD, None) for _ in range(20)]
-            self.assertEqual(len({id(f) for f in futures}), 1)
+            # one view per caller, all of them on this loop, one derivation
+            self.assertEqual(len({id(f) for f in futures}), 20)
+            self.assertEqual(len(self.executor.pending), 1)
             self.executor.finish()
-            await futures[0]
+            self.assertEqual(set(await asyncio.gather(*futures)), {PSK})
             await _settle()
 
         asyncio.run(scenario())
@@ -315,8 +318,9 @@ class TestOffLoopHandshake(unittest.TestCase):
             self.proto.handle_noise_handshake_message(message, client)
             self.assertTrue(client.noise_psk_pending)
             self.assertEqual(len(self.executor.pending), 1, "message 1 joined the prewarm")
-            self.executor.finish()
-            await self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)]
+            shared = asyncio.wrap_future(self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)])
+            self.executor.finish()  # drops the entry the instant it completes
+            await shared
             await _settle()
 
         asyncio.run(scenario())
@@ -331,8 +335,9 @@ class TestOffLoopHandshake(unittest.TestCase):
             self.proto.handle_noise_handshake_message(message, client)
             self.assertTrue(client.noise_psk_pending)
             self.proto.handle_client_disconnected(client)
-            self.executor.finish()
-            await self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)]
+            shared = asyncio.wrap_future(self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)])
+            self.executor.finish()  # drops the entry the instant it completes
+            await shared
             await _settle()
 
         asyncio.run(scenario())
@@ -349,8 +354,9 @@ class TestOffLoopHandshake(unittest.TestCase):
         async def scenario():
             self.proto.handle_noise_handshake_message(message, client)
             self.proto._abort_noise_handshake(client, "duplicate")
-            self.executor.finish()
-            await self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)]
+            shared = asyncio.wrap_future(self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)])
+            self.executor.finish()  # drops the entry the instant it completes
+            await shared
             await _settle()
 
         asyncio.run(scenario())
@@ -364,12 +370,13 @@ class TestOffLoopHandshake(unittest.TestCase):
 
         async def scenario():
             self.proto.handle_noise_handshake_message(message, client)
+            shared = asyncio.wrap_future(self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)])
             worker = threading.Thread(
                 target=self.executor.pending[0].set_exception, args=(RuntimeError("argon2"),))
             worker.start()
             worker.join()
             with self.assertRaises(RuntimeError):
-                await self.proto._noise_psk_futures[(PASSWORD.encode(), NODE_ID)]
+                await shared
             await _settle()
 
         with patch.object(protocol_module.LOG, "error") as error:
@@ -408,17 +415,23 @@ class TestOffLoopHandshake(unittest.TestCase):
         self.assertEqual(self.executor.pending, [], "nothing went through the pool")
         self.assertIn((PASSWORD.encode(), NODE_ID), self.proto._noise_psks)
 
-    def test_a_future_from_a_closed_loop_is_replaced(self):
+    def test_a_derivation_started_on_a_closed_loop_is_shared_not_restarted(self):
+        """The shared entry belongs to no loop: a loop that closes with the
+        derivation unfinished leaves it running, and the next caller on a
+        fresh loop joins it instead of paying for argon2 again."""
         async def first():
             self.proto._derive_noise_psk_async(PASSWORD, None)
 
         async def second():
             future = self.proto._derive_noise_psk_async(PASSWORD, None)
             self.assertIs(future.get_loop(), asyncio.get_running_loop())
+            self.executor.finish()
+            self.assertEqual(await future, PSK)
 
         asyncio.run(first())  # the loop closes with the derivation unfinished
         asyncio.run(second())
-        self.assertEqual(len(self.executor.pending), 2, "a fresh derivation was started")
+        self.assertEqual(len(self.executor.pending), 1, "one derivation for both loops")
+        self.assertEqual(self.proto._noise_psk_futures, {})
 
 
 class TestCompletedFutureRace(unittest.TestCase):
@@ -581,6 +594,186 @@ class TestIdlePoolIsReleased(unittest.TestCase):
         self.assertEqual(outcome.get("http"), ("ok", True), outcome)
         self.assertTrue(outcome.get("ws"), outcome)
         self.assertEqual(self._wait_for_no_workers(), [])
+
+
+class TestOneDerivationManyLoops(unittest.TestCase):
+    """Each network protocol runs its own event loop on its own thread. Two
+    clients with one shared password over two transports at the same moment
+    used to be handed the same asyncio future, bound to the first loop: an
+    ``await`` on the second loop raised "attached to a different loop", and
+    the handshake path's resume callback for the second client ran on the
+    first transport's thread."""
+
+    def test_each_loop_gets_its_own_future_for_one_derivation(self):
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+        executor = _ManualExecutor()
+        proto._noise_psk_executor = executor
+        a_started = threading.Event()
+        b_attached = threading.Event()
+        seen = {}
+
+        def ws():
+            async def run():
+                future = proto._derive_noise_psk_async("shared-password", None)
+                a_started.set()
+                future.add_done_callback(
+                    lambda _d: seen.__setitem__("ws_callback_thread", threading.current_thread().name))
+                b_attached.wait(5)
+                executor.finish()
+                seen["ws_result"] = await future
+                await _settle()
+            asyncio.run(run())
+
+        def http():
+            async def run():
+                a_started.wait(5)
+                future = proto._derive_noise_psk_async("shared-password", None)
+                seen["http_own_loop"] = future.get_loop() is asyncio.get_running_loop()
+                future.add_done_callback(
+                    lambda _d: seen.__setitem__("http_callback_thread", threading.current_thread().name))
+                b_attached.set()
+                try:
+                    seen["http_result"] = await future
+                except RuntimeError as e:  # "attached to a different loop"
+                    seen["http_result"] = f"{type(e).__name__}: {e}"
+                await _settle()
+            asyncio.run(run())
+
+        thread_a = threading.Thread(target=ws, name="ws")
+        thread_b = threading.Thread(target=http, name="http")
+        thread_a.start()
+        thread_b.start()
+        thread_a.join(10)
+        thread_b.join(10)
+
+        self.assertEqual(len(executor.pending), 1, "one derivation for two loops")
+        self.assertTrue(seen.get("http_own_loop"), seen)
+        self.assertEqual(seen.get("ws_result"), PSK, seen)
+        self.assertEqual(seen.get("http_result"), PSK, seen)
+        self.assertEqual(seen.get("ws_callback_thread"), "ws", seen)
+        self.assertEqual(seen.get("http_callback_thread"), "http", seen)
+        self.assertEqual(proto._noise_psk_futures, {})
+
+    def test_a_parked_handshake_on_the_second_loop_resumes_on_its_own_thread(self):
+        """The real caller: message 1 parked on the HTTP transport's loop
+        while the websocket transport's loop already derives the same
+        password. The HTTP client's handshake continues on the HTTP thread."""
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+        executor = _ManualExecutor()
+        proto._noise_psk_executor = executor
+        a_started = threading.Event()
+        b_parked = threading.Event()
+        seen = {}
+        client = _make_client(proto)
+        _initiator, message = _message_1(client)
+        real_handler = proto.handle_noise_handshake_message
+
+        def spy(msg, conn):
+            seen.setdefault("handler_threads", []).append(threading.current_thread().name)
+            return real_handler(msg, conn)
+
+        def ws():
+            async def run():
+                proto._derive_noise_psk_async(PASSWORD, None)
+                a_started.set()
+                b_parked.wait(5)
+                executor.finish(result=protocol_module.derive_psk(PASSWORD.encode(), node_id=NODE_ID))
+                await asyncio.sleep(0.2)
+            asyncio.run(run())
+
+        def http():
+            async def run():
+                a_started.wait(5)
+                with patch.object(proto, "handle_noise_handshake_message", side_effect=spy):
+                    proto.handle_noise_handshake_message(message, client)
+                    seen["parked"] = client.noise_psk_pending
+                    b_parked.set()
+                    for _ in range(200):
+                        if not client.noise_psk_pending:
+                            break
+                        await asyncio.sleep(0.01)
+            asyncio.run(run())
+
+        thread_a = threading.Thread(target=ws, name="ws")
+        thread_b = threading.Thread(target=http, name="http")
+        thread_a.start()
+        thread_b.start()
+        thread_a.join(10)
+        thread_b.join(10)
+
+        self.assertTrue(seen.get("parked"), seen)
+        self.assertFalse(client.noise_psk_pending)
+        self.assertEqual(len(executor.pending), 1, "message 1 joined the ws derivation")
+        self.assertEqual(seen.get("handler_threads"), ["http", "http"], seen)
+        self.assertEqual(client.send.call_count, 1, "message 2 went out")
+
+    def test_a_loop_closed_mid_derivation_does_not_pin_the_pool(self):
+        """The completion callback lives on the pool's future, not on a loop:
+        when the loop that started the derivation is gone before it finishes,
+        the entry is still dropped and the idle pool still released."""
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+        release = threading.Event()
+
+        def slow(password, node_id=None):
+            release.wait(5)
+            return PSK
+
+        async def start():
+            proto._derive_noise_psk_async(PASSWORD, None)
+
+        with patch.object(protocol_module, "derive_psk", slow):
+            asyncio.run(start())  # the loop closes with the worker still busy
+            self.assertEqual(len(proto._noise_psk_futures), 1)
+            release.set()
+            for _ in range(500):
+                if proto._noise_psk_executor is None:
+                    break
+                threading.Event().wait(0.01)
+
+        self.assertEqual(proto._noise_psk_futures, {}, "the entry was dropped")
+        self.assertIsNone(proto._noise_psk_executor, "the idle pool was released")
+        self.assertIn((PASSWORD.encode(), NODE_ID), proto._noise_psks)
+
+    def test_the_first_callers_share_one_lock(self):
+        """Two loops that touch the pool for the first time in the same
+        instant must end up with one ``_psk_lock``, or the pool section is
+        not mutually exclusive for that pair."""
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+        real_lock = threading.Lock
+        entered = threading.Barrier(2, timeout=0.5)
+
+        class _SlowLockFactory:
+            def __getattr__(self, name):
+                return getattr(threading, name)
+
+            @staticmethod
+            def Lock():
+                # widen the check-then-set window: both first callers are
+                # inside it before either assigns
+                try:
+                    entered.wait()
+                except threading.BrokenBarrierError:
+                    pass
+                return real_lock()
+
+        locks = []
+
+        def first_touch():
+            locks.append(proto._psk_lock)
+
+        with patch.object(protocol_module, "threading", _SlowLockFactory()):
+            threads = [threading.Thread(target=first_touch) for _ in range(2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(10)
+
+        self.assertEqual(len(locks), 2)
+        self.assertIs(locks[0], locks[1], "two first callers minted two locks")
 
 
 class TestBackingFields(unittest.TestCase):
