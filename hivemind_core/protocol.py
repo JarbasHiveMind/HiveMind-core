@@ -964,10 +964,10 @@ class HiveMindListenerProtocol:
     # how many distinct passwords keep a derived PSK in memory at once
     NOISE_PSK_CACHE_SIZE = 256
     # Threads deriving PSKs off the IOLoop. argon2-cffi releases the GIL, but
-    # every derivation holds a 64 MiB arena, so keep this small. The pool is
-    # never shut down: the listener has no stop method, and at interpreter
-    # exit the worker threads finish their current derivation (well under a
-    # second each) and drop anything still queued.
+    # every derivation holds a 64 MiB arena, so keep this small. The listener
+    # has no stop method, so the pool is shut down when it goes idle (no
+    # derivation in flight) and created again for the next one; see
+    # _release_idle_noise_psk_executor.
     NOISE_PSK_WORKERS = 2
     # Client-row metadata keys holding the persisted PSK and the binding
     # that says which (node id, password) pair it was derived for. They live
@@ -1177,19 +1177,26 @@ class HiveMindListenerProtocol:
                 # The key exists: hand it over instead of deriving again.
                 self._remember_noise_psk(key, future.result())
                 return future
-        if self._noise_psk_executor is None:
-            self._noise_psk_executor = ThreadPoolExecutor(
-                max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
-        future = asyncio.wrap_future(
-            self._noise_psk_executor.submit(derive_psk, key[0], node_id=self._node_id),
-            loop=loop)
-        futures[key] = future
+        # Each network protocol runs its own event loop on its own thread, and
+        # they all share this pool. Creating the pool, submitting and recording
+        # the future happen under the lock, so the idle release on another loop
+        # can never shut the pool down between this submit and this insert.
+        with self._psk_lock:
+            if self._noise_psk_executor is None:
+                self._noise_psk_executor = ThreadPoolExecutor(
+                    max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
+            future = asyncio.wrap_future(
+                self._noise_psk_executor.submit(derive_psk, key[0], node_id=self._node_id),
+                loop=loop)
+            futures[key] = future
 
         def _derived(done: asyncio.Future) -> None:
             # only this future's own entry: a same-key caller may already
             # have replaced it, and that replacement must stay shared
-            if futures.get(key) is done:
-                futures.pop(key, None)
+            with self._psk_lock:
+                if futures.get(key) is done:
+                    futures.pop(key, None)
+            self._release_idle_noise_psk_executor()
             if done.cancelled():
                 return
             error = done.exception()
@@ -1203,6 +1210,29 @@ class HiveMindListenerProtocol:
 
         future.add_done_callback(_derived)
         return future
+
+    def _release_idle_noise_psk_executor(self) -> None:
+        """Shut the PSK worker pool down once no derivation is in flight.
+
+        An idle pool keeps its worker threads alive for the life of the
+        process, and a host that checks for lingering threads when it stops
+        (Home Assistant's test harness does) fails on them. The next
+        derivation creates a new pool. Only a pool this class created is shut
+        down; an injected one is left alone.
+
+        Several event loops on several threads share the pool (each network
+        protocol runs its own), so the check and the swap happen under the same
+        lock as the submit and insert in ``_derive_noise_psk_async``. The
+        shutdown itself runs after the lock is released.
+        """
+        with self._psk_lock:
+            executor = self._noise_psk_executor
+            if not isinstance(executor, ThreadPoolExecutor):
+                return
+            if self._noise_psk_futures:
+                return
+            self._noise_psk_executor = None
+        executor.shutdown(wait=False)
 
     def _prewarm_noise_psk(self, client: HiveMindClientConnection) -> None:
         """Start deriving ``client``'s PSK as soon as the offer goes out.

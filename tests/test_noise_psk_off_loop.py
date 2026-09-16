@@ -458,6 +458,131 @@ class TestCompletedFutureRace(unittest.TestCase):
         self.assertEqual(proto._noise_psk_futures, {}, "no stale or orphaned entry")
 
 
+class TestIdlePoolIsReleased(unittest.TestCase):
+    """The worker pool does not outlive the derivations it ran.
+
+    A host that checks for lingering threads when it stops (Home Assistant's
+    test harness) failed on the idle ``noise-psk_0`` worker.
+    """
+
+    @staticmethod
+    def _live_psk_workers():
+        return [t for t in threading.enumerate()
+                if t.name.startswith("noise-psk") and t.is_alive()]
+
+    def _wait_for_no_workers(self, timeout=5.0):
+        deadline = threading.Event()
+        timer = threading.Timer(timeout, deadline.set)
+        timer.start()
+        try:
+            while self._live_psk_workers() and not deadline.is_set():
+                deadline.wait(0.01)
+        finally:
+            timer.cancel()
+        return self._live_psk_workers()
+
+    def test_no_worker_thread_is_left_after_the_derivation(self):
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+
+        async def scenario():
+            future = proto._derive_noise_psk_async(PASSWORD, None)
+            self.assertIsNotNone(future)
+            self.assertEqual(await future, PSK)
+            await _settle()
+
+        with patch.object(protocol_module, "derive_psk", return_value=PSK):
+            asyncio.run(scenario())
+
+        self.assertIsNone(proto._noise_psk_executor)
+        self.assertEqual(self._wait_for_no_workers(), [])
+
+    def test_a_later_derivation_gets_a_new_pool(self):
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+
+        async def derive(password):
+            return await proto._derive_noise_psk_async(password, None)
+
+        with patch.object(protocol_module, "derive_psk", return_value=PSK):
+            self.assertEqual(asyncio.run(derive(PASSWORD)), PSK)
+            self.assertEqual(asyncio.run(derive("another-password")), PSK)
+
+        self.assertEqual(self._wait_for_no_workers(), [])
+
+    def test_an_injected_pool_is_not_shut_down(self):
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+        executor = _ManualExecutor()
+        proto._noise_psk_executor = executor
+
+        async def scenario():
+            future = proto._derive_noise_psk_async(PASSWORD, None)
+            executor.finish()
+            await future
+            await _settle()
+
+        asyncio.run(scenario())
+        self.assertIs(proto._noise_psk_executor, executor)
+
+    def test_a_release_on_one_loop_cannot_shut_the_pool_under_a_submit_on_another(self):
+        """Each network protocol runs its own event loop on its own thread, and
+        all of them share one pool. Loop B ("http") is held inside ``submit``
+        after it has the pool and before its future is recorded; meanwhile loop
+        A ("ws") finishes a derivation and its completion callback checks for
+        an idle pool. Without the lock that callback shut the pool down and B's
+        submit raised "cannot schedule new futures after shutdown", which the
+        handshake path turns into a 1011 disconnect.
+        """
+        proto, patcher = _make_protocol(_Row({}))
+        self.addCleanup(patcher.stop)
+        b_in_submit = threading.Event()   # B has the pool and is inside submit
+        a_released = threading.Event()    # A's completion callback has run
+        outcome = {}
+
+        class _HeldSubmitPool(protocol_module.ThreadPoolExecutor):
+            def submit(self, fn, /, *args, **kwargs):
+                if threading.current_thread().name == "http":
+                    b_in_submit.set()
+                    # With the lock held here, A's callback waits for it and
+                    # this wait times out; without the lock A releases the pool.
+                    a_released.wait(1.0)
+                return super().submit(fn, *args, **kwargs)
+
+        def http():
+            async def run():
+                try:
+                    future = proto._derive_noise_psk_async("http-password", None)
+                    outcome["http"] = ("ok", await future == PSK)
+                    await _settle()
+                except Exception as e:  # noqa: BLE001 - the outcome is the assertion
+                    outcome["http"] = ("raised", f"{type(e).__name__}: {e}")
+            asyncio.run(run())
+
+        def ws():
+            async def run():
+                b_in_submit.wait(5)
+                future = proto._derive_noise_psk_async("ws-password", None)
+                outcome["ws"] = await future == PSK
+                await _settle()   # the completion callback runs here
+                a_released.set()
+            asyncio.run(run())
+
+        with patch.object(protocol_module, "ThreadPoolExecutor", _HeldSubmitPool), \
+                patch.object(protocol_module, "derive_psk", lambda p, node_id=None: PSK):
+            thread_b = threading.Thread(target=http, name="http")
+            thread_b.start()
+            self.assertTrue(b_in_submit.wait(5), "loop B never reached submit")
+            thread_a = threading.Thread(target=ws, name="ws")
+            thread_a.start()
+            thread_a.join(10)
+            thread_b.join(10)
+
+        self.assertEqual(outcome.get("http"), ("ok", True), outcome)
+        self.assertTrue(outcome.get("ws"), outcome)
+        self.assertEqual(self._wait_for_no_workers(), [])
+
+
 class TestBackingFields(unittest.TestCase):
     def test_backing_fields_stay_out_of_init_and_repr(self):
         fields = {f.name: f for f in dataclasses.fields(HiveMindListenerProtocol)}
