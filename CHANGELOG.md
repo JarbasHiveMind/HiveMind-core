@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.4a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.4a2) (2026-09-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.4a1...5.2.4a2)
+
+**Merged pull requests:**
+
+- add-client: --allow option and voice-satellite message-type defaults [\#330](https://github.com/JarbasHiveMind/HiveMind-core/pull/330) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.4a1) (2026-09-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.3a1...5.2.4a1)
@@ -374,10 +382,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.1a1...4.13.2a1)
 
-**Merged pull requests:**
-
-- fix: derive the rendezvous mailbox from proven identity, not a declared pubkey [\#248](https://github.com/JarbasHiveMind/HiveMind-core/pull/248) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.1a1) (2026-08-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.0a1...4.13.1a1)
@@ -460,15 +464,15 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
-
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
@@ -492,15 +496,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
-
-## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
 
 ## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+
+## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
