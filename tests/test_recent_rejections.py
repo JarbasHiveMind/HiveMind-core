@@ -190,3 +190,81 @@ class TestRecentRejections(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAHandshakeFailureIsNotAnInvalidKey(unittest.TestCase):
+    """A v3 abort must not tell the operator the access key is wrong.
+
+    The key is looked up and accepted when the transport opens the
+    connection. A handshake that then fails says nothing about the key, and
+    reporting it as an invalid key sent at least one operator hunting a key
+    that was already correct (hivemind-homeassistant#2 is the open-time
+    case; this is the other path to the same words).
+    """
+
+    def _abort(self, reason="this node requires the v3 Noise handshake"):
+        proto = _make_protocol()
+        client = _make_client(proto)
+        emitted = []
+        logged = []
+        with patch.object(proto, "_emit_lifecycle",
+                          side_effect=lambda c, m: emitted.append(m)), \
+                patch("hivemind_core.protocol.LOG.error", side_effect=logged.append):
+            proto._abort_noise_handshake(client, reason)
+        return proto, client, emitted, logged
+
+    def test_the_bus_error_names_the_handshake_not_the_key(self):
+        _, _, emitted, _ = self._abort()
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(emitted[0].data["error"], "protocol v3 handshake failed")
+
+    def test_the_log_does_not_claim_an_invalid_key(self):
+        _, _, _, logged = self._abort()
+        self.assertTrue(logged, "the abort logged nothing")
+        self.assertFalse(
+            any("invalid api key" in line for line in logged),
+            f"a handshake abort still reports an invalid key: {logged}")
+        self.assertTrue(any("Noise handshake failed" in line for line in logged))
+
+    def test_the_handshake_reason_never_reaches_the_bus_or_the_second_line(self):
+        """The reason is free text and can name the access key."""
+        _, _, emitted, logged = self._abort(
+            reason="pinned key mismatch for secret-access-key")
+        self.assertNotIn("secret-access-key", emitted[0].data["error"])
+        second_lines = [line for line in logged if "FAILED:" not in line]
+        self.assertTrue(second_lines)
+        for line in second_lines:
+            self.assertNotIn("secret-access-key", line)
+
+    def test_the_rejection_ring_still_says_handshake(self):
+        proto, _, _, _ = self._abort()
+        entries = proto.get_recent_rejections()
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["reason"], "noise_handshake_failed")
+
+    def test_the_open_time_path_is_unchanged(self):
+        proto = _make_protocol()
+        client = _make_client(proto)
+        emitted = []
+        logged = []
+        with patch.object(proto, "_emit_lifecycle",
+                          side_effect=lambda c, m: emitted.append(m)), \
+                patch("hivemind_core.protocol.LOG.error", side_effect=logged.append):
+            proto.handle_invalid_key_connected(client)
+        self.assertEqual(emitted[0].data["error"], "invalid access key")
+        self.assertIn("Client provided an invalid api key", logged)
+        self.assertEqual(proto.get_recent_rejections()[0]["reason"], "invalid_key")
+
+    def test_both_paths_still_fire_the_invalid_key_callbacks(self):
+        """Dropping these would make rejections vanish from the panel's counters."""
+        for abort in (True, False):
+            proto = _make_protocol()
+            proto.callbacks = MagicMock()
+            client = _make_client(proto)
+            with patch.object(proto, "_emit_lifecycle"):
+                if abort:
+                    proto._abort_noise_handshake(client, "some reason")
+                else:
+                    proto.handle_invalid_key_connected(client)
+            proto.callbacks.on_invalid_key.assert_called_once_with(client)
+            proto.agent_protocol.callbacks.on_invalid_key.assert_called_once_with(client)

@@ -1485,7 +1485,29 @@ class HiveMindListenerProtocol:
             entries = [e for e in entries if now - e["time"] <= max_age]
         return list(reversed(entries))
 
-    def handle_invalid_key_connected(self, client: HiveMindClientConnection):
+    def handle_invalid_key_connected(self, client: HiveMindClientConnection,
+                                     *,
+                                     error: str = "invalid access key",
+                                     log_message: str = "Client provided an invalid api key"):
+        """Reject a connection and tell every protocol it was rejected.
+
+        Named for the case that reaches it first: a transport looked the
+        access key up, found nothing, and closed. A second caller reaches it
+        with a key that is perfectly valid — a v3 Noise handshake that cannot
+        complete — and the operator was then told the key was wrong, which
+        sent at least one of them hunting a key that was already correct.
+
+        ``error`` and ``log_message`` let that caller say what actually
+        happened. Both must be stable text the caller chose. A Noise failure
+        reason is free text that can name the access key (the pin-mismatch
+        hint does), and this text goes to the log and onto the bus, so it is
+        never passed through from a handshake.
+
+        The ``on_invalid_key`` callbacks fire either way. They are how the
+        admin panel and the agent protocol count a refused connection, and a
+        connection was refused; dropping them to fix the wording would make
+        rejections disappear from those counters.
+        """
         self.record_rejection(client, 1008, "invalid_key")
         try:
             self.callbacks.on_invalid_key(client)
@@ -1502,10 +1524,10 @@ class HiveMindListenerProtocol:
         except:
             LOG.exception("error on invalid_key agent callback")
 
-        LOG.error("Client provided an invalid api key")
+        LOG.error(log_message)
         message = Message(
             "hive.client.connection.error",
-            {"error": "invalid access key", "peer": client.peer},
+            {"error": error, "peer": client.peer},
             {"source": client.peer},
         )
         self._emit_lifecycle(client, message)
@@ -1974,7 +1996,14 @@ class HiveMindListenerProtocol:
         # the close reason is free text and can name the access key, so the
         # ring gets a stable code; a caller with a sharper code records first
         self.record_rejection(client, 1008, "noise_handshake_failed")
-        self.handle_invalid_key_connected(client)
+        # Not an invalid key: the key was accepted at connection time, and
+        # this connection died on the handshake. ``reason`` is free text that
+        # can name the access key, so it stays in the line above and only a
+        # fixed string goes to the log and the bus.
+        self.handle_invalid_key_connected(
+            client,
+            error="protocol v3 handshake failed",
+            log_message=f"rejecting {client.peer}: the protocol v3 Noise handshake failed")
         client.disconnect(1008, close_reason)
 
     def handle_noise_handshake_message(
