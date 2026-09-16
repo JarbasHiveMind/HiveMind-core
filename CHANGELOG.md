@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.4a1) (2026-09-16)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.3a1...5.2.4a1)
+
+**Merged pull requests:**
+
+- fix: shut the Noise PSK worker pool down when it goes idle [\#338](https://github.com/JarbasHiveMind/HiveMind-core/pull/338) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.3a1) (2026-09-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.2a1...5.2.3a1)
@@ -373,10 +381,6 @@
 ## [4.13.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.1a1) (2026-08-12)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.0a1...4.13.1a1)
-
-**Merged pull requests:**
-
-- fix: give a client that lost its Noise key a way back in [\#246](https://github.com/JarbasHiveMind/HiveMind-core/pull/246) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.0a1) (2026-08-11)
 
