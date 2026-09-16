@@ -3522,7 +3522,9 @@ class HiveMindListenerProtocol:
         # ensure client specific session data is injected in query to ovos
         message = self._install_client_session(message, client)
         if message.msg_type == "speak":
-            message.context["destination"] = ["audio"]  # make audible, this is injected "speak" command
+            # OVOS-MSG-1 §3.3: ``destination`` is a single string. A Message
+            # addresses one consumer or all of them; there is no array form.
+            message.context["destination"] = "audio"  # make audible, this is injected "speak" command
         elif message.context.get("destination") is None:
             message.context["destination"] = "skills"  # ensure not treated as a broadcast
 
