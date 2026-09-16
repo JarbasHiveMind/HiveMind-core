@@ -5,6 +5,7 @@ import dataclasses
 from os.path import isfile
 import ipaddress
 import socket
+import sys
 import threading
 import time
 from typing import Callable, Mapping, Optional, Type
@@ -489,9 +490,29 @@ class HiveMindService:
 
         self._run_network_protocols(protos)
 
-        self._start_presence()
-        wait_for_exit_signal()  # block until ctrl+c
-
-        self._stop_presence()
-        self._stop_upstream()
-        self._status.set_stopping()
+        try:
+            self._start_presence()
+            wait_for_exit_signal()  # block until ctrl+c
+        finally:
+            # Every cleanup action runs, whatever the ones before it did. As
+            # three bare statements the first to raise skipped the rest, and
+            # with no `finally` at all anything raised by _start_presence or
+            # wait_for_exit_signal skipped all three -- leaving a service that
+            # still advertised itself over zeroconf and still reported ready
+            # while it was gone.
+            #
+            # A cleanup failure never replaces the failure that brought us
+            # here: while an exception is already propagating it is logged and
+            # dropped, so the original traceback survives. On the ordinary path
+            # there is nothing to protect, so the first one is raised.
+            unwinding = sys.exc_info()[0] is not None
+            failures = []
+            for action in (self._stop_presence, self._stop_upstream,
+                           self._status.set_stopping):
+                try:
+                    action()
+                except Exception as error:  # noqa: BLE001 - see above
+                    LOG.exception(f"Shutdown step {action.__name__} failed")
+                    failures.append(error)
+            if failures and not unwinding:
+                raise failures[0]
