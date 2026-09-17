@@ -11,6 +11,7 @@ from rich.prompt import Prompt
 from rich.table import Table
 
 from hivemind_plugin_manager.database import Client
+from ovos_spec_tools import migration_counterpart
 
 from hivemind_core.database import ClientDatabase
 from hivemind_core.service import HiveMindService
@@ -28,6 +29,22 @@ def parse_client_metadata(metadata):
     if not isinstance(parsed, dict):
         raise click.BadParameter("must be a JSON object")
     return parsed
+
+
+def with_migration_twins(types):
+    """Return ``types`` with the migration twin of each one after it, once.
+
+    The message-type gate admits only the strings on the whitelist
+    (HIVEMIND-POLICY-1 §4), so a grant of the legacy spelling does not
+    admit the spec spelling. The CLI writes and removes both spellings of
+    a migration pair together, and the gate stays literal.
+    """
+    out = []
+    for t in types:
+        for s in (t, migration_counterpart(t)):
+            if s and s not in out:
+                out.append(s)
+    return out
 
 
 def prompt_node_id(db: ClientDatabase) -> str:
@@ -424,14 +441,15 @@ def allow_msg(args):
             return
         # each type once: a repeat in one call would store two copies, and
         # one blacklist-msg would then leave the type granted
-        new = [t for t in dict.fromkeys(types) if t not in client.allowed_types]
+        # the migration twin of each type too: the gate matches literal strings
+        new = [t for t in with_migration_twins(types) if t not in client.allowed_types]
         for t in new:
             client.allowed_types.append(t)
         db.update_item(client)
         name = client.name
         for t in new:
             print(f"Allowed '{t}' for {name}")
-        for t in dict.fromkeys(types):
+        for t in with_migration_twins(types):
             if t not in new:
                 print(f"Client {name} already allowed '{t}'")
 
@@ -445,14 +463,17 @@ def blacklist_msg(msg_type, node_id):
         if client is None:
             print("Invalid Node ID!")
             return
-        if msg_type not in client.allowed_types:
+        # the migration twin too: allow-msg grants both spellings of a pair
+        revoked = [t for t in with_migration_twins([msg_type]) if t in client.allowed_types]
+        if not revoked:
             print(f"Client '{client.name}' message already blacklisted: '{msg_type}'")
             return
         # remove every copy: a row written before repeats were refused can
         # hold the type twice (HIVEMIND-POLICY-1 §4, a revocation takes effect)
-        client.allowed_types = [t for t in client.allowed_types if t != msg_type]
+        client.allowed_types = [t for t in client.allowed_types if t not in revoked]
         db.update_item(client)
-        print(f"Blacklisted '{msg_type}' for {client.name}")
+        for t in revoked:
+            print(f"Blacklisted '{t}' for {client.name}")
 
 
 # HiveMessage type an operator can toggle -> the Client field holding it

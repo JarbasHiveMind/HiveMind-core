@@ -60,6 +60,9 @@ dependencies = [
     "hivemind-ovos-agent-plugin>=0.4.0a1,<1.0.0",
     # transformer pipeline runner services on the text/bus path
     "ovos-plugin-manager>=2.10.0a1,<3.0.0",
+    # 1.7.0a1 has migration_counterpart, which allow-msg and blacklist-msg use
+    # to write and remove both spellings of a migration pair
+    "ovos-spec-tools>=1.7.0a1,<2.0.0",
     "setuptools",
 ]
 
