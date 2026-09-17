@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.7a1) (2026-09-17)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.6a1...5.2.7a1)
+
+**Merged pull requests:**
+
+- fix: store each allowed type once so one blacklist-msg revokes it [\#361](https://github.com/JarbasHiveMind/HiveMind-core/pull/361) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.6a1) (2026-09-17)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.5a1...5.2.6a1)
@@ -370,8 +378,6 @@
 **Merged pull requests:**
 
 - fix: gate QUERY/CASCADE response routing behind the request-path ACL check [\#257](https://github.com/JarbasHiveMind/HiveMind-core/pull/257) ([JarbasAl](https://github.com/JarbasAl))
-- fix: say which node's mailbox answered a RENDEZVOUS request [\#255](https://github.com/JarbasHiveMind/HiveMind-core/pull/255) ([JarbasAl](https://github.com/JarbasAl))
-- fix: answer PING floods when the agent bus is unreachable [\#254](https://github.com/JarbasHiveMind/HiveMind-core/pull/254) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.5a1) (2026-08-13)
 
@@ -427,15 +433,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
-
-## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
 
 ## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+
+## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
