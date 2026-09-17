@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.6a1) (2026-09-17)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.5a1...5.2.6a1)
+
+**Merged pull requests:**
+
+- fix: give each event loop its own view of a shared PSK derivation [\#358](https://github.com/JarbasHiveMind/HiveMind-core/pull/358) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.5a1) (2026-09-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.4a2...5.2.5a1)
@@ -376,7 +384,6 @@
 **Merged pull requests:**
 
 - fix: rename-client must not blank the name it was not given [\#256](https://github.com/JarbasHiveMind/HiveMind-core/pull/256) ([JarbasAl](https://github.com/JarbasAl))
-- fix: generate a node public key when the server has none [\#252](https://github.com/JarbasHiveMind/HiveMind-core/pull/252) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.3a1) (2026-08-12)
 
