@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict, deque
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future as ConcurrentFuture, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from typing import Union, List, Dict, Optional, Callable, Literal, Tuple
@@ -992,11 +992,20 @@ class HiveMindListenerProtocol:
     # its own, and both reach the cache.
     _noise_psk_lock: Optional[threading.Lock] = field(default=None, init=False, repr=False)
 
+    # Serialises the first creation of _psk_lock: two loops that derive for
+    # the first time in the same instant would otherwise each mint a lock,
+    # and the pool section would not be mutually exclusive for that pair.
+    _PSK_LOCK_CREATION = threading.Lock()
+
     @property
     def _psk_lock(self) -> threading.Lock:
-        if self._noise_psk_lock is None:
-            self._noise_psk_lock = threading.Lock()
-        return self._noise_psk_lock
+        lock = self._noise_psk_lock
+        if lock is None:
+            with self._PSK_LOCK_CREATION:
+                lock = self._noise_psk_lock
+                if lock is None:
+                    lock = self._noise_psk_lock = threading.Lock()
+        return lock
 
     def _noise_psk_key(self, password: Union[str, bytes]) -> Tuple[bytes, str]:
         if isinstance(password, str):
@@ -1145,52 +1154,51 @@ class HiveMindListenerProtocol:
         except Exception:
             LOG.exception("failed to persist the derived Noise PSK")
 
-    def _derive_noise_psk_async(
+    def _start_noise_psk_derivation(
             self, password: Union[str, bytes],
-            client: Optional[HiveMindClientConnection]) -> Optional[asyncio.Future]:
-        """Derive the PSK for ``password`` on a worker thread.
+            client: Optional[HiveMindClientConnection]) -> ConcurrentFuture:
+        """Start, or join, the worker-pool derivation of ``password``'s PSK.
 
-        Returns a future resolving to the key, shared by every caller asking
-        for the same password while it is in flight; the LRU and the client
-        row are filled when it completes. Returns None when no event loop is
-        running on this thread (a transport that calls in from its own
-        thread, e.g. MQTT), in which case the caller derives inline.
+        Returns the pool's own future, shared by every caller asking for the
+        same password while it is in flight. It belongs to no event loop:
+        each network protocol runs its own loop on its own thread, and a
+        caller gets its own loop-bound view of it from
+        ``_derive_noise_psk_async``. The LRU and the client row are filled
+        by a completion callback on this future, so they are filled whatever
+        happens to the loop that started it. A key already in memory is
+        handed back as a finished future.
         """
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return None
         key = self._noise_psk_key(password)
-        if self._noise_psk_futures is None:
-            self._noise_psk_futures = {}
-        futures = self._noise_psk_futures
-        future = futures.get(key)
-        if future is not None:
-            if future.get_loop().is_closed():
-                # bound to a loop that is gone: it can never complete
-                futures.pop(key, None)
-            elif not future.done():
-                return future
-            elif not future.cancelled() and future.exception() is None:
-                # Finished, but its completion callback has not run yet
-                # (the callback is queued behind whoever is asking now).
-                # The key exists: hand it over instead of deriving again.
-                self._remember_noise_psk(key, future.result())
-                return future
-        # Each network protocol runs its own event loop on its own thread, and
-        # they all share this pool. Creating the pool, submitting and recording
-        # the future happen under the lock, so the idle release on another loop
-        # can never shut the pool down between this submit and this insert.
+        psk = self._recall_noise_psk(key)
+        if psk is not None:
+            done: ConcurrentFuture = ConcurrentFuture()
+            done.set_result(psk)
+            return done
+        # Creating the pool, submitting and recording the future happen under
+        # the lock, so the idle release on another thread can never shut the
+        # pool down between this submit and this insert.
         with self._psk_lock:
+            if self._noise_psk_futures is None:
+                self._noise_psk_futures = {}
+            futures = self._noise_psk_futures
+            pending = futures.get(key)
+            if pending is not None:
+                return pending
             if self._noise_psk_executor is None:
                 self._noise_psk_executor = ThreadPoolExecutor(
                     max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
-            future = asyncio.wrap_future(
-                self._noise_psk_executor.submit(derive_psk, key[0], node_id=self._node_id),
-                loop=loop)
-            futures[key] = future
+            pending = self._noise_psk_executor.submit(
+                derive_psk, key[0], node_id=self._node_id)
+            futures[key] = pending
 
-        def _derived(done: asyncio.Future) -> None:
+        def _derived(done: ConcurrentFuture) -> None:
+            # Runs on the worker thread that finished the derivation. The
+            # key goes into memory before the entry is dropped, so a caller
+            # arriving in between finds one or the other and never derives
+            # again.
+            failed = done.cancelled() or done.exception() is not None
+            if not failed:
+                self._remember_noise_psk(key, done.result())
             # only this future's own entry: a same-key caller may already
             # have replaced it, and that replacement must stay shared
             with self._psk_lock:
@@ -1205,11 +1213,30 @@ class HiveMindListenerProtocol:
                 LOG.error(f"Noise PSK derivation failed: "
                           f"{type(error).__name__}: {error}")
                 return
-            self._remember_noise_psk(key, done.result())
             self._persist_noise_psk(client, key, done.result())
 
-        future.add_done_callback(_derived)
-        return future
+        pending.add_done_callback(_derived)
+        return pending
+
+    def _derive_noise_psk_async(
+            self, password: Union[str, bytes],
+            client: Optional[HiveMindClientConnection]) -> Optional[asyncio.Future]:
+        """Derive the PSK for ``password`` on a worker thread.
+
+        Returns a future bound to the calling thread's event loop, resolving
+        to the key. Callers asking for the same password while it is in
+        flight share one derivation, but each gets a future on its own loop,
+        so an ``await`` or a done callback on it always runs on the loop, and
+        the thread, that asked. Returns None when no event loop is running
+        on this thread (a transport that calls in from its own thread, e.g.
+        MQTT), in which case the caller derives inline.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return None
+        return asyncio.wrap_future(
+            self._start_noise_psk_derivation(password, client), loop=loop)
 
     def _release_idle_noise_psk_executor(self) -> None:
         """Shut the PSK worker pool down once no derivation is in flight.
@@ -1246,8 +1273,12 @@ class HiveMindListenerProtocol:
             return
         password = client.pswd_handshake.password
         try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return  # a transport thread without a loop derives inline later
+        try:
             if self._cached_noise_psk(self._noise_psk_key(password), client) is None:
-                self._derive_noise_psk_async(password, client)
+                self._start_noise_psk_derivation(password, client)
         except Exception:
             LOG.exception("failed to start the Noise PSK derivation")
 
