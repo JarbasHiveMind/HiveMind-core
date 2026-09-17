@@ -158,6 +158,8 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password,
     """
     if any(not t.strip() for t in allow_types):
         raise click.BadParameter("a message type cannot be empty", param_hint="--allow")
+    if any(t != "".join(t.split()) for t in allow_types):
+        raise click.BadParameter("a message type cannot contain white space", param_hint="--allow")
     # Ban low-entropy, guessable passwords at ingestion time. Only a
     # user-supplied password is checked — an auto-generated one is always
     # high-entropy. The runtime handshake re-checks as a backstop (see
@@ -190,8 +192,9 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password,
                 )
         name = name or f"HiveMind-Node-{db.total_clients()}"
         print(f"Database backend: {db.db.__class__.__name__}")
-        # exactly the types the operator passed; none means an empty whitelist
-        granted = list(allow_types)
+        # exactly the types the operator passed, each once; none means an
+        # empty whitelist. A repeat would survive one blacklist-msg.
+        granted = list(dict.fromkeys(allow_types))
         success = db.add_client(name, access_key, password=password,
                                 admin=admin, metadata=client_metadata,
                                 allowed_types=granted)
@@ -408,6 +411,9 @@ def allow_msg(args):
     if any(not t.strip() for t in types):
         print("A message type cannot be empty; nothing was granted.")
         return
+    if any(t != "".join(t.split()) for t in types):
+        print("A message type cannot contain white space; nothing was granted.")
+        return
     with ClientDatabase() as db:
         if len(types) == 1:
             client = resolve_client(db, None)
@@ -416,14 +422,16 @@ def allow_msg(args):
         if client is None:
             print("Invalid Node ID!")
             return
-        new = [t for t in types if t not in client.allowed_types]
+        # each type once: a repeat in one call would store two copies, and
+        # one blacklist-msg would then leave the type granted
+        new = [t for t in dict.fromkeys(types) if t not in client.allowed_types]
         for t in new:
             client.allowed_types.append(t)
         db.update_item(client)
         name = client.name
         for t in new:
             print(f"Allowed '{t}' for {name}")
-        for t in types:
+        for t in dict.fromkeys(types):
             if t not in new:
                 print(f"Client {name} already allowed '{t}'")
 
@@ -440,7 +448,9 @@ def blacklist_msg(msg_type, node_id):
         if msg_type not in client.allowed_types:
             print(f"Client '{client.name}' message already blacklisted: '{msg_type}'")
             return
-        client.allowed_types.remove(msg_type)
+        # remove every copy: a row written before repeats were refused can
+        # hold the type twice (HIVEMIND-POLICY-1 §4, a revocation takes effect)
+        client.allowed_types = [t for t in client.allowed_types if t != msg_type]
         db.update_item(client)
         print(f"Blacklisted '{msg_type}' for {client.name}")
 
