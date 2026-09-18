@@ -6,9 +6,10 @@ tell two connections apart, because two satellites may hold the same access
 key. ``peer`` is unique per connection.
 
 Both are on the payload. Removing ``key`` would break a consumer that reads
-the documented field for no gain; carrying only ``key`` leaves a consumer
-unable to pair a disconnect with the connect it belongs to when a key is
-shared.
+the documented field for no gain; carrying only ``key`` leaves two
+disconnects on one shared key indistinguishable. ``peer`` does not pair a
+disconnect with its connect: the connect fires before HELLO, and HELLO
+replaces the session the peer string is built from.
 """
 import unittest
 from unittest.mock import MagicMock, patch
