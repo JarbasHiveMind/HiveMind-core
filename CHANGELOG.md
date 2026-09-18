@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.0a1) (2026-09-18)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.8a1...5.3.0a1)
+
+**Merged pull requests:**
+
+- feat: give the listener a shutdown method that releases the PSK pool at once [\#364](https://github.com/JarbasHiveMind/HiveMind-core/pull/364) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.8a1) (2026-09-18)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.7a2...5.2.8a1)
@@ -374,10 +382,6 @@
 ## [4.13.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.9a1) (2026-08-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.8a1...4.13.9a1)
-
-**Merged pull requests:**
-
-- fix: CLI client commands accept an access key, not only a numeric id [\#263](https://github.com/JarbasHiveMind/HiveMind-core/pull/263) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.8a1) (2026-08-13)
 
