@@ -277,7 +277,7 @@ class HiveMindClientConnection:
         AUTHENTICATE: possession grants nothing and admission still runs
         the ACL. It is derived from the durable client identity, NOT the
         secret access key (session_ids are visible to every bus observer),
-        and hub-salted so the same client is not linkable across hubs. The
+        and node-salted so the same client is not linkable across nodes. The
         salt also hides the small integer client_id, so the token is not
         enumerable.
 
@@ -3250,8 +3250,8 @@ class HiveMindListenerProtocol:
         AUTHENTICATE — possession grants nothing; admission still runs the
         ACL. It is derived from the durable client identity (via
         ``client.session_namespace``), not the secret access key, so a
-        session is a durable route that survives reconnect, and hub-salted
-        so it is not linkable across hubs. Using the durable identity rather
+        session is a durable route that survives reconnect, and node-salted
+        so it is not linkable across nodes. Using the durable identity rather
         than the per-connection ``conn_nonce`` is what keeps a session
         routable across a reconnect (a new connection reuses the same
         namespace) and across a hub restart (the salt is the persistent node
