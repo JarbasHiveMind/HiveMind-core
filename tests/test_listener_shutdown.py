@@ -3,8 +3,10 @@
 The idle release (#338) drops the pool after each burst of derivations. A
 host that drops the listener while a derivation is still queued has nothing
 to wait for, so shutdown() cancels what is queued, leaves what is running,
-and drops the pool. hivescope's MasterNode.cleanup calls it.
+and drops the pool. Nothing in the fleet calls it yet; hivescope's
+MasterNode.cleanup is the intended first caller, in a hivescope PR.
 """
+from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import threading
 import unittest
@@ -75,7 +77,36 @@ class TestShutdown(unittest.TestCase):
         self.proto.shutdown()
         self.assertIsNone(self.proto._noise_psk_executor)
 
-    def test_an_injected_pool_is_left_alone(self):
+    def test_an_injected_real_pool_is_left_alone_with_its_work(self):
+        """A pool the embedder assigned may carry the embedder's own work."""
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="embedder")
+        self.addCleanup(pool.shutdown, True)
+        gate = threading.Event()
+        own_work = pool.submit(gate.wait, 10)  # the embedder's job, running
+        queued = pool.submit(lambda: "queued")  # the embedder's job, waiting
+        self.proto._noise_psk_executor = pool
+
+        async def scenario():
+            with patch.object(protocol_module, "derive_psk", return_value=PSK):
+                return await self.proto._derive_noise_psk_async(PASSWORD, None)
+
+        try:
+            self.proto.shutdown()  # before the derivation: nothing is ours
+            self.assertIs(self.proto._noise_psk_executor, pool)
+            self.assertFalse(queued.cancelled())
+            gate.set()
+            self.assertEqual(asyncio.run(scenario()), PSK)  # derives on the pool
+            self.assertIs(self.proto._noise_psk_executor, pool,
+                          "the idle release took the embedder's pool")
+            self.proto.shutdown()
+            self.assertIs(self.proto._noise_psk_executor, pool)
+            self.assertEqual(queued.result(timeout=10), "queued")
+            self.assertEqual(pool.submit(lambda: 1).result(timeout=10), 1,
+                             "the embedder's pool was shut down")
+        finally:
+            gate.set()
+
+    def test_an_injected_non_pool_object_is_left_alone(self):
         class NotAPool:
             closed = False
 

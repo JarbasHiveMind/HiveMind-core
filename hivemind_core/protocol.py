@@ -983,6 +983,10 @@ class HiveMindListenerProtocol:
     # dataclass, and the futures are keyed by the client password.
     _noise_psk_executor: Optional[ThreadPoolExecutor] = field(
         default=None, init=False, repr=False)
+    # True only while _noise_psk_executor is a pool this class created. An
+    # embedder that assigns its own pool keeps it: neither the idle release
+    # nor shutdown() touches a pool that is not ours.
+    _noise_psk_executor_owned: bool = field(default=False, init=False, repr=False)
     _noise_psk_futures: Optional[dict] = field(default=None, init=False, repr=False)
     # api keys whose row is known to carry the persisted key already, so a
     # memory hit does not re-read the row; bounded by the number of client
@@ -1188,6 +1192,7 @@ class HiveMindListenerProtocol:
             if self._noise_psk_executor is None:
                 self._noise_psk_executor = ThreadPoolExecutor(
                     max_workers=self.NOISE_PSK_WORKERS, thread_name_prefix="noise-psk")
+                self._noise_psk_executor_owned = True
             pending = self._noise_psk_executor.submit(
                 derive_psk, key[0], node_id=self._node_id)
             futures[key] = pending
@@ -1246,7 +1251,7 @@ class HiveMindListenerProtocol:
         process, and a host that checks for lingering threads when it stops
         (Home Assistant's test harness does) fails on them. The next
         derivation creates a new pool. Only a pool this class created is shut
-        down; an injected one is left alone.
+        down; a pool an embedder assigned is left alone, whatever its type.
 
         Several event loops on several threads share the pool (each network
         protocol runs its own), so the check and the swap happen under the same
@@ -1255,11 +1260,12 @@ class HiveMindListenerProtocol:
         """
         with self._psk_lock:
             executor = self._noise_psk_executor
-            if not isinstance(executor, ThreadPoolExecutor):
+            if executor is None or not self._noise_psk_executor_owned:
                 return
             if self._noise_psk_futures:
                 return
             self._noise_psk_executor = None
+            self._noise_psk_executor_owned = False
         executor.shutdown(wait=False)
 
     def shutdown(self) -> None:
@@ -1276,14 +1282,17 @@ class HiveMindListenerProtocol:
 
         Idempotent, safe on a listener that never derived a key, and the
         listener can derive again afterwards: the next derivation creates a
-        new pool. Only a pool this class created is shut down; an injected
-        one is left alone, the same as the idle release.
+        new pool. Only a pool this class created is shut down. A pool an
+        embedder assigned, a real ``ThreadPoolExecutor`` included, is left
+        alone, the same as the idle release: it may carry the embedder's own
+        work, and cancelling that is not this class's call.
         """
         with self._psk_lock:
             executor = self._noise_psk_executor
-            if not isinstance(executor, ThreadPoolExecutor):
+            if executor is None or not self._noise_psk_executor_owned:
                 return
             self._noise_psk_executor = None
+            self._noise_psk_executor_owned = False
         executor.shutdown(wait=False, cancel_futures=True)
 
     def _prewarm_noise_psk(self, client: HiveMindClientConnection) -> None:
