@@ -1363,9 +1363,18 @@ class HiveMindListenerProtocol:
             LOG.exception("error on connect agent callback")
 
         LOG.debug(f"new client: {client.peer}")
+        # ``key`` names the CLIENT; ``peer`` names this CONNECTION. Two
+        # satellites can hold the same access key, and a consumer keying on
+        # ``key`` alone then cannot tell their connect and disconnect events
+        # apart. Both are carried: ``key`` because it is the documented field
+        # and removing it breaks consumers for no gain, ``peer`` because it is
+        # the identifier that is unique per connection. ``peer`` is already in
+        # the message context, so this adds no attribute a network protocol
+        # plugin's connection object must carry.
         message = Message(
             "hive.client.connect",
             {"key": client.key,
+             "peer": client.peer,
              "session_id": client.sess.session_id},
             {"source": client.peer},
         )
@@ -1510,7 +1519,9 @@ class HiveMindListenerProtocol:
         context["session"] = client.sess.serialize()
         context["session"]["session_id"] = (client.sess.session_id if client.is_admin
                                              else client.layer1_session_id)
-        message = Message("hive.client.disconnect", {"key": client.key}, context)
+        # Both identifiers, for the reason given on hive.client.connect.
+        message = Message("hive.client.disconnect",
+                          {"key": client.key, "peer": client.peer}, context)
         self._emit_lifecycle(client, message)
 
     def record_rejection(self, client: HiveMindClientConnection, code: int, reason: str):
