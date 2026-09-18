@@ -271,16 +271,16 @@ class HiveMindClientConnection:
         scheduler-replayed message carrying that old session_id remains
         deliverable.
 
-        The token is ``sha256(f"{hub_salt}:{client_id}")[:16]`` where
+        The token is ``sha256(f"{node_salt}:{client_id}")[:16]`` where
         ``client_id`` is the durable DB row id (via :meth:`resolve_user`,
-        which already caches with a TTL) and ``hub_salt`` is the hub's
-        persistent node public key (:attr:`NodeIdentity.public_key`, the
+        which already caches with a TTL) and ``node_salt`` is the node's
+        persistent public key (:attr:`NodeIdentity.public_key`, the
         same identity the node persists on disk), so the namespace also
-        survives a HUB restart. The token IDENTIFIES, it does not
+        survives a node restart. The token IDENTIFIES, it does not
         AUTHENTICATE: possession grants nothing and admission still runs
         the ACL. It is derived from the durable client identity, NOT the
         secret access key (session_ids are visible to every bus observer),
-        and hub-salted so the same client is not linkable across hubs. The
+        and node-salted so the same client is not linkable across nodes. The
         salt also hides the small integer client_id, so the token is not
         enumerable.
 
@@ -303,9 +303,9 @@ class HiveMindClientConnection:
                       "falling back to per-connection nonce")
             return self.conn_nonce
         identity = getattr(getattr(self, "hm_protocol", None), "identity", None)
-        hub_salt = getattr(identity, "public_key", None) or ""
+        node_salt = getattr(identity, "public_key", None) or ""
         return hashlib.sha256(
-            f"{hub_salt}:{client_id}".encode()).hexdigest()[:16]
+            f"{node_salt}:{client_id}".encode()).hexdigest()[:16]
 
     @property
     def layer1_session_id(self) -> str:
@@ -3445,8 +3445,8 @@ class HiveMindListenerProtocol:
         AUTHENTICATE — possession grants nothing; admission still runs the
         ACL. It is derived from the durable client identity (via
         ``client.session_namespace``), not the secret access key, so a
-        session is a durable route that survives reconnect, and hub-salted
-        so it is not linkable across hubs. Using the durable identity rather
+        session is a durable route that survives reconnect, and node-salted
+        so it is not linkable across nodes. Using the durable identity rather
         than the per-connection ``conn_nonce`` is what keeps a session
         routable across a reconnect (a new connection reuses the same
         namespace) and across a hub restart (the salt is the persistent node

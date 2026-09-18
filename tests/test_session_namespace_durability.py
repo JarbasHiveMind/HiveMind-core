@@ -7,11 +7,11 @@ reconnected would land in a different Layer-1 session, and a message replayed
 by the scheduler carrying the pre-drop session_id would become undeliverable.
 
 ``HiveMindClientConnection.session_namespace`` fixes this: the namespace is
-derived from the DURABLE DB identity (client_id) plus the hub's persistent
+derived from the DURABLE DB identity (client_id) plus the node's persistent
 node public key, so it survives a reconnect (new nonce, same client_id) and a
-hub restart (the salt is the persistent node identity). The token IDENTIFIES,
+node restart (the salt is the persistent node identity). The token IDENTIFIES,
 it does not AUTHENTICATE — it is derived from the durable identity, never the
-secret access key, and hub-salted so it is not linkable across hubs.
+secret access key, and node-salted so it is not linkable across nodes.
 """
 from unittest.mock import MagicMock
 
@@ -31,7 +31,7 @@ def _make_protocol():
     return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
-def _make_client(client_id, key="access-key", public_key="hub-pubkey-A",
+def _make_client(client_id, key="access-key", public_key="node-pubkey-A",
                  db=True):
     proto = _make_protocol()
     client = HiveMindClientConnection(
@@ -41,7 +41,7 @@ def _make_client(client_id, key="access-key", public_key="hub-pubkey-A",
         hm_protocol=proto,
         sess=Session(session_id="default"),
     )
-    # Stub the hub salt to a known value AFTER __post_init__ (which reads the
+    # Stub the node salt to a known value AFTER __post_init__ (which reads the
     # real RSA key via identity_rsa_key); session_namespace reads only
     # identity.public_key.
     proto.identity.public_key = public_key
@@ -95,16 +95,16 @@ def test_namespace_is_not_the_secret_key():
     assert "secret-two" not in rotated.session_namespace
 
 
-def test_namespace_is_hub_salted_and_stable():
-    # Same client_id + same hub salt -> same token across two separate
-    # connection objects; a different hub salt -> different token (a session
+def test_namespace_is_node_salted_and_stable():
+    # Same client_id + same node salt -> same token across two separate
+    # connection objects; a different node salt -> different token (a session
     # is not linkable across hubs).
-    same_hub_1 = _make_client(client_id=9, public_key="hub-A")
-    same_hub_2 = _make_client(client_id=9, public_key="hub-A")
-    other_hub = _make_client(client_id=9, public_key="hub-B")
+    same_node_1 = _make_client(client_id=9, public_key="node-A")
+    same_node_2 = _make_client(client_id=9, public_key="node-A")
+    other_node = _make_client(client_id=9, public_key="node-B")
 
-    assert same_hub_1.session_namespace == same_hub_2.session_namespace
-    assert same_hub_1.session_namespace != other_hub.session_namespace
+    assert same_node_1.session_namespace == same_node_2.session_namespace
+    assert same_node_1.session_namespace != other_node.session_namespace
 
 
 def test_admin_branch_unchanged():
