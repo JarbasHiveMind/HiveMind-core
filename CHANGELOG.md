@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.7a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.7a2) (2026-09-18)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.7a1...5.2.7a2)
+
+**Merged pull requests:**
+
+- chore: call the namespace salt what it is, the node's key [\#328](https://github.com/JarbasHiveMind/HiveMind-core/pull/328) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.2.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.2.7a1) (2026-09-17)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.6a1...5.2.7a1)
@@ -375,10 +383,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.5a1...4.13.6a1)
 
-**Merged pull requests:**
-
-- fix: gate QUERY/CASCADE response routing behind the request-path ACL check [\#257](https://github.com/JarbasHiveMind/HiveMind-core/pull/257) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.5a1) (2026-08-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.4a1...4.13.5a1)
@@ -386,10 +390,6 @@
 ## [4.13.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.4a1) (2026-08-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.3a1...4.13.4a1)
-
-**Merged pull requests:**
-
-- fix: rename-client must not blank the name it was not given [\#256](https://github.com/JarbasHiveMind/HiveMind-core/pull/256) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.3a1) (2026-08-12)
 
