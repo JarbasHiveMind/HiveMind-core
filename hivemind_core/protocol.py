@@ -964,10 +964,11 @@ class HiveMindListenerProtocol:
     # how many distinct passwords keep a derived PSK in memory at once
     NOISE_PSK_CACHE_SIZE = 256
     # Threads deriving PSKs off the IOLoop. argon2-cffi releases the GIL, but
-    # every derivation holds a 64 MiB arena, so keep this small. The listener
-    # has no stop method, so the pool is shut down when it goes idle (no
-    # derivation in flight) and created again for the next one; see
-    # _release_idle_noise_psk_executor.
+    # every derivation holds a 64 MiB arena, so keep this small. The pool is
+    # shut down when it goes idle (no derivation in flight) and created again
+    # for the next one; see _release_idle_noise_psk_executor. shutdown()
+    # releases it at once, in flight or not, for a host that drops the
+    # listener.
     NOISE_PSK_WORKERS = 2
     # Client-row metadata keys holding the persisted PSK and the binding
     # that says which (node id, password) pair it was derived for. They live
@@ -1260,6 +1261,30 @@ class HiveMindListenerProtocol:
                 return
             self._noise_psk_executor = None
         executor.shutdown(wait=False)
+
+    def shutdown(self) -> None:
+        """Release the PSK derivation pool now, whether or not a key is in flight.
+
+        The idle release covers a running server: the pool goes away after
+        each burst of derivations. A host that drops the listener itself, an
+        embedded hub, a test harness, an integration that unloads and
+        reloads, has nowhere to wait for that burst to end, and a derivation
+        whose listener is gone has nobody to hand a key to. So this cancels
+        the queued derivations, does not wait for the running ones (each
+        holds a 64 MiB arena for about a second), and drops the pool. The
+        done callbacks of the cancelled futures remove their own entries.
+
+        Idempotent, safe on a listener that never derived a key, and the
+        listener can derive again afterwards: the next derivation creates a
+        new pool. Only a pool this class created is shut down; an injected
+        one is left alone, the same as the idle release.
+        """
+        with self._psk_lock:
+            executor = self._noise_psk_executor
+            if not isinstance(executor, ThreadPoolExecutor):
+                return
+            self._noise_psk_executor = None
+        executor.shutdown(wait=False, cancel_futures=True)
 
     def _prewarm_noise_psk(self, client: HiveMindClientConnection) -> None:
         """Start deriving ``client``'s PSK as soon as the offer goes out.

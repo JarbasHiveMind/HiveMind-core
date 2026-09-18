@@ -508,7 +508,7 @@ class HiveMindService:
             unwinding = sys.exc_info()[0] is not None
             failures = []
             for action in (self._stop_presence, self._stop_upstream,
-                           self._status.set_stopping):
+                           hm_protocol.shutdown, self._status.set_stopping):
                 try:
                     action()
                 except Exception as error:  # noqa: BLE001 - see above
