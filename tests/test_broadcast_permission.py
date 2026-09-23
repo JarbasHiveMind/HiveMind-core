@@ -16,7 +16,9 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
-from hivemind_core.protocol import HiveMindClientConnection, HiveMindListenerProtocol
+from hivemind_core.protocol import (POLICY_KICK_CLOSE_CODE,
+                                    HiveMindClientConnection,
+                                    HiveMindListenerProtocol)
 
 
 def _make_protocol():
@@ -61,10 +63,11 @@ def test_revoked_broadcast_is_denied_even_for_admin():
     proto.handle_broadcast_message(_broadcast(), client)
     proto.broadcast_callback.assert_not_called()
     proto.illegal_callback.assert_called_once()
-    # the kick now closes with 1008 and names the routing type, and the
+    # the kick closes with the policy code, not 1008, and names the
     # protocol records it for the operator (test_permission_kicks_recorded)
-    assert client.disconnect.call_count == 1
-    assert client.disconnect.call_args[0][0] == 1008
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "BROADCAST is not allowed for this client")
 
 
 def test_granted_broadcast_is_allowed_for_admin():
@@ -82,7 +85,8 @@ def test_grant_alone_does_not_promote_a_non_admin():
     client = _make_client(is_admin=False, can_broadcast=True)
     proto.handle_broadcast_message(_broadcast(), client)
     proto.broadcast_callback.assert_not_called()
-    # the kick now closes with 1008 and names the routing type, and the
+    # the kick closes with the policy code, not 1008, and names the
     # protocol records it for the operator (test_permission_kicks_recorded)
-    assert client.disconnect.call_count == 1
-    assert client.disconnect.call_args[0][0] == 1008
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "BROADCAST is not allowed for this client")

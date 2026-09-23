@@ -13,7 +13,8 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
-from hivemind_core.protocol import HiveMindListenerProtocol
+from hivemind_core.protocol import (POLICY_KICK_CLOSE_CODE,
+                                    HiveMindListenerProtocol)
 
 
 def _make_protocol():
@@ -48,10 +49,11 @@ def test_illegal_broadcast_disconnects():
     client = _make_client(is_admin=False)
     proto.handle_broadcast_message(_wrap(HiveMessageType.BROADCAST), client)
     proto.illegal_callback.assert_called_once()
-    # the kick now closes with 1008 and names the routing type, and the
+    # the kick closes with the policy code, not 1008, and names the
     # protocol records it for the operator (test_permission_kicks_recorded)
-    assert client.disconnect.call_count == 1
-    assert client.disconnect.call_args[0][0] == 1008
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "BROADCAST is not allowed for this client")
     proto.broadcast_callback.assert_not_called()
 
 
@@ -60,10 +62,11 @@ def test_illegal_propagate_disconnects():
     client = _make_client(can_propagate=False)
     proto.handle_propagate_message(_wrap(HiveMessageType.PROPAGATE), client)
     proto.illegal_callback.assert_called_once()
-    # the kick now closes with 1008 and names the routing type, and the
+    # the kick closes with the policy code, not 1008, and names the
     # protocol records it for the operator (test_permission_kicks_recorded)
-    assert client.disconnect.call_count == 1
-    assert client.disconnect.call_args[0][0] == 1008
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "PROPAGATE is not allowed for this client")
     proto.propagate_callback.assert_not_called()
 
 
@@ -72,10 +75,11 @@ def test_illegal_escalate_disconnects():
     client = _make_client(can_escalate=False)
     proto.handle_escalate_message(_wrap(HiveMessageType.ESCALATE), client)
     proto.illegal_callback.assert_called_once()
-    # the kick now closes with 1008 and names the routing type, and the
+    # the kick closes with the policy code, not 1008, and names the
     # protocol records it for the operator (test_permission_kicks_recorded)
-    assert client.disconnect.call_count == 1
-    assert client.disconnect.call_args[0][0] == 1008
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "ESCALATE is not allowed for this client")
     proto.escalate_callback.assert_not_called()
 
 
