@@ -19,7 +19,8 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
-from hivemind_core.protocol import HiveMindListenerProtocol
+from hivemind_core.protocol import (POLICY_KICK_CLOSE_CODE,
+                                    HiveMindListenerProtocol)
 
 
 def _make_protocol():
@@ -74,7 +75,11 @@ def test_forged_query_response_from_unprivileged_client_is_dropped():
 
     victim_conn.send.assert_not_called()
     proto.illegal_callback.assert_called_once()
-    attacker.disconnect.assert_called_once_with()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    attacker.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "QUERY is not allowed for this client")
 
 
 def test_forged_cascade_response_from_unprivileged_client_is_dropped():
@@ -87,7 +92,11 @@ def test_forged_cascade_response_from_unprivileged_client_is_dropped():
 
     victim_conn.send.assert_not_called()
     proto.illegal_callback.assert_called_once()
-    attacker.disconnect.assert_called_once_with()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    attacker.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "CASCADE is not allowed for this client")
 
 
 # --- positive control: a legitimate in-flight response must still land -----

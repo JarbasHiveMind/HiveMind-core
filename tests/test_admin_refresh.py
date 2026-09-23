@@ -13,7 +13,8 @@ from ovos_bus_client.session import Session
 
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
-from hivemind_core.protocol import (HiveMindClientConnection,
+from hivemind_core.protocol import (POLICY_KICK_CLOSE_CODE,
+                                    HiveMindClientConnection,
                                     HiveMindListenerProtocol)
 
 
@@ -119,7 +120,11 @@ def test_revoked_admin_loses_broadcast_at_next_message():
 
     protocol.handle_message(_broadcast_hivemessage(), client)
     protocol.broadcast_callback.assert_not_called()
-    client.disconnect.assert_called_once_with()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "BROADCAST is not allowed for this client")
     assert client.is_admin is False
 
 
@@ -205,7 +210,11 @@ def test_revoked_can_escalate_is_denied_at_next_message():
 
     protocol.handle_message(_escalate_hivemessage(), client)
     protocol.escalate_callback.assert_not_called()
-    client.disconnect.assert_called_once_with()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "ESCALATE is not allowed for this client")
     assert client.can_escalate is False
 
 
@@ -236,7 +245,11 @@ def test_revoked_can_propagate_is_denied_at_next_message():
 
     protocol.handle_message(_propagate_hivemessage(), client)
     protocol.propagate_callback.assert_not_called()
-    client.disconnect.assert_called_once_with()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "PROPAGATE is not allowed for this client")
     assert client.can_propagate is False
 
 

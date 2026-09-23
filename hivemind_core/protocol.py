@@ -5,6 +5,7 @@ import asyncio
 import copy
 import dataclasses
 import hashlib
+import inspect
 import json
 import logging
 import os
@@ -149,6 +150,49 @@ OUTSTANDING_QUERY_TTL = 300.0
 # bound, so a flood of unique query_ids cannot grow the store without limit.
 OUTSTANDING_QUERY_MAX = 256
 
+# Close code for an origination-permission kick (HIVEMIND-NODE-1 §4).
+#
+# It is NOT 1008. The fleet's own client reserves 1008 for a refused identity:
+# hivemind_bus_client.client tests the CODE alone, latches ``_auth_rejected``,
+# emits ``auth_rejected`` and stops reconnecting, telling the operator to check
+# an access key that is correct. A kicked satellite is correctly registered and
+# must be free to reconnect and keep doing what it IS allowed to do.
+#
+# The HIVEMIND specifications name no close codes at all, so this is an
+# application code from the private-use range of RFC 6455 §7.4.2 (4000-4999),
+# which no other party assigns. Recording it in HIVEMIND-NODE-1 is tracked on
+# the architecture lane.
+POLICY_KICK_CLOSE_CODE = 4003
+
+
+def close_connection(client, code: int, reason: str) -> None:
+    """Close *client* with a code, on a transport that may not take one.
+
+    Every transport in this repository builds the connection with
+    ``disconnect(code=1000, reason="")``, but ``hivemind-email`` builds it with
+    ``def _disconnect() -> None``. Passing a code there raises ``TypeError``
+    out of the handler and into the transport, and the client is then never
+    disconnected at all: the kick stops kicking on that transport.
+
+    The signature is read rather than the call being wrapped in
+    ``except TypeError``, so a ``TypeError`` raised *inside* a transport's own
+    disconnect still propagates instead of being read as "takes no code".
+    """
+    try:
+        signature = inspect.signature(client.disconnect)
+    except (TypeError, ValueError):
+        # a builtin or a C callable: try the coded call and let it speak
+        client.disconnect(code, reason)
+        return
+    try:
+        signature.bind(code, reason)
+    except TypeError:
+        LOG.debug("transport disconnect takes no close code; closing without "
+                  "one (code %s was meant)", code)
+        client.disconnect()
+        return
+    client.disconnect(code, reason)
+
 
 def _non_negative_float(value, default: float) -> float:
     try:
@@ -214,6 +258,12 @@ class HiveMindClientConnection:
     # set once this connection's rejection is in the listener's
     # recent_rejections ring, so a later hook does not record it twice
     rejection_recorded: bool = field(default=False, init=False, repr=False)
+    # origination-permission kicks already recorded for this connection. A
+    # kick is recorded even when the connection carries a rejection already,
+    # so this set, not ``rejection_recorded``, is what stops one connection
+    # repeating the same violation into the ring.
+    kick_reasons_recorded: set = field(default_factory=set, init=False,
+                                       repr=False)
     # set once this connection is being torn down (a handshake abort, the
     # transport reporting the peer gone) so work parked on it, a PSK
     # derivation in flight, knows not to resume it
@@ -712,6 +762,15 @@ class HiveMindListenerProtocol:
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
     # size of the recent_rejections ring the node's own operator reads
     rejection_history_size = 100
+    # A kick of an ADMITTED client is kept in its own ring of the same size.
+    # One ring for both would let the cheapest write evict the dearest: any
+    # client holding a valid low-privilege key can write one entry per
+    # connection by sending one well-formed message it may not send, so 100
+    # such messages flush the operator's evidence of a brute-force attempt
+    # (the invalid_key entries). A separate ring bounds each class on its own
+    # and neither can evict the other. A larger single ring only raises the
+    # price of the flush; it does not stop it.
+    kick_history_size = 100
     # The only reasons the ring stores. A close reason can interpolate an
     # access key or an exception text, so the ring never keeps free text:
     # any other value is stored as "other".
@@ -720,15 +779,28 @@ class HiveMindListenerProtocol:
     # refused before a HiveMindClientConnection exists, so the plugin gives
     # record_rejection a stand-in peer. The name is registered here so the
     # operator reads that rejection as itself and not as "other".
+    # The five "illegal_*" names below record an origination-permission kick
+    # of a client that is already admitted (HIVEMIND-NODE-1 §4: "A node MAY
+    # treat a violation as misbehaviour and close the connection instead of
+    # returning a denial"). The ring is not an admission-only surface —
+    # "internal_error", "non_noise_frame" and "invalid_noise_frame" already
+    # record closes of an admitted client — and the operator asking why a
+    # satellite dropped needs these five most of all.
+    # The name says which routing type the client tried, not which permission
+    # it lacked: three permissions still gate the five types, and QUERY stays
+    # paired with ESCALATE and CASCADE with PROPAGATE (NODE-1 §4).
     REJECTION_REASONS = frozenset({
         "invalid_key", "invalid_authorization", "protocol_v3_required",
         "noise_handshake_failed", "noise_pin_mismatch", "non_noise_frame",
-        "invalid_noise_frame", "unencrypted_frame", "internal_error", "other",
+        "invalid_noise_frame", "unencrypted_frame", "internal_error",
+        "illegal_broadcast", "illegal_propagate", "illegal_query",
+        "illegal_cascade", "illegal_escalate", "other",
     })
     # backing store for ``recent_rejections``; None so a bypass-built
     # instance still sees a class default. One lock for every instance:
     # appends are rare and short.
     _recent_rejections = None
+    _recent_kicks = None
     _rejections_lock = threading.Lock()
     query_timeout = 8.0  # seconds to wait for the local agent to answer a QUERY/CASCADE
     default_lang = "en-US"
@@ -819,6 +891,18 @@ class HiveMindListenerProtocol:
             if self._recent_rejections is None:
                 self._recent_rejections = deque(maxlen=self.rejection_history_size)
             return self._recent_rejections
+
+    @property
+    def recent_kicks(self) -> deque:
+        """Recent kicks of an already admitted client, newest last.
+
+        Same shape and same audience as ``recent_rejections``. Separate so a
+        kick cannot evict an admission rejection; see ``kick_history_size``.
+        """
+        with self._rejections_lock:
+            if self._recent_kicks is None:
+                self._recent_kicks = deque(maxlen=self.kick_history_size)
+            return self._recent_kicks
 
     @property
     def trusted_pubkeys(self) -> dict:
@@ -1558,35 +1642,59 @@ class HiveMindListenerProtocol:
                           {"key": client.key, "peer": client.peer}, context)
         self._emit_lifecycle(client, message)
 
-    def record_rejection(self, client: HiveMindClientConnection, code: int, reason: str):
+    def record_rejection(self, client: HiveMindClientConnection, code: int,
+                         reason: str, once: bool = True):
         """Add one rejected connection to the bounded ``recent_rejections`` ring.
 
         The entry carries the time, the peer, the close code and a stable
         reason from ``REJECTION_REASONS``. Free text is never stored: a close
         reason can carry the access key (the pin-mismatch hint) or exception
         text, so an unknown reason is stored as ``"other"``.
+
+        Args:
+            once: the default. The connection is refused once, and a later
+                hook on the same refusal must not write a second entry.
+                A kick of an already ADMITTED client passes ``False``: that
+                connection may have been recorded before (``internal_error``
+                is recorded for an admitted client), and the one-shot flag
+                would then drop the record of the violation, which is the one
+                the operator most needs. Each kick reason is still recorded at
+                most once per connection, so a client that repeats the same
+                violation cannot fill the ring from one connection.
         """
-        if client.rejection_recorded:
-            return
-        client.rejection_recorded = True
+        if once:
+            if client.rejection_recorded:
+                return
+            client.rejection_recorded = True
         if reason not in self.REJECTION_REASONS:
             reason = "other"
+        if not once:
+            if reason in client.kick_reasons_recorded:
+                return
+            client.kick_reasons_recorded.add(reason)
         entry = {"time": time.time(), "peer": client.peer,
                  "code": code, "reason": reason}
-        ring = self.recent_rejections
+        ring = self.recent_kicks if not once else self.recent_rejections
         with self._rejections_lock:
             ring.append(entry)
 
     def get_recent_rejections(self, max_age: Optional[float] = None) -> List[dict]:
         """Return copies of the recorded rejections, newest first.
 
+        Both rings are read: an admission rejection and a kick of an admitted
+        client are one list for the operator, as they were before the kicks
+        got a ring of their own.
+
         Args:
             max_age: when set, only entries younger than this many seconds.
         """
         now = time.time()
-        ring = self.recent_rejections
+        # both properties take the lock themselves, and it is not reentrant
+        rejections, kicks = self.recent_rejections, self.recent_kicks
         with self._rejections_lock:
-            entries = [dict(e) for e in ring]
+            entries = [dict(e) for e in rejections]
+            entries += [dict(e) for e in kicks]
+        entries.sort(key=lambda e: e["time"])
         if max_age is not None:
             entries = [e for e in entries if now - e["time"] <= max_age]
         return list(reversed(entries))
@@ -1751,7 +1859,8 @@ class HiveMindListenerProtocol:
             LOG.exception(f"handle_message: unhandled error in the "
                            f"{msg_type} handler for {client.peer}")
             self.record_rejection(client, 1011, "internal_error")
-            client.disconnect(1011, f"internal error handling {msg_type}")
+            close_connection(client, 1011,
+                             f"internal error handling {msg_type}")
             return
 
         self.update_last_seen(client)
@@ -2406,8 +2515,12 @@ class HiveMindListenerProtocol:
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # kick client for misbehaviour so it stops doing that
-            client.disconnect()
+            # kick client for misbehaviour so it stops doing that, and record
+            # the kick for the node's operator
+            self.record_rejection(client, POLICY_KICK_CLOSE_CODE, "illegal_broadcast",
+                                  once=False)
+            close_connection(client, POLICY_KICK_CLOSE_CODE,
+                             "BROADCAST is not allowed for this client")
             return
 
         if self.broadcast_callback:
@@ -2621,8 +2734,12 @@ class HiveMindListenerProtocol:
             LOG.warning("Received propagate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # kick client for misbehaviour so it stops doing that
-            client.disconnect()
+            # kick client for misbehaviour so it stops doing that, and record
+            # the kick for the node's operator
+            self.record_rejection(client, POLICY_KICK_CLOSE_CODE, "illegal_propagate",
+                                  once=False)
+            close_connection(client, POLICY_KICK_CLOSE_CODE,
+                             "PROPAGATE is not allowed for this client")
             return
 
         # HIVEMIND-MSG-1 §5 gates *re-forwarding* of a looped message, not local
@@ -3164,7 +3281,10 @@ class HiveMindListenerProtocol:
             LOG.warning("Received QUERY from client without escalate permission")
             if self.illegal_callback:
                 self.illegal_callback(self._unpack_message(message, client))
-            client.disconnect()
+            self.record_rejection(client, POLICY_KICK_CLOSE_CODE, "illegal_query",
+                                  once=False)
+            close_connection(client, POLICY_KICK_CLOSE_CODE,
+                             "QUERY is not allowed for this client")
             return
 
         if metadata.get("is_response", False):
@@ -3242,7 +3362,10 @@ class HiveMindListenerProtocol:
                         "permission")
             if self.illegal_callback:
                 self.illegal_callback(self._unpack_message(message, client))
-            client.disconnect()
+            self.record_rejection(client, POLICY_KICK_CLOSE_CODE, "illegal_cascade",
+                                  once=False)
+            close_connection(client, POLICY_KICK_CLOSE_CODE,
+                             "CASCADE is not allowed for this client")
             return
 
         if metadata.get("is_response", False):
@@ -3314,8 +3437,12 @@ class HiveMindListenerProtocol:
             LOG.warning("Received escalate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # kick client for misbehaviour so it stops doing that
-            client.disconnect()
+            # kick client for misbehaviour so it stops doing that, and record
+            # the kick for the node's operator
+            self.record_rejection(client, POLICY_KICK_CLOSE_CODE, "illegal_escalate",
+                                  once=False)
+            close_connection(client, POLICY_KICK_CLOSE_CODE,
+                             "ESCALATE is not allowed for this client")
             return
 
         # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
