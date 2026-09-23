@@ -61,7 +61,10 @@ def test_revoked_broadcast_is_denied_even_for_admin():
     proto.handle_broadcast_message(_broadcast(), client)
     proto.broadcast_callback.assert_not_called()
     proto.illegal_callback.assert_called_once()
-    client.disconnect.assert_called_once_with()
+    # the kick now closes with 1008 and names the routing type, and the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    assert client.disconnect.call_count == 1
+    assert client.disconnect.call_args[0][0] == 1008
 
 
 def test_granted_broadcast_is_allowed_for_admin():
@@ -79,4 +82,7 @@ def test_grant_alone_does_not_promote_a_non_admin():
     client = _make_client(is_admin=False, can_broadcast=True)
     proto.handle_broadcast_message(_broadcast(), client)
     proto.broadcast_callback.assert_not_called()
-    client.disconnect.assert_called_once_with()
+    # the kick now closes with 1008 and names the routing type, and the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    assert client.disconnect.call_count == 1
+    assert client.disconnect.call_args[0][0] == 1008

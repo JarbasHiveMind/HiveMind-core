@@ -720,10 +720,22 @@ class HiveMindListenerProtocol:
     # refused before a HiveMindClientConnection exists, so the plugin gives
     # record_rejection a stand-in peer. The name is registered here so the
     # operator reads that rejection as itself and not as "other".
+    # The five "illegal_*" names below record an origination-permission kick
+    # of a client that is already admitted (HIVEMIND-NODE-1 §4: "A node MAY
+    # treat a violation as misbehaviour and close the connection instead of
+    # returning a denial"). The ring is not an admission-only surface —
+    # "internal_error", "non_noise_frame" and "invalid_noise_frame" already
+    # record closes of an admitted client — and the operator asking why a
+    # satellite dropped needs these five most of all.
+    # The name says which routing type the client tried, not which permission
+    # it lacked: three permissions still gate the five types, and QUERY stays
+    # paired with ESCALATE and CASCADE with PROPAGATE (NODE-1 §4).
     REJECTION_REASONS = frozenset({
         "invalid_key", "invalid_authorization", "protocol_v3_required",
         "noise_handshake_failed", "noise_pin_mismatch", "non_noise_frame",
-        "invalid_noise_frame", "unencrypted_frame", "internal_error", "other",
+        "invalid_noise_frame", "unencrypted_frame", "internal_error",
+        "illegal_broadcast", "illegal_propagate", "illegal_query",
+        "illegal_cascade", "illegal_escalate", "other",
     })
     # backing store for ``recent_rejections``; None so a bypass-built
     # instance still sees a class default. One lock for every instance:
@@ -2406,8 +2418,10 @@ class HiveMindListenerProtocol:
             LOG.warning("Received broadcast message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # kick client for misbehaviour so it stops doing that
-            client.disconnect()
+            # kick client for misbehaviour so it stops doing that, and record
+            # the kick for the node's operator
+            self.record_rejection(client, 1008, "illegal_broadcast")
+            client.disconnect(1008, "BROADCAST is not allowed for this client")
             return
 
         if self.broadcast_callback:
@@ -2621,8 +2635,10 @@ class HiveMindListenerProtocol:
             LOG.warning("Received propagate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # kick client for misbehaviour so it stops doing that
-            client.disconnect()
+            # kick client for misbehaviour so it stops doing that, and record
+            # the kick for the node's operator
+            self.record_rejection(client, 1008, "illegal_propagate")
+            client.disconnect(1008, "PROPAGATE is not allowed for this client")
             return
 
         # HIVEMIND-MSG-1 §5 gates *re-forwarding* of a looped message, not local
@@ -3164,7 +3180,8 @@ class HiveMindListenerProtocol:
             LOG.warning("Received QUERY from client without escalate permission")
             if self.illegal_callback:
                 self.illegal_callback(self._unpack_message(message, client))
-            client.disconnect()
+            self.record_rejection(client, 1008, "illegal_query")
+            client.disconnect(1008, "QUERY is not allowed for this client")
             return
 
         if metadata.get("is_response", False):
@@ -3242,7 +3259,8 @@ class HiveMindListenerProtocol:
                         "permission")
             if self.illegal_callback:
                 self.illegal_callback(self._unpack_message(message, client))
-            client.disconnect()
+            self.record_rejection(client, 1008, "illegal_cascade")
+            client.disconnect(1008, "CASCADE is not allowed for this client")
             return
 
         if metadata.get("is_response", False):
@@ -3314,8 +3332,10 @@ class HiveMindListenerProtocol:
             LOG.warning("Received escalate message from downstream, illegal action")
             if self.illegal_callback:
                 self.illegal_callback(payload)
-            # kick client for misbehaviour so it stops doing that
-            client.disconnect()
+            # kick client for misbehaviour so it stops doing that, and record
+            # the kick for the node's operator
+            self.record_rejection(client, 1008, "illegal_escalate")
+            client.disconnect(1008, "ESCALATE is not allowed for this client")
             return
 
         # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
