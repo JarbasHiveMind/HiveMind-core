@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.1a1) (2026-09-23)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.0a1...5.3.1a1)
+
+**Merged pull requests:**
+
+- fix: record the five origination-permission kicks for the operator [\#368](https://github.com/JarbasHiveMind/HiveMind-core/pull/368) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.0a1) (2026-09-18)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.2.8a1...5.3.0a1)
@@ -375,10 +383,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.9a1...4.13.10a1)
 
-**Merged pull requests:**
-
-- fix: raise ovos-bus-client floor to 2.2.0a1 for receive-side migration [\#265](https://github.com/JarbasHiveMind/HiveMind-core/pull/265) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.9a1) (2026-08-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.8a1...4.13.9a1)
@@ -525,15 +529,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
-
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
