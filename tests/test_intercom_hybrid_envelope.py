@@ -12,7 +12,6 @@ someone else without opening it.
 Both envelope shapes are pinned here. The plain-RSA shape stays accepted so an
 existing peer that speaks it keeps working.
 """
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -31,14 +30,19 @@ def _keypair():
     return key, key.publickey().export_key().decode("utf-8")
 
 
-def _node(node_key, node_pub, client_pub, tmp_path=None):
+def _node(node_key, node_pub, client_pub, tmp_path):
     """A listener that owns *node_key* and has already pinned *client_pub*.
 
     ``identity.private_key`` is a **path** — ``load_RSA_key`` opens it — so the
     key is written out rather than passed as PEM text.
+
+    *tmp_path* is pytest's per-test directory and is REQUIRED. It used to
+    default to ``None`` and the key went to ``tempfile.mkdtemp()``, which
+    pytest does not own: every run left another directory holding a
+    ``node.key`` in the shared tmp. Five of them, one per call site below.
     """
     node = object.__new__(HiveMindListenerProtocol)
-    keyfile = Path(tempfile.mkdtemp()) / "node.key"
+    keyfile = Path(tmp_path) / "node.key"
     keyfile.write_bytes(node_key.export_key())
     node.identity = MagicMock(
         private_key=str(keyfile),
@@ -78,10 +82,10 @@ def _inner():
 class TestHybridEnvelope:
     """The shape the reference client actually sends."""
 
-    def test_a_hybrid_intercom_addressed_to_us_is_decrypted_and_dispatched(self):
+    def test_a_hybrid_intercom_addressed_to_us_is_decrypted_and_dispatched(self, tmp_path):
         node_key, node_pub = _keypair()
         sender_key, sender_pub = _keypair()
-        node = _node(node_key, node_pub, sender_pub)
+        node = _node(node_key, node_pub, sender_pub, tmp_path)
         dispatched = _capture(node)
 
         envelope = hybrid_encrypt(node_pub, _inner().serialize(), sign_key=sender_key)
@@ -96,12 +100,12 @@ class TestHybridEnvelope:
         assert dispatched[0].msg_type == HiveMessageType.BUS
         assert dispatched[0].payload.data["utterances"] == ["hello from intercom"]
 
-    def test_a_payload_larger_than_one_rsa_block_survives(self):
+    def test_a_payload_larger_than_one_rsa_block_survives(self, tmp_path):
         """The reason hybrid exists. Raw RSA caps at ~214 bytes with a
         2048-bit key, which a real utterance envelope exceeds."""
         node_key, node_pub = _keypair()
         sender_key, sender_pub = _keypair()
-        node = _node(node_key, node_pub, sender_pub)
+        node = _node(node_key, node_pub, sender_pub, tmp_path)
         dispatched = _capture(node)
 
         big = HiveMessage(HiveMessageType.BUS,
@@ -120,10 +124,10 @@ class TestHybridEnvelope:
 class TestPlainRsaEnvelopeStillAccepted:
     """Back-compat: a peer that speaks the older shape keeps working."""
 
-    def test_a_plain_rsa_intercom_is_still_decrypted(self):
+    def test_a_plain_rsa_intercom_is_still_decrypted(self, tmp_path):
         node_key, node_pub = _keypair()
         sender_key, sender_pub = _keypair()
-        node = _node(node_key, node_pub, sender_pub)
+        node = _node(node_key, node_pub, sender_pub, tmp_path)
         dispatched = _capture(node)
 
         # small enough to fit one RSA block
@@ -146,11 +150,11 @@ class TestPlainRsaEnvelopeStillAccepted:
 class TestOriginStillAuthenticated:
     """The fix must not weaken CRYPTO-1 §4."""
 
-    def test_a_hybrid_envelope_signed_by_the_wrong_key_is_dropped(self):
+    def test_a_hybrid_envelope_signed_by_the_wrong_key_is_dropped(self, tmp_path):
         node_key, node_pub = _keypair()
         _, pinned_pub = _keypair()
         forger_key, _ = _keypair()
-        node = _node(node_key, node_pub, pinned_pub)
+        node = _node(node_key, node_pub, pinned_pub, tmp_path)
         dispatched = _capture(node)
 
         envelope = hybrid_encrypt(node_pub, _inner().serialize(), sign_key=forger_key)
@@ -160,10 +164,10 @@ class TestOriginStillAuthenticated:
         assert node.handle_intercom_message(msg, _client()) is True
         assert not dispatched, "an unverifiable origin must be dropped"
 
-    def test_an_unsigned_hybrid_envelope_is_dropped(self):
+    def test_an_unsigned_hybrid_envelope_is_dropped(self, tmp_path):
         node_key, node_pub = _keypair()
         _, sender_pub = _keypair()
-        node = _node(node_key, node_pub, sender_pub)
+        node = _node(node_key, node_pub, sender_pub, tmp_path)
         dispatched = _capture(node)
 
         envelope = hybrid_encrypt(node_pub, _inner().serialize())  # no sign_key
