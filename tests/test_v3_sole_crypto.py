@@ -121,7 +121,12 @@ class TestHandshakeParamsAreNoiseOnly(unittest.TestCase):
 
 class TestDuplicateHandshakeAfterEstablished(unittest.TestCase):
     """A fresh, well-formed HANDSHAKE frame arriving after the Noise
-    session is established must be rejected, not treated as a new message 1.
+    session is established must be DROPPED, not treated as a new message 1.
+
+    The frame is ignored and the session survives. It used to be rejected by
+    closing the connection with 1008, which made one replayed frame enough to
+    end an established session; the client records that as a refused identity
+    and stops reconnecting.
 
     FAIL-BEFORE: without the guard, such a frame re-enters the
     ``client.noise_handshake is None`` branch (true post-establishment,
@@ -170,12 +175,17 @@ class TestDuplicateHandshakeAfterEstablished(unittest.TestCase):
                    return_value=fake_new_handshake) as start_mock:
             proto.handle_noise_handshake_message(message, client)
 
-        # rejected, not silently re-handshaked
-        client.disconnect.assert_called_with(1008, unittest.mock.ANY)
+        # dropped, not silently re-handshaked. The frame used to be rejected
+        # by closing the connection, which closed a HEALTHY session: a
+        # replayed frame then ended it, and the client records the 1008 as a
+        # refused identity and stops reconnecting. The early return is what
+        # stops the reset; the close added nothing to that.
+        client.disconnect.assert_not_called()
+        self.assertIs(client.noise_transport, established_transport,
+                      "the live session must survive a duplicate frame")
         # no new responder handshake was started
         start_mock.assert_not_called()
-        # the established transport was torn down by the abort path (fatal
-        # per _abort_noise_handshake), never silently replaced in place
+        # and nothing replaced the handshake state in place
         self.assertIsNone(client.noise_handshake)
         self.assertIsNot(client.noise_transport, fake_new_handshake)
         # no message 2 (or any other reply) was sent for this frame
