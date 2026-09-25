@@ -165,18 +165,100 @@ OUTSTANDING_QUERY_MAX = 256
 POLICY_KICK_CLOSE_CODE = 4003
 
 
+#: How a close is offered to a transport, from the shape that carries the
+#: whole close to the shape that carries none of it. Each entry is the
+#: positional arguments, the keyword arguments, and what the shape drops.
+#: The first shape the transport's own signature accepts is the one used, so
+#: a transport never silently receives a close weaker than it can take.
+#:
+#: A shape is accepted only when each POSITIONAL value lands on a parameter of
+#: its own name. Binding alone is not enough: ``disconnect(reason, code=1000)``
+#: accepts two positional arguments and would take the integer code as its
+#: reason and the text reason as its code, with nothing raised and nothing to
+#: see. That transport declares both names, so the keyword shape below serves
+#: it correctly.
+_CLOSE_SHAPES = (
+    (("code", "reason"), (), None),
+    ((), ("code", "reason"), None),
+    # ``disconnect(code, /, *, reason)``: the code cannot be a keyword and the
+    # reason cannot be positional. Without this the whole table misses, and
+    # the fallback raised TypeError with the client still connected.
+    (("code",), ("reason",), None),
+    (("code",), (), "the reason"),
+    ((), ("code",), "the reason"),
+    # A transport that names a reason but no code: it is closed with what it
+    # can carry rather than with a code crossed into its reason.
+    ((), ("reason",), "the code"),
+    (("reason",), (), "the code"),
+    ((), (), "the code and the reason"),
+)
+
+
+def _positional_names(signature, count: int):
+    """The parameter names the first *count* positional arguments bind to.
+
+    ``None`` in place of a name means ``*args`` absorbs it, which carries the
+    value in order and so cannot cross two values over. ``None`` returned for
+    the whole call means the signature cannot take that many positionally.
+    """
+    names = []
+    for parameter in signature.parameters.values():
+        if len(names) >= count:
+            break
+        if parameter.kind is parameter.VAR_POSITIONAL:
+            names.extend([None] * (count - len(names)))
+            break
+        if parameter.kind in (parameter.POSITIONAL_ONLY,
+                              parameter.POSITIONAL_OR_KEYWORD):
+            names.append(parameter.name)
+    if len(names) < count:
+        return None
+    return names
+
+
 def close_connection(client, code: int, reason: str) -> None:
     """Close *client* with a code, on a transport that may not take one.
 
-    Every transport in this repository builds the connection with
-    ``disconnect(code=1000, reason="")``, but ``hivemind-email`` builds it with
-    ``def _disconnect() -> None``. Passing a code there raises ``TypeError``
-    out of the handler and into the transport, and the client is then never
-    disconnected at all: the kick stops kicking on that transport.
+    Most transports in this repository build the connection with
+    ``disconnect(code=1000, reason="")``, and ``hivemind-email`` builds it
+    with ``def _disconnect() -> None``. Passing a code to that one raises
+    ``TypeError`` out of the handler and into the transport, and the client is
+    then never disconnected at all: the kick stops kicking there.
+
+    The exposure is the CODED close sites only: the 1008 and 1011 rejections
+    and the 4003 policy kicks, all of which pass through here. The one
+    uncoded ``client.disconnect()`` left in this module is in
+    ``handle_client_disconnected``. It binds on every shape a transport in
+    this organisation ships today, all of which give every parameter a
+    default; a transport with a REQUIRED positional parameter would raise
+    there, and no transport has one. An earlier version of this docstring put
+    the exposure on the BROADCAST path; that path closes WITH a code, through
+    this helper.
 
     The signature is read rather than the call being wrapped in
     ``except TypeError``, so a ``TypeError`` raised *inside* a transport's own
     disconnect still propagates instead of being read as "takes no code".
+
+    The shape is chosen from ``_CLOSE_SHAPES``, best first, because reading
+    one shape is not enough:
+
+    * A keyword-only ``disconnect(*, code=1000, reason="")`` does not accept
+      ``(code, reason)`` positionally. Falling straight to the uncoded call
+      sent the transport-default 1000 and lost the kick code with no sign.
+    * A ``disconnect(code)`` with one required positional argument does not
+      accept two, and the uncoded fallback raises ``TypeError`` for the
+      argument it still needs. The fallback was itself unsafe.
+    * A ``disconnect(code, /, *, reason)`` takes the code positionally and the
+      reason by keyword and accepts neither the other way, so no single-kind
+      shape binds it at all.
+    * A ``disconnect(reason, code=1000)`` accepts two positional arguments and
+      binds them CROSSED. Arity is therefore not enough: each positional value
+      must land on a parameter of its own name, and the keyword shape is what
+      serves that transport.
+
+    A transport whose signature this table cannot satisfy still gets the coded
+    call, and its own ``TypeError`` speaks. That is a transport shape nobody
+    ships; the table covers every one in this organisation.
     """
     try:
         signature = inspect.signature(client.disconnect)
@@ -184,13 +266,28 @@ def close_connection(client, code: int, reason: str) -> None:
         # a builtin or a C callable: try the coded call and let it speak
         client.disconnect(code, reason)
         return
-    try:
-        signature.bind(code, reason)
-    except TypeError:
-        LOG.debug("transport disconnect takes no close code; closing without "
-                  "one (code %s was meant)", code)
-        client.disconnect()
+    supplied = {"code": code, "reason": reason}
+    for positional, keyword, dropped in _CLOSE_SHAPES:
+        args = tuple(supplied[name] for name in positional)
+        kwargs = {name: supplied[name] for name in keyword}
+        try:
+            signature.bind(*args, **kwargs)
+        except TypeError:
+            continue
+        bound_names = _positional_names(signature, len(positional))
+        if bound_names is None:
+            continue
+        if any(bound is not None and bound != wanted
+               for bound, wanted in zip(bound_names, positional)):
+            # it binds, but a value would land on a parameter of another
+            # name: the transport would be handed the code as its reason
+            continue
+        if dropped is not None:
+            LOG.debug("transport disconnect does not take %s; closing with "
+                      "what it takes (code %s was meant)", dropped, code)
+        client.disconnect(*args, **kwargs)
         return
+    # nothing bound: make the coded call and let the transport speak
     client.disconnect(code, reason)
 
 
@@ -547,7 +644,9 @@ class HiveMindClientConnection:
         """Record ``reason_code`` on the listener, then close with code and reason."""
         if self.hm_protocol is not None:
             self.hm_protocol.record_rejection(self, code, reason_code)
-        self.disconnect(code, reason)
+        # through close_connection: this is a coded close, so it carries the
+        # same transport-shape exposure as the kick sites
+        close_connection(self, code, reason)
 
     def decode(self, payload: str) -> Optional[HiveMessage]:
         encrypted = False
@@ -1513,7 +1612,8 @@ class HiveMindListenerProtocol:
             )
             self.handle_invalid_protocol_version(client)
             self.record_rejection(client, 1008, "protocol_v3_required")
-            client.disconnect(1008, "this node requires protocol v3 (the Noise handshake)")
+            close_connection(client, 1008,
+                             "this node requires protocol v3 (the Noise handshake)")
             return
 
         hello_payload = {
@@ -2219,7 +2319,7 @@ class HiveMindListenerProtocol:
             client,
             error="protocol v3 handshake failed",
             log_message=f"rejecting {client.peer}: the protocol v3 Noise handshake failed")
-        client.disconnect(1008, close_reason)
+        close_connection(client, 1008, close_reason)
 
     def handle_noise_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
