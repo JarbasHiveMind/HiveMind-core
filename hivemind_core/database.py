@@ -1,19 +1,7 @@
 # hivemind-core
 # Copyright (C) 2026 Casimiro Ferreira
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the GNU Affero General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-from typing import List, Optional, Iterable
+# SPDX-License-Identifier: Apache-2.0
+from typing import Any, Dict, List, Optional, Iterable
 
 from ovos_utils.log import LOG
 
@@ -25,9 +13,6 @@ from hivemind_plugin_manager.database import Client
 class ClientDatabase:
 
     def __init__(self, config=None):
-        """
-        Initialize the client database with the specified backend.
-        """
         config = config or get_server_config()["database"]
         name = config["module"]
         db_class = DatabaseFactory.get_class(name)
@@ -48,56 +33,64 @@ class ClientDatabase:
         return self.db.search_by_value("name", name)
 
     def get_client_by_api_key(self, api_key: str) -> Optional[Client]:
-        search: List[Client] = self.db.search_by_value("api_key", api_key)
-        if len(search):
-            return search[0]
-        return None
+        return self.db.get_client_by_api_key(api_key)
+
+    def get_client_by_id(self, client_id: int) -> Optional[Client]:
+        return self.db.get_client_by_id(client_id)
+
+    def refresh(self, client_id: int) -> Optional[Client]:
+        return self.db.refresh(client_id)
 
     def add_client(self,
                    name: str,
                    key: str = "",
                    admin: bool = False,
+                   allowed_types: Optional[List[str]] = None,
+                   password: Optional[str] = None,
+                   metadata: Optional[Dict[str, Any]] = None,
+                   # Deprecated kwargs — folded into metadata. Kept so the
+                   # CLI and external callers using the old signature keep
+                   # working. Client.deserialize handles the same migration
+                   # on the read side. See HiveMind-core#85.
                    intent_blacklist: Optional[List[str]] = None,
                    skill_blacklist: Optional[List[str]] = None,
-                   message_blacklist: Optional[List[str]] = None,
-                   allowed_types: Optional[List[str]] = None,
-                   crypto_key: Optional[str] = None,
-                   password: Optional[str] = None) -> bool:
-        if crypto_key is not None:
-            crypto_key = crypto_key[:16]
+                   message_blacklist: Optional[List[str]] = None) -> bool:
+        # Migrate any legacy blacklist kwargs into metadata.
+        meta = dict(metadata) if metadata else {}
+        for k, v in (("skill_blacklist", skill_blacklist),
+                     ("intent_blacklist", intent_blacklist),
+                     ("message_blacklist", message_blacklist)):
+            if v:
+                meta.setdefault(k, list(v))
 
         user = self.get_client_by_api_key(key)
         if user:
-            # Update the existing client object directly
             if name:
                 user.name = name
-            if intent_blacklist:
-                user.intent_blacklist = intent_blacklist
-            if skill_blacklist:
-                user.skill_blacklist = skill_blacklist
-            if message_blacklist:
-                user.message_blacklist = message_blacklist
             if allowed_types:
                 user.allowed_types = allowed_types
+            # unlike the fields above, admin is compared against None so that
+            # an explicit admin=False demotes the client instead of being
+            # read as "no change"
             if admin is not None:
                 user.is_admin = admin
-            if crypto_key:
-                user.crypto_key = crypto_key
             if password:
                 user.password = password
+            if meta:
+                # merge — don't blow away existing metadata
+                merged = dict(user.metadata)
+                merged.update(meta)
+                user.metadata = merged
             return self.db.update_item(user)
 
         user = Client(
             api_key=key,
             name=name,
-            intent_blacklist=intent_blacklist,
-            skill_blacklist=skill_blacklist,
-            message_blacklist=message_blacklist,
-            crypto_key=crypto_key,
             client_id=self.total_clients() + 1,
             is_admin=admin,
             password=password,
-            allowed_types=allowed_types,
+            allowed_types=allowed_types or [],
+            metadata=meta,
         )
         return self.db.add_item(user)
 
