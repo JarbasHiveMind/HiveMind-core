@@ -291,7 +291,10 @@ class TestOffLoopHandshake(unittest.TestCase):
             self.proto.handle_noise_handshake_message(message, client)  # duplicate
 
         asyncio.run(scenario())
-        client.disconnect.assert_called_once_with(1008, unittest.mock.ANY)
+        # the duplicate is dropped, not answered, and the connection is
+        # kept: closing here ended a healthy session over a frame that a
+        # burst makes likely while argon2id is still running
+        client.disconnect.assert_not_called()
         client.send.assert_not_called()
 
     def test_concurrent_connections_share_one_derivation(self):

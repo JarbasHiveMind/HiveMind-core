@@ -2242,8 +2242,17 @@ class HiveMindListenerProtocol:
         if client.noise_transport is not None:
             # Session already established; a client-controlled duplicate or
             # replayed HANDSHAKE frame must not reach a None noise_handshake.
-            self._abort_noise_handshake(
-                client, "unexpected HANDSHAKE frame after the Noise session was established")
+            # DROP THE FRAME, NOT THE SESSION. The early return is what keeps
+            # the duplicate away from the handshake state; aborting as well
+            # killed a healthy session and, because the client records the
+            # 1008 as a refused identity, took a correctly registered
+            # satellite off the mesh until it was restarted. It is also a
+            # denial of service: one injected or replayed frame on an
+            # established connection ended it. This is the measured cause of
+            # the hivemind-test-harness nightly red.
+            LOG.warning(
+                f"ignoring a HANDSHAKE frame from {client.peer}: the Noise "
+                f"session is already established")
             return
 
         if client.noise_handshake is None:
@@ -2265,11 +2274,15 @@ class HiveMindListenerProtocol:
                                       client._handshake_payload or {}, name)
             if client.noise_psk_pending:
                 # message 1 is parked on this connection already; a second
-                # frame is a client-controlled duplicate, rejected before it
-                # can start a handshake of its own
-                self._abort_noise_handshake(
-                    client, "unexpected HANDSHAKE frame while the Noise "
-                            "pre-shared key is being derived")
+                # frame is a client-controlled duplicate, dropped before it
+                # can start a handshake of its own. Dropped, not aborted, for
+                # the same reason as the established-session case above: the
+                # return is what protects the state, and a derivation that is
+                # still running is exactly when a burst makes a duplicate
+                # likely.
+                LOG.warning(
+                    f"ignoring a HANDSHAKE frame from {client.peer}: the "
+                    f"Noise pre-shared key is still being derived")
                 return
             password = client.pswd_handshake.password
             psk = self._cached_noise_psk(self._noise_psk_key(password), client)
