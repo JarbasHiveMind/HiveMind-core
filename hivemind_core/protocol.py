@@ -165,6 +165,20 @@ OUTSTANDING_QUERY_MAX = 256
 POLICY_KICK_CLOSE_CODE = 4003
 
 
+def _handshake_failure_text(exc: BaseException) -> str:
+    """Name the exception even when it carries no message.
+
+    ``f"handshake failure: {e}"`` renders an exception constructed with no
+    arguments as the empty string, so the node log and the client's close
+    reason both read "handshake failure: " and name nothing at all. The
+    nightly burst in hivemind-test-harness produced exactly that, and the
+    run log could not say which failure it was.
+    """
+    text = str(exc).strip()
+    name = type(exc).__name__
+    return f"{name}: {text}" if text else name
+
+
 def close_connection(client, code: int, reason: str) -> None:
     """Close *client* with a code, on a transport that may not take one.
 
@@ -2319,7 +2333,9 @@ class HiveMindListenerProtocol:
                 msg2 = client.noise_handshake.write_message(
                     json.dumps({"encoding": client.encoding}).encode("utf-8"))
             except Exception as e:
-                self._abort_noise_handshake(client, f"handshake failure: {e}")
+                LOG.debug("Noise handshake exception", exc_info=True)
+                self._abort_noise_handshake(
+                    client, f"handshake failure: {_handshake_failure_text(e)}")
                 return
             client.send(HiveMessage(HiveMessageType.HANDSHAKE,
                                     {"noise": {"msg": msg2.hex()}}))
@@ -2330,7 +2346,9 @@ class HiveMindListenerProtocol:
             try:
                 client.noise_handshake.read_message(noise_msg)
             except Exception as e:
-                self._abort_noise_handshake(client, f"handshake failure: {e}")
+                LOG.debug("Noise handshake exception", exc_info=True)
+                self._abort_noise_handshake(
+                    client, f"handshake failure: {_handshake_failure_text(e)}")
                 return
 
         self._finish_noise_handshake(client)
