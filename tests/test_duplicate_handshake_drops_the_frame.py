@@ -82,6 +82,53 @@ class TestAnEstablishedSessionSurvivesADuplicate(unittest.TestCase):
         self.assertIs(client.noise_transport, transport)
         self.assertFalse(client.disconnected)
 
+    def test_a_malformed_envelope_does_not_end_an_established_session(self):
+        """The guard must sit ABOVE the envelope parse.
+
+        The parse aborts on bad hex, and that is right DURING a handshake.
+        On an established session there is no handshake state for it to
+        protect, so aborting there only ended a healthy session: one byte of
+        bad hex cleared the transport, recorded 1008 noise_handshake_failed
+        and disconnected, which is the same latch the guard exists to stop.
+        The first version of this fix left that path open.
+        """
+        for label, payload in (("bad hex", {"noise": {"msg": "zz"}}),
+                               ("no msg key", {"noise": {}}),
+                               ("no noise key", {})):
+            with self.subTest(payload=label):
+                client = _client(established=True)
+                transport = client.noise_transport
+                protocol = _protocol()
+                message = MagicMock()
+                message.payload = payload
+                with patch.object(HiveMindListenerProtocol,
+                                  "_abort_noise_handshake") as abort:
+                    protocol.handle_noise_handshake_message(message, client)
+                abort.assert_not_called()
+                self.assertIs(client.noise_transport, transport)
+                self.assertFalse(client.disconnected)
+
+    def test_a_malformed_envelope_still_aborts_during_a_handshake(self):
+        """The control, and it must not move with the thing it controls.
+
+        Moving the guard above the parse must not stop a mid-handshake
+        malformed envelope from aborting. If this passed too, the change
+        would have disabled the parse check rather than reordered it.
+        """
+        for label, payload in (("bad hex", {"noise": {"msg": "zz"}}),
+                               ("no msg key", {"noise": {}})):
+            with self.subTest(payload=label):
+                client = _client()          # no established transport
+                protocol = _protocol()
+                message = MagicMock()
+                message.payload = payload
+                with patch.object(HiveMindListenerProtocol,
+                                  "_abort_noise_handshake") as abort:
+                    protocol.handle_noise_handshake_message(message, client)
+                abort.assert_called_once()
+                self.assertIn("malformed Noise envelope",
+                              abort.call_args[0][1])
+
     def test_the_duplicate_reaches_no_handshake_state(self):
         """The original guard's actual purpose still holds.
 
@@ -120,13 +167,18 @@ class TestAPendingDerivationSurvivesADuplicate(unittest.TestCase):
                                      "suite": "25519_ChaChaPoly_BLAKE2s"}}
         with patch.object(HiveMindListenerProtocol,
                           "_abort_noise_handshake") as abort:
-            try:
-                protocol.handle_noise_handshake_message(message, client)
-            except Exception:
-                # the frame is dropped before any of the work below it runs;
-                # anything raised past that point is not what this asserts
-                pass
+            # No try/except. The call must RETURN, not raise: an earlier
+            # version swallowed everything here, so an exception raised before
+            # the abort satisfied the assertion below just as a clean drop
+            # did, and the test could not tell them apart.
+            protocol.handle_noise_handshake_message(message, client)
+
         abort.assert_not_called()
+        # and the drop really happened: the guard returns above the derivation
+        # work, so neither of these runs for a dropped frame. Without them a
+        # frame that fell through and merely failed to abort would pass.
+        protocol._cached_noise_psk.assert_not_called()
+        protocol._derive_noise_psk_async.assert_not_called()
 
 
 class TestNeitherGuardAborts(unittest.TestCase):

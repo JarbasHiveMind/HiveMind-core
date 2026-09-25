@@ -2233,11 +2233,6 @@ class HiveMindListenerProtocol:
         pinned-key contradiction aborts cryptographically, fail-fast.
         """
         noise_params = message.payload.get("noise") or {}
-        try:
-            noise_msg = bytes.fromhex(noise_params["msg"])
-        except (KeyError, TypeError, ValueError):
-            self._abort_noise_handshake(client, "malformed Noise envelope")
-            return
 
         if client.noise_transport is not None:
             # Session already established; a client-controlled duplicate or
@@ -2253,6 +2248,20 @@ class HiveMindListenerProtocol:
             LOG.warning(
                 f"ignoring a HANDSHAKE frame from {client.peer}: the Noise "
                 f"session is already established")
+            return
+
+        # The parse comes AFTER the guard above. A running session has no
+        # handshake state for it to protect, so aborting here on bad hex only
+        # ended a healthy session: "zz" in the msg field, or no msg field at
+        # all, reached this abort and cleared the transport, recorded 1008
+        # noise_handshake_failed and disconnected. That is the same client-side
+        # latch the guard exists to stop, reachable with one byte of bad hex.
+        # Aborting on a malformed envelope DURING a handshake stays right,
+        # which is what this order keeps.
+        try:
+            noise_msg = bytes.fromhex(noise_params["msg"])
+        except (KeyError, TypeError, ValueError):
+            self._abort_noise_handshake(client, "malformed Noise envelope")
             return
 
         if client.noise_handshake is None:
