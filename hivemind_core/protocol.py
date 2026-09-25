@@ -579,9 +579,50 @@ class HiveMindClientConnection:
         if isinstance(payload, bytes):
             message = decode_bitstring(payload)
         else:
-            if isinstance(payload, str):
-                payload = json.loads(payload)
-            message = HiveMessage(**payload)
+            # HIVEMIND-MSG-1 §3 (architecture efc6566): "A node MUST
+            # forward or ignore a payload it does not understand. It MUST NOT
+            # reject the connection over it, and it MUST NOT stop its own
+            # handler over it." §6 repeats it in the MUST NOT list.
+            #
+            # Raising here IS that rejection: the transport catches whatever
+            # `decode` raises and closes with 1008, so one frame from a remote
+            # peer dropped the session. A frame this node cannot turn into an
+            # envelope at all is therefore DROPPED. `None` is the transport's
+            # existing "keep receiving" signal, already returned for a
+            # buffered multi-frame Noise chunk and already guarded there.
+            #
+            # This is a narrower door than the CLIENT receive door, which uses
+            # `HiveMessage.from_wire`, and the difference is deliberate. A
+            # client has two answers to a bad frame, raise or drop, so its one
+            # door refuses at the door. A server has a third: it answers the
+            # peer with `hive.policy.denied` / `malformed_payload` over the
+            # same connection, which is what `handle_message` does. A frame
+            # whose ENVELOPE reads but whose PAYLOAD is unusable must reach
+            # that answer, so it is built here and not refused; refusing it
+            # would turn a reply that names the peer's bug into silence.
+            # Only a frame with no envelope is dropped.
+            #
+            # The except clause is wide because every source inside it is the
+            # frame's fault: `json.loads` raises `JSONDecodeError` (a
+            # `ValueError`), an unknown `msg_type` raises a bare `ValueError`
+            # from the registry lookup, and an absent `msg_type` raises
+            # `TypeError` from the constructor. The block parses one frame and
+            # nothing else, so no bug of this node's can hide inside it.
+            try:
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                if not isinstance(payload, dict):
+                    raise ValueError(
+                        f"a wire frame must be a JSON object, got "
+                        f"{type(payload).__name__} (HIVEMIND-MSG-1 §2)")
+                message = HiveMessage(**payload)
+            except (ValueError, TypeError) as e:
+                # Never log the frame: it can carry a user's speech or a
+                # credential. The exception class and the peer are enough.
+                LOG.warning(f"dropping an unreadable frame from {self.peer}: "
+                            f"{type(e).__name__} (HIVEMIND-MSG-1 §3, the "
+                            f"connection stays up)")
+                return None
 
         # HIVEMIND-CRYPTO-1 §3.5 - when the server requires crypto, drop any
         # cleartext frame that is not part of key establishment. HELLO and
