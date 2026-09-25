@@ -166,6 +166,7 @@ def test_a_configured_private_key_is_kept(tmp_path):
     # the property: what is published is the public half of the key ON DISK,
     # compared as key material rather than as an encoding
     from Cryptodome.PublicKey import RSA
-    on_disk = RSA.import_key(open(key_path).read())
+    with open(key_path, encoding="utf-8") as f:
+        on_disk = RSA.import_key(f.read())
     assert RSA.import_key(identity.public_key).n == on_disk.n, \
         "the published key must be the public half of the key in use"
