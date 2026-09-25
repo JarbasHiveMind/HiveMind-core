@@ -87,8 +87,21 @@ class TestUnauthenticatedIntercomRefused(unittest.TestCase):
         assert self.client.peer in mock_log.warning.call_args[0][0]
 
     def test_plaintext_dict_intercom_is_dropped(self):
+        # A plain JSON object, which is what the name has always promised.
+        # This passed ``_inner_bus().serialize()`` until hivemind-bus-client
+        # 1.2.4a1, and that is a STRING: the constructor now refuses one,
+        # because parsing it there would reapply, one level down, the repair
+        # ``from_wire`` refuses (HIVEMIND-MSG-1 §4). A string payload can no
+        # longer exist in a HiveMessage anywhere, so the old shape was not a
+        # weaker case to cover, it was an unreachable one.
+        #
+        # The property is unchanged and does not depend on the shape:
+        # ``handle_intercom_message`` drops any payload that is not a dict
+        # carrying "ciphertext", so an unsigned frame is refused whatever it
+        # holds.
         frame = HiveMessage(HiveMessageType.INTERCOM,
-                            payload=_inner_bus().serialize())
+                            payload={"type": "speak",
+                                     "data": {"utterance": "hi"}})
         with patch("hivemind_core.protocol.LOG") as mock_log:
             handled = self.proto.handle_intercom_message(frame, self.client)
         self._assert_dropped(handled, mock_log)
