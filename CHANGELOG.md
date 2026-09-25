@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.1a2) (2026-09-25)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.1a1...5.3.1a2)
+
+**Merged pull requests:**
+
+- test: the unauthenticated INTERCOM case uses a dict, as its name says [\#373](https://github.com/JarbasHiveMind/HiveMind-core/pull/373) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.1a1) (2026-09-23)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.0a1...5.3.1a1)
@@ -374,10 +382,6 @@
 ## [4.13.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.11a1) (2026-08-14)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.10a1...4.13.11a1)
-
-**Merged pull requests:**
-
-- fix: raise ovos-bus-client floor to 2.8.3a1 for send-side wire twins [\#267](https://github.com/JarbasHiveMind/HiveMind-core/pull/267) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.10a1) (2026-08-14)
 
