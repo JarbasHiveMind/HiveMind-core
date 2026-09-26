@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.2a1) (2026-09-26)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.1a2...5.3.2a1)
+
+**Merged pull requests:**
+
+- fix: a duplicate HANDSHAKE frame drops the frame, not the session [\#372](https://github.com/JarbasHiveMind/HiveMind-core/pull/372) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.1a2) (2026-09-25)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.1a1...5.3.1a2)
@@ -375,10 +383,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.11a1...4.13.11a2)
 
-**Merged pull requests:**
-
-- docs: add AGENTS.md with per-repo agent conventions [\#269](https://github.com/JarbasHiveMind/HiveMind-core/pull/269) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.11a1) (2026-08-14)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.10a1...4.13.11a1)
@@ -501,15 +505,15 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
-
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
