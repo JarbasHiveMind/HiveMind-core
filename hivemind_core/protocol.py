@@ -581,6 +581,24 @@ class HiveMindClientConnection:
         else:
             if isinstance(payload, str):
                 payload = json.loads(payload)
+            # `HiveMessage(**payload)` and NOT `HiveMessage.from_wire`.
+            # Measured on T-5708: the wire door is STRICTER, and three of its
+            # refusals are shapes this node must answer rather than raise on.
+            # A payload that is a list or a number, and a HELLO with no
+            # payload key, are refused by `from_wire`; here they are ADMITTED
+            # and `handle_message` answers `hive.policy.denied` with
+            # `malformed_payload` and keeps the connection. A raise at this
+            # door reaches the transport, which closes with 1008, so a peer's
+            # bug would become a disconnect instead of a reply -- see
+            # `tests/test_malformed_wrapper_payload.py`, whose two subtests
+            # `query/payload-is-a-list` and `query/payload-is-a-number` fail
+            # on exactly that change.
+            #
+            # This line stays until hivemind-websocket-client offers a wire
+            # construction that is EXEMPT from its originator guards without
+            # being stricter (T-5708). §4 forbids an admitting node to inspect
+            # the inner payload of a wrapped routing message, so the guard
+            # that library is adding must not fire here.
             message = HiveMessage(**payload)
 
         # HIVEMIND-CRYPTO-1 §3.5 - when the server requires crypto, drop any

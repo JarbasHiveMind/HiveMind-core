@@ -29,6 +29,21 @@ BAD_PAYLOAD = {"type": "recognizer_loop:utterance",
                "data": {"utterances": ["hello"]},
                "context": {}}
 
+
+def _bad_frame(msg_type):
+    """A wrapper frame whose payload is not an envelope, built as a FRAME.
+
+    Not ``HiveMessage(msg_type, payload=BAD_PAYLOAD)``. That asks the
+    constructor to accept a shape HIVEMIND-MSG-1 §4 forbids, and
+    hivemind-websocket-client is going to stop accepting it at the
+    originator (T-5708). A node still has to ADMIT the frame -- §4 forbids
+    an admitting node to inspect the inner payload of a wrapped routing
+    message -- so the test builds it the way it arrives, through the wire
+    door, and the refusal stays where it belongs: at the rebuild.
+    """
+    return HiveMessage.from_wire({"msg_type": msg_type.value if hasattr(msg_type, "value") else msg_type,
+                                  "payload": dict(BAD_PAYLOAD)})
+
 WRAPPER_TYPES = [HiveMessageType.QUERY, HiveMessageType.BROADCAST,
                  HiveMessageType.PROPAGATE, HiveMessageType.ESCALATE,
                  HiveMessageType.CASCADE]
@@ -70,7 +85,7 @@ class TestMalformedWrapperPayload(unittest.TestCase):
     def test_malformed_query_is_rejected_not_crashed(self):
         protocol = _make_protocol()
         client = _make_client(protocol)
-        message = HiveMessage(HiveMessageType.QUERY, payload=BAD_PAYLOAD)
+        message = _bad_frame(HiveMessageType.QUERY)
 
         protocol.handle_message(message, client)  # must not raise
 
@@ -83,7 +98,7 @@ class TestMalformedWrapperPayload(unittest.TestCase):
             with self.subTest(msg_type=msg_type):
                 protocol = _make_protocol()
                 client = _make_client(protocol)
-                message = HiveMessage(msg_type, payload=BAD_PAYLOAD)
+                message = _bad_frame(msg_type)
 
                 protocol.handle_message(message, client)  # must not raise
 
@@ -96,7 +111,7 @@ class TestMalformedWrapperPayload(unittest.TestCase):
         client = _make_client(protocol)
 
         protocol.handle_message(
-            HiveMessage(HiveMessageType.QUERY, payload=BAD_PAYLOAD), client)
+            _bad_frame(HiveMessageType.QUERY), client)
 
         client.disconnect.assert_not_called()
 
@@ -201,3 +216,66 @@ class TestGuardRunsBeforeTheDebugLog(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheDoorAdmitsAndDoesNotInspect(unittest.TestCase):
+    """What ``decode`` must keep doing, whatever builds the frame.
+
+    HIVEMIND-MSG-1 §4 forbids an admitting node to inspect the inner payload
+    of a wrapped routing message, so a routing frame whose payload is not an
+    envelope is ADMITTED at the door and refused at the rebuild, where
+    ``handle_message`` answers ``hive.policy.denied``. A door that refused it
+    would move a peer's bug into this node's door and turn a reply into a 1008
+    disconnect, which is what measuring ``HiveMessage.from_wire`` as the door
+    showed (T-5708).
+
+    These rows pin that behaviour, so the next attempt to change the door has
+    to face it.
+    """
+
+    def _decode(self, raw):
+        protocol = _make_protocol()
+        client = _make_client(protocol)
+        client.noise_transport = MagicMock()
+        client.noise_transport.decrypt_frame.return_value = raw
+        return client.decode(b"noise-frame")
+
+    def test_a_routing_frame_with_a_non_envelope_payload_is_still_admitted(self):
+        """§4's MUST NOT, at the door. The control on every tightening below."""
+        raw = ('{"msg_type":"query","payload":'
+               '{"type":"recognizer_loop:utterance",'
+               '"data":{"utterances":["hi"]},"context":{}}}')
+        message = self._decode(raw)
+        self.assertEqual(message.msg_type, HiveMessageType.QUERY)
+        # The frame is admitted intact, and the read is what fails.
+        with self.assertRaises(TypeError):
+            message.payload
+
+    def test_a_legal_nested_envelope_still_reads_back(self):
+        """The other control: the shape §4 asks for is unaffected."""
+        raw = ('{"msg_type":"query","payload":{"msg_type":"bus","payload":'
+               '{"type":"recognizer_loop:utterance",'
+               '"data":{"utterances":["hi"]},"context":{}}}}')
+        message = self._decode(raw)
+        self.assertEqual(message.payload.msg_type, HiveMessageType.BUS)
+
+    def test_the_per_hop_fields_survive(self):
+        """``from_wire`` keeps them and ``deserialize`` would drop them.
+
+        ``source_peer`` decides whether a PROPAGATE is trusted, so a door
+        that dropped it would silently change that decision.
+        """
+        raw = ('{"msg_type":"bus","payload":'
+               '{"type":"recognizer_loop:utterance","data":{},"context":{}},'
+               '"source_peer":"sat::1","route":[{"source":"n1"}],'
+               '"target_site_id":"site-a"}')
+        message = self._decode(raw)
+        self.assertEqual(message.source_peer, "sat::1")
+        self.assertEqual(message.target_site_id, "site-a")
+        self.assertEqual(len(message.route), 1)
+
+    def test_a_ping_with_no_payload_key_is_still_admitted(self):
+        """The control on that tightening: a PING frame is the whole message,
+        and §2 marks the key required "except PING"."""
+        message = self._decode('{"msg_type":"ping"}')
+        self.assertEqual(message.msg_type, HiveMessageType.PING)
