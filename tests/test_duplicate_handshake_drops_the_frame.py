@@ -181,6 +181,83 @@ class TestAPendingDerivationSurvivesADuplicate(unittest.TestCase):
         protocol._derive_noise_psk_async.assert_not_called()
 
 
+    def test_a_frame_of_any_shape_is_dropped_while_the_psk_is_derived(self):
+        """T-5899: the guard must sit above the parse AND the negotiation.
+
+        While the guard sat below both, only a well-formed, correctly
+        negotiated duplicate was dropped. A malformed envelope aborted at the
+        parse, and a frame naming an unoffered pattern aborted at the
+        negotiation check, so one injected frame inside the argon2id window
+        still cleared the transport, recorded 1008 noise_handshake_failed and
+        disconnected -- the same client-side latch this file exists to stop.
+        """
+        payloads = (
+            ("bad hex", {"noise": {"msg": "zz", "pattern": "XXpsk2",
+                                   "suite": "25519_ChaChaPoly_BLAKE2s"}}),
+            ("no msg key", {"noise": {"pattern": "XXpsk2",
+                                      "suite": "25519_ChaChaPoly_BLAKE2s"}}),
+            ("no noise key", {}),
+            ("unoffered pattern", {"noise": {"msg": "00" * 8,
+                                             "pattern": "KKpsk0",
+                                             "suite": "25519_ChaChaPoly_BLAKE2s"}}),
+            ("unoffered suite", {"noise": {"msg": "00" * 8,
+                                           "pattern": "XXpsk2",
+                                           "suite": "448_AESGCM_SHA512"}}),
+        )
+        for label, payload in payloads:
+            with self.subTest(payload=label):
+                client = _client(psk_pending=True)
+                client.pswd_handshake = MagicMock(password="pw")
+                client._handshake_payload = {
+                    "noise": {"patterns": ["XXpsk2"],
+                              "suites": ["25519_ChaChaPoly_BLAKE2s"]}}
+                client._hello_payload = {}
+                protocol = _protocol()
+                protocol._get_pinned_client_noise_key = MagicMock(return_value=None)
+                protocol._cached_noise_psk = MagicMock(return_value=None)
+                protocol._noise_psk_key = MagicMock(return_value="k")
+                protocol._derive_noise_psk_async = MagicMock()
+                message = MagicMock()
+                message.payload = payload
+                with patch.object(HiveMindListenerProtocol,
+                                  "_abort_noise_handshake") as abort:
+                    protocol.handle_noise_handshake_message(message, client)
+
+                abort.assert_not_called()
+                self.assertFalse(client.disconnected)
+                # the drop really happened, above every judgement of the frame
+                protocol._get_pinned_client_noise_key.assert_not_called()
+                protocol._cached_noise_psk.assert_not_called()
+                protocol._derive_noise_psk_async.assert_not_called()
+
+    def test_an_unoffered_pattern_still_aborts_when_nothing_is_parked(self):
+        """The control for the negotiation half.
+
+        The malformed-envelope control is above. This one holds the other
+        abort the guard now sits over: with no derivation parked, a frame
+        naming a pattern the server never offered must still abort. If both
+        controls passed in both worlds, the guard would be a disabled check
+        rather than a reorder.
+        """
+        client = _client()                  # nothing parked, nothing established
+        client.pswd_handshake = MagicMock(password="pw")
+        client._handshake_payload = {
+            "noise": {"patterns": ["XXpsk2"],
+                      "suites": ["25519_ChaChaPoly_BLAKE2s"]}}
+        client._hello_payload = {}
+        protocol = _protocol()
+        protocol._get_pinned_client_noise_key = MagicMock(return_value=None)
+        message = MagicMock()
+        message.payload = {"noise": {"msg": "00" * 8, "pattern": "KKpsk0",
+                                     "suite": "25519_ChaChaPoly_BLAKE2s"}}
+        with patch.object(HiveMindListenerProtocol,
+                          "_abort_noise_handshake") as abort:
+            protocol.handle_noise_handshake_message(message, client)
+
+        abort.assert_called_once()
+        self.assertIn("pattern/suite not offered", abort.call_args[0][1])
+
+
 class TestNeitherGuardAborts(unittest.TestCase):
     """Both sites, because fixing one leaves the other killing sessions."""
 

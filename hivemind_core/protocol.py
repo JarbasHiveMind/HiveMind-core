@@ -2250,6 +2250,39 @@ class HiveMindListenerProtocol:
                 f"session is already established")
             return
 
+        if client.noise_psk_pending:
+            # Message 1 is parked on this connection already, waiting for the
+            # argon2id derivation, so no second frame can legitimately advance
+            # this handshake until the derivation returns. DROP THE FRAME,
+            # WHATEVER ITS SHAPE, for the same reason as the case above: the
+            # return is what protects the state.
+            #
+            # The shape is deliberately not examined, and this guard sits
+            # above the parse and above the negotiation check to keep it that
+            # way. Both of those abort, and an abort clears the transport,
+            # records 1008 noise_handshake_failed and disconnects, which the
+            # client latches as a refused identity. While the guard sat below
+            # them, only a well-formed and correctly negotiated duplicate was
+            # dropped: "zz" in the msg field, or a frame naming a pattern the
+            # server never offered, still ended the connection. One injected
+            # frame inside the argon2id window was therefore a denial of
+            # service, and the window is long on purpose.
+            #
+            # Nothing is lost by not judging the frame. A well-formed one is
+            # the duplicate a burst makes likely; a malformed one proves
+            # nothing about a peer that has authenticated nothing yet. No
+            # Noise step runs on a dropped frame, so this is not an
+            # authentication failure, and HIVEMIND-CRYPTO-1 §3.3 does not
+            # reach it: what that clause makes fatal is a failure AT a Noise
+            # step -- a failed DH, a failed AEAD decryption inside the
+            # handshake, a PSK mismatch, a pinned-key contradiction. The
+            # parked message 1 is still the one being answered, and when the
+            # derivation completes it is replayed and judged in full.
+            LOG.warning(
+                f"ignoring a HANDSHAKE frame from {client.peer}: the "
+                f"Noise pre-shared key is still being derived")
+            return
+
         # The parse comes AFTER the guard above. A running session has no
         # handshake state for it to protect, so aborting here on bad hex only
         # ended a healthy session: "zz" in the msg field, or no msg field at
@@ -2281,18 +2314,6 @@ class HiveMindListenerProtocol:
             name = noise_protocol_name(pattern, suite)
             prologue = build_prologue(client._hello_payload or {},
                                       client._handshake_payload or {}, name)
-            if client.noise_psk_pending:
-                # message 1 is parked on this connection already; a second
-                # frame is a client-controlled duplicate, dropped before it
-                # can start a handshake of its own. Dropped, not aborted, for
-                # the same reason as the established-session case above: the
-                # return is what protects the state, and a derivation that is
-                # still running is exactly when a burst makes a duplicate
-                # likely.
-                LOG.warning(
-                    f"ignoring a HANDSHAKE frame from {client.peer}: the "
-                    f"Noise pre-shared key is still being derived")
-                return
             password = client.pswd_handshake.password
             psk = self._cached_noise_psk(self._noise_psk_key(password), client)
             if psk is None:
