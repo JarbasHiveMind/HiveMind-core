@@ -28,7 +28,10 @@ HiveMindListenerProtocol.handle_new_client()
 Client sends HANDSHAKE (Noise message 1)
         │
 HiveMindListenerProtocol.handle_handshake_message()
-  ├─ runs the Noise handshake (aborts 1008 on a non-Noise frame or wrong PSK)
+  ├─ runs the Noise handshake (aborts 1008 on a non-Noise frame or wrong PSK
+  │    while the handshake is in progress)
+  ├─ a HANDSHAKE frame on an ESTABLISHED session is dropped; the session lives
+  │    (see HANDSHAKE frame behaviour)
   └─ on completion, the Noise transport becomes the session crypto layer
         │
         ▼
@@ -105,6 +108,53 @@ they read different dead drops instead of getting matching well-formed
 empty answers (`{"status": "ok", "messages": []}`) from two different
 mailboxes and reading that as "we met." A client that wants a specific
 mailbox can also confirm it reached that one.
+
+### HANDSHAKE frame behaviour
+
+#### `handle_noise_handshake_message(message, client)`
+
+Called for each protocol v3 Noise handshake frame.
+
+The connection state decides what a frame does. The same frame is fatal during a
+handshake and harmless after one. Read the state first, then the table.
+
+| Connection state | A HANDSHAKE frame | Effect on the connection |
+|---|---|---|
+| Noise session established (`noise_transport` is set) | Dropped, whatever the frame contains | None. The session lives and the client stays registered |
+| Handshake in progress | Aborted if the frame is bad: a malformed envelope, a pattern or suite the server did not offer, `KKpsk0` with no pinned key, or a wrong pre-shared key | Closed with 1008, and the rejection is recorded |
+| Handshake in progress, pre-shared key still being derived (`noise_psk_pending`) | A well formed and correctly negotiated duplicate is dropped. A bad frame still aborts | The session lives for a duplicate. A bad frame closes the connection |
+
+The established-session drop is the part that changed. Before it, a duplicate or
+replayed HANDSHAKE frame on a healthy session closed that session. The client
+recorded the 1008 as a refused identity, so a correctly registered satellite left
+the mesh until somebody restarted it. One injected frame was therefore enough to
+end a connection. The server now ignores the frame and writes a warning:
+
+```
+ignoring a HANDSHAKE frame from <peer>: the Noise session is already established
+```
+
+The envelope parse runs after this guard, not before it. This matters: one byte of
+bad hex in the `msg` field used to reach the abort and close a healthy session.
+
+The third row is a known limit, not a design. The pre-shared key derivation runs
+off the IO loop, because argon2id must not stall the loop that serves every other
+client. Message 1 waits on the connection while the key arrives. In that window
+the drop sits after the envelope parse, after the pattern and suite check, and
+after the pinned-key lookup, so only a well formed and correctly negotiated
+duplicate reaches it. A malformed frame in the same window still closes the
+connection. Whether every frame in that window should be dropped is still open.
+
+```
+Receive HANDSHAKE (Noise frame)
+  ├─ noise_transport set?  ── yes ──▶ drop the frame, keep the session
+  │                                    (log a warning)
+  ├─ parse the envelope    ── bad ──▶ abort 1008
+  ├─ pattern/suite offered?── no  ──▶ abort 1008
+  ├─ KKpsk0 with no pin?   ── yes ──▶ abort 1008
+  ├─ noise_psk_pending?    ── yes ──▶ drop the frame, keep the connection
+  └─ run the handshake step          (a bad frame never reaches here)
+```
 
 ### PING handler behaviour
 

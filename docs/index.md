@@ -36,6 +36,7 @@ HiveMind Core is fully **plugin-driven**:
 - [Configuration](configuration.md): covers configuring protocols and databases.
 - [CLI Reference](cli.md): a complete command-line reference.
 - [Protocol Internals](protocol.md): explains the HiveMind message format.
+- [Prerelease Quirks](prerelease-quirks.md): behaviour that changed between prereleases, and known limits.
 - [Plugin System](plugins.md): an overview of the modular plugin architecture.
 - [Transformer Pipelines](transformers.md): OVOS transformer plugins on the text/bus path.
 - [Plugin Development](plugin_development.md): a guide for creating custom plugins.
