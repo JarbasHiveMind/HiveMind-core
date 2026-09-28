@@ -3108,15 +3108,28 @@ class HiveMindListenerProtocol:
             LOG.warning(f"{client.peer} sent an unauthorized QUERY/CASCADE message")
             return None
         message = self._install_client_session(message, client)
-        if message.context.get("destination") is None:
-            message.context["destination"] = "skills"
         verdict = self.policy_chain.review(message, client)
         if verdict.denied:
             LOG.info(f"policy denied QUERY '{message.msg_type}' from "
                      f"{client.peer}: {verdict.code} ({verdict.reason})")
             self._send_policy_denied(client, message, verdict)
             return None
+        # stamped with ``source``, after the policy chain, for the same reason:
+        # POLICY-1 lets a policy plugin mutate this message, so a value written
+        # before the chain is not the value the agent sees.
+        #
+        # A transformer DOES run on this path, contrary to what an earlier
+        # version of this comment said: the caller runs
+        # ``utterance_transformers.transform`` after this function returns. It
+        # cannot move this key, for two reasons that are worth writing down
+        # rather than rediscovering — it is handed ``dict(admitted.context)``, a
+        # COPY, and of what it returns only ``canceled`` is read back. So the
+        # policy chain is the only writer that can reach the context this
+        # function stamps. ``observe`` runs below, after the stamp, and nothing
+        # emits this message to a bus at all on this path, so a mutation there
+        # reaches no consumer.
         message.context["peer"] = message.context["source"] = client.peer
+        message.context["destination"] = self._agent_label
         self.policy_chain.observe(message, client)
         return message
 
@@ -3648,6 +3661,37 @@ class HiveMindListenerProtocol:
         """
         return declared_id if is_admin else f"{client.session_namespace}:{declared_id}"
 
+    @property
+    def _agent_label(self) -> str:
+        """The Layer-1 ``destination`` this node writes on an injected message.
+
+        The node owns this key; a peer never writes it. BRIDGE-1 §3.1 makes the
+        inbound ``source`` the node's to stamp, and §3.2 makes the outbound
+        ``destination`` the node's to route on. A peer cannot address anything:
+        it sends a request and receives the answer, and it does not know another
+        peer exists.
+
+        The value is a LABEL, not a routing key. It is read by humans and by
+        nothing else on the way in: ``ovos-core`` never reads ``destination``,
+        and ``ovos-bus-client`` only swaps it with ``source`` in
+        ``Message.reply()``, which is what carries the answer back to the peer
+        this node stamped as ``source``. Naming the agent plugin that handled
+        the request is therefore the most useful thing it can say.
+
+        The id is the entry-point name the plugin was loaded under, recorded on
+        the instance by ``AgentProtocolFactory`` (hivemind-plugin-manager). An
+        agent built directly, as a test does, records nothing, and the generic
+        label is used instead.
+        """
+        # ``str()`` because the annotation does not coerce and this value is
+        # stamped straight into the Layer-1 context. A plugin whose
+        # ``plugin_id`` is not a string would put that object in the message,
+        # and OVOS-MSG-1 §3.3 requires a single string. Not reachable through
+        # the factory, which sets the entry-point name; it WAS reachable while
+        # hivemind-plugin-manager#65 could bind a positional argument into the
+        # field, so this is hardening rather than a live fix.
+        return str(getattr(self.agent_protocol, "plugin_id", "") or "") or "hivemind"
+
     def _install_client_session(self, message: Message,
                                  client: HiveMindClientConnection):
         """Copy the client's serialised session onto an inbound bus message.
@@ -3746,13 +3790,6 @@ class HiveMindListenerProtocol:
 
         # ensure client specific session data is injected in query to ovos
         message = self._install_client_session(message, client)
-        if message.msg_type == "speak":
-            # OVOS-MSG-1 §3.3: ``destination`` is a single string. A Message
-            # addresses one consumer or all of them; there is no array form.
-            message.context["destination"] = "audio"  # make audible, this is injected "speak" command
-        elif message.context.get("destination") is None:
-            message.context["destination"] = "skills"  # ensure not treated as a broadcast
-
         # policy admission chain — issue #85
         verdict = self.policy_chain.review(message, client)
         if verdict.denied:
@@ -3772,6 +3809,11 @@ class HiveMindListenerProtocol:
         # send client message to internal mycroft bus
         LOG.info(f"Forwarding message '{message.msg_type}' to agent bus from client: {client.peer}")
         message.context["peer"] = message.context["source"] = client.peer
+        # ``destination`` is stamped HERE and not before the chain, for the same
+        # reason ``source`` is: a transformer replaces context wholesale, so a
+        # value written earlier is not the value the agent bus sees. Stamping
+        # last means a transformer cannot put a peer id in this key either.
+        message.context["destination"] = self._agent_label
         # A metadata/utterance transformer wholesale-replaces message.context
         # (see _apply_utterance_transformers), which could otherwise let a
         # config-opt-in transformer plugin move this message into another
