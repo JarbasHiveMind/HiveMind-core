@@ -1,6 +1,5 @@
 """Default client-database backend selection + cross-backend migration."""
 import os
-import tempfile
 from unittest import mock
 
 import pytest
@@ -23,24 +22,37 @@ def _sqlite_supports_current_client_model() -> bool:
         return False
 
 
-def _make_existing(json=False, sqlite=False):
-    tmp = tempfile.mkdtemp()
-    base = os.path.join(tmp, "hivemind-core")
+def _make_existing(tmp_path, json=False, sqlite=False):
+    """Lay out an existing deployment under a pytest-owned directory.
+
+    ``tempfile.mkdtemp()`` used to make the directory, which put a
+    clients.json into the shared TMPDIR and never removed it: pytest does not
+    own an mkdtemp, so every run left another one behind. ``tmp_path`` is
+    per-test and pytest reaps it.
+
+    The writes use context managers. As bare ``open(...).write(...)`` calls
+    they left the handles to the garbage collector and raised
+    ResourceWarning.
+    """
+    base = os.path.join(str(tmp_path), "hivemind-core")
     os.makedirs(base, exist_ok=True)
     if json:
-        open(os.path.join(base, "clients.json"), "w").write("{}")
+        with open(os.path.join(base, "clients.json"), "w", encoding="utf-8") as f:
+            f.write("{}")
     if sqlite:
-        open(os.path.join(base, "clients.db"), "w").write("")
-    return tmp
+        with open(os.path.join(base, "clients.db"), "w", encoding="utf-8") as f:
+            f.write("")
+    return str(tmp_path)
 
 
-def test_fresh_install_defaults_to_sqlite():
-    with mock.patch.object(C, "xdg_data_home", return_value=tempfile.mkdtemp()):
+def test_fresh_install_defaults_to_sqlite(tmp_path):
+    with mock.patch.object(C, "xdg_data_home", return_value=str(tmp_path)):
         assert C._default_database()["module"] == "hivemind-sqlite-db-plugin"
 
 
-def test_existing_json_deployment_is_kept():
-    with mock.patch.object(C, "xdg_data_home", return_value=_make_existing(json=True)):
+def test_existing_json_deployment_is_kept(tmp_path):
+    with mock.patch.object(C, "xdg_data_home",
+                           return_value=_make_existing(tmp_path, json=True)):
         assert C._default_database()["module"] == "hivemind-json-db-plugin"
 
 
@@ -58,19 +70,23 @@ def test_client_database_delegates_client_refresh():
     backend.refresh.assert_called_once_with(7)
 
 
-def test_sqlite_wins_once_present():
-    with mock.patch.object(C, "xdg_data_home", return_value=_make_existing(json=True, sqlite=True)):
+def test_sqlite_wins_once_present(tmp_path):
+    with mock.patch.object(C, "xdg_data_home",
+                           return_value=_make_existing(tmp_path, json=True,
+                                                      sqlite=True)):
         assert C._default_database()["module"] == "hivemind-sqlite-db-plugin"
 
 
 @pytest.mark.skipif(
     not _sqlite_supports_current_client_model(),
     reason="needs hivemind-sqlite-database>=0.3.0a1 (current Client model)")
-def test_migrate_db_copies_clients_json_to_sqlite():
+def test_migrate_db_copies_clients_json_to_sqlite(tmp_path):
     from hivemind_plugin_manager import DatabaseFactory
 
-    tmp_json = tempfile.mkdtemp()
-    tmp_sqlite = tempfile.mkdtemp()
+    tmp_json = str(tmp_path / "json")
+    tmp_sqlite = str(tmp_path / "sqlite")
+    os.makedirs(tmp_json, exist_ok=True)
+    os.makedirs(tmp_sqlite, exist_ok=True)
     cfgj = {"module": "hivemind-json-db-plugin",
             "hivemind-json-db-plugin": {"name": "clients", "subfolder": "hivemind-core"}}
     # The json plugin entry-point is currently provided by json-database's

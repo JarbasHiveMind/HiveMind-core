@@ -296,12 +296,12 @@ def test_fifo_order_direct():
         b.stop_all()
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="relay FIFO: depends on relay chain being fully wired (chain_topology)",
-)
 def test_fifo_order_relay_chain():
-    """Sequential utterances through a relay chain arrive in order at root.
+    """Sequential utterances from a satellite arrive in order at the relay.
+
+    This test covers the S0 to R0 hop only. It reads the relay inbound
+    listener, not root M0. For the full chain to root, see
+    ``test_fifo_order_relay_chain_to_root``.
 
     Spec: BRIDGE-1 §5 (relay hop)
     Topology: chain_topology() — M0→R0→S0
@@ -318,6 +318,53 @@ def test_fifo_order_relay_chain():
             time.sleep(0.02)
 
         assert_fifo_order(r.listener, s, "recognizer_loop:utterance", count=4)
+    finally:
+        b.stop_all()
+
+
+def test_fifo_order_relay_chain_to_root():
+    """Sequential utterances from a satellite arrive in order at root M0.
+
+    A plain BUS message stops at the relay: HIVEMIND-NODE-1 §3.3 says a
+    server with an upstream "forwards messages upstream when they are not
+    resolved locally", and the relay has its own backend bus, so it resolves
+    the utterance itself. ESCALATE is the type that travels upward
+    (HIVEMIND-NODE-1 §4), and HIVEMIND-MSG-1 §5 says a node delivers a
+    site-targeted inner message to its own bus only when the site identifier
+    matches. So the message that reaches root is an ESCALATE that names the
+    root site.
+
+    The test does not separate ESCALATE from PROPAGATE: PROPAGATE reaches
+    root and injects the same way, because delivery is gated on the site, not
+    on the outer type. It separates both from a plain BUS, which stops at the
+    relay.
+
+    Spec: BRIDGE-1 §5 (order), NODE-1 §3.3 and §4, MSG-1 §5
+    Topology: chain_topology() — M0→R0→S0
+    Helper: assert_fifo_order
+    """
+    b = chain_topology()
+    b.start_all()
+    try:
+        m = b.get_master("M0")
+        r = b.get_relay("R0")
+        s = b.get_satellite("S0")
+
+        for i in range(4):
+            s.send(
+                HiveMessage(
+                    HiveMessageType.ESCALATE,
+                    payload=HiveMessage(
+                        HiveMessageType.BUS, _make_utterance(seq=i)
+                    ),
+                    target_site_id=m.identity.site_id,
+                )
+            )
+            time.sleep(0.02)
+
+        # The envelope M0 admits is the relay's upstream connection, so the
+        # records at root carry the relay's peer, not the satellite's.
+        assert_fifo_order(m, r.upstream, "recognizer_loop:utterance", count=4)
     finally:
         b.stop_all()
 
