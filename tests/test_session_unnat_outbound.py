@@ -12,6 +12,7 @@ The un-NAT works on a per-peer deepcopy: the input message is shared across a
 fan-out to multiple peers and must never be mutated.
 """
 import json
+import logging
 from unittest.mock import MagicMock
 
 from ovos_bus_client.message import Message
@@ -90,9 +91,14 @@ def test_two_namespaces_no_cross_contamination():
     assert _sent_session_id(b) == "kitchen"
 
 
-def test_non_matching_prefix_sent_unchanged():
+def test_unnamespaced_prefix_sent_unchanged():
+    # A colon-bearing session id that this node never namespaced. "other" is
+    # not the shape a ``session_namespace`` token takes, so it is none of this
+    # node's business and travels untouched. This is the pass-through case; the
+    # drop case is a HEX-shaped foreign prefix, tested below — the two are
+    # deliberately kept apart, because a test that spells a foreign namespace
+    # "other" cannot see the defect at all.
     client = _make_client("ns1")
-    # another client's namespace — leave untouched
     client.send(_bus_msg("other:default"))
     assert _sent_session_id(client) == "other:default"
 
@@ -128,3 +134,108 @@ def test_hello_message_unchanged():
     client.send(hello)
     # delivered verbatim, no crash on a non-BUS payload
     assert client.send_msg.called
+
+
+# --- AGENT-1 §3.3: a response whose peer is gone ---------------------------
+#
+# A delayed bus reply can outlive the connection it was generated for. The
+# ``peer`` key is recycled on reconnect (the collision suffix is minted only
+# against a LIVE connection, and a clean disconnect pops the old one first), so
+# the stale reply is addressed to a live socket carrying ANOTHER connection's
+# Layer-1 namespace. §3.3 forbids selecting the receiver "by any identity other
+# than the ``destination`` — in particular not by a shared session namespace",
+# and requires the undelivered response to be logged at WARNING.
+#
+# Before this guard the raw internal token went out on the wire, which also
+# breaks the BRIDGE-1 §4 outbound MUST: the peer saw neither the name it used
+# nor a stable id across turns.
+
+_NS_A = "8a783b509a6d721a"   # 16 hex, the sha256(...)[:16] shape
+_NS_B = "479902549eebbcfe"
+_NS_FALLBACK = "0123456789abcdef0123456789abcdef"  # 32 hex, uuid4().hex shape
+
+
+def test_reconnected_peer_does_not_receive_the_old_token():
+    # THE CELL THE FINDING ASKS FOR. The reconnected connection holds namespace
+    # _NS_B; a reply still carrying _NS_A arrives for it. It must receive
+    # NOTHING — not the old token, and not a rewritten id either.
+    client = _make_client(_NS_B)
+
+    client.send(_bus_msg(f"{_NS_A}:chat"))
+
+    assert not client.send_msg.called, (
+        "a reply carrying another connection's Layer-1 namespace reached the "
+        "peer; it must be dropped under HIVEMIND-AGENT-1 3.3")
+
+
+def test_the_old_token_is_not_merely_rewritten():
+    # Guards the weaker fix: stripping or replacing the foreign prefix would
+    # hand the peer somebody else's conversation under its own name, which is
+    # the §3.2 isolation break §3.3 exists to forbid. Nothing is sent at all.
+    client = _make_client(_NS_B)
+    client.send(_bus_msg(f"{_NS_A}:chat"))
+    assert client.send_msg.call_args_list == []
+
+
+def test_foreign_namespace_drop_is_logged_at_warning(caplog):
+    # §3.3 makes the log the ONLY place the loss can appear ("no peer can
+    # observe it"), so a silent drop is non-conformant. The record must name
+    # the session and the destination it could not resolve.
+    client = _make_client(_NS_B)
+    msg = HiveMessage(
+        HiveMessageType.BUS,
+        payload=Message("speak", {"utterance": "hi"},
+                        {"session": {"session_id": f"{_NS_A}:chat"},
+                         "destination": "sat::chat"}),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="hivemind_core.protocol"):
+        client.send(msg)
+
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert warnings, "the undelivered response was dropped without a WARNING"
+    text = warnings[0].getMessage()
+    assert f"{_NS_A}:chat" in text, text      # the session it carried
+    assert "sat::chat" in text, text          # the destination it names
+
+
+def test_fallback_shaped_namespace_is_also_dropped():
+    # ``session_namespace`` falls back to the bare uuid4().hex when no durable
+    # client_id resolves (unauthenticated/edge). That token is 32 hex, not 16,
+    # and a guard that only knows the 16-hex shape leaks on exactly the
+    # connections that have no identity to scope them.
+    client = _make_client(_NS_B)
+    client.send(_bus_msg(f"{_NS_FALLBACK}:chat"))
+    assert not client.send_msg.called
+
+
+def test_own_namespace_still_delivered_after_the_guard():
+    # The CONTROL for every drop above: the same code path, same shapes, this
+    # connection's OWN prefix. If this reds, the guard has stopped the §4
+    # outbound translation instead of narrowing it.
+    client = _make_client(_NS_B)
+    client.send(_bus_msg(f"{_NS_B}:chat"))
+    assert _sent_session_id(client) == "chat"
+
+
+def test_admin_hex_shaped_declared_id_is_not_dropped():
+    # §4.1 exempts an admin from translation, so its declared id reaches the
+    # bus unchanged and comes back unchanged. An admin that happens to name its
+    # session with a hex-shaped prefix must not be mistaken for a foreign
+    # namespace and silenced.
+    client = _make_client(_NS_B)
+    client.is_admin = True
+    client.send(_bus_msg(f"{_NS_A}:chat"))
+    assert _sent_session_id(client) == f"{_NS_A}:chat"
+
+
+def test_client_declared_hex_shaped_name_round_trips():
+    # The narrowest hole the shape test could open. A bridge may declare a
+    # session name that itself looks like a namespace token ("0123...:call42").
+    # Inbound it is NATted to "<ours>:0123...:call42", so outbound OUR prefix
+    # matches FIRST and the client gets its own name back. The drop branch is
+    # only reached when our prefix does not match at all, so a legitimate
+    # hex-shaped declared name is never silenced.
+    client = _make_client(_NS_B)
+    client.send(_bus_msg(f"{_NS_B}:{_NS_A}:call42"))
+    assert _sent_session_id(client) == f"{_NS_A}:call42"

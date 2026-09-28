@@ -9,6 +9,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import threading
 import time
 import uuid
@@ -90,6 +91,15 @@ from Cryptodome.PublicKey import RSA
 #: in this file keeps using ovos ``LOG`` on purpose, so it routes into OVOS's
 #: logging setup — do not "fix" this one back to match.
 _log = logging.getLogger(__name__)
+
+# A ``session_namespace`` token as :attr:`HiveMindClientConnection.session_namespace`
+# mints one: ``sha256(...)[:16]`` normally, or the bare ``uuid4().hex`` fallback
+# when no durable client_id resolves. Both are lowercase hex of a fixed width, so
+# an outbound Layer-1 session id of this node's own making is recognisable by
+# shape alone. Used to tell "another live connection's namespace" (drop, see
+# :meth:`_unnat_outbound_session`) apart from "a session id this node never
+# namespaced" (pass through untouched).
+_NAMESPACE_PREFIX_RE = re.compile(r"^(?:[0-9a-f]{16}|[0-9a-f]{32}):")
 
 #: HIVEMIND-MSG-1 §4: the payload of these message types IS a nested
 #: ``HiveMessage``. Every other type carries a bus ``Message``, binary data or
@@ -287,7 +297,8 @@ class HiveMindClientConnection:
     # Per-connection nonce, minted lazily once and stable for the
     # connection's life. Namespaces the client-declared session_id — see
     # ``layer1_session_id`` below (HIVEMIND-BRIDGE-1 §4).
-    _conn_nonce: str = field(default="", init=False, repr=False)
+    _conn_nonce: str = field(
+        default_factory=lambda: uuid.uuid4().hex, init=False, repr=False)
 
     # Serialises ``send``. The IOLoop thread, the ovos messagebus thread and
     # the upstream slave thread all send on the same connection, and a v3
@@ -303,25 +314,62 @@ class HiveMindClientConnection:
 
     @property
     def conn_nonce(self) -> str:
-        """Per-connection nonce, minted lazily on first use and stable for
-        the connection's life."""
-        if not self._conn_nonce:
-            self._conn_nonce = uuid.uuid4().hex
+        """Per-connection nonce, minted when the connection object is
+        constructed and stable for the connection's life.
+
+        It is minted eagerly, not on first read: ``session_namespace`` reads
+        it on every inbound and every outbound bus message, three threads
+        send on one connection (see ``_send_lock``), and a lazy mint has no
+        lock, so two threads that read it first both mint and the last write
+        wins. That splits one connection's messages across two Layer-1
+        sessions and makes the outbound un-NAT miss its own prefix.
+        """
         return self._conn_nonce
 
     @property
     def session_namespace(self) -> str:
-        """A DURABLE, identity-scoped namespace token for this client's
-        Layer-1 sessions (HIVEMIND-BRIDGE-1 §4).
+        """A PER-CONNECTION, identity-scoped namespace token for this
+        connection's Layer-1 sessions (HIVEMIND-BRIDGE-1 §4).
 
-        Unlike :attr:`conn_nonce`, which is reminted on every reconnect,
-        this token is derived from the client's durable DB identity, so a
-        satellite that drops and reconnects keeps the same namespace: a
-        session minted before the drop stays routable afterwards, and a
-        scheduler-replayed message carrying that old session_id remains
-        deliverable.
+        §4 states what this token has to be derived from: "the connection's
+        own identity (§3), which the server already guarantees distinct, and
+        the ``session_id`` the client declared. Namespacing the client's name
+        by the connection makes the result unique across all live connections
+        — two connections that chose the same name still get different Layer-1
+        sessions". The inbound MUST is the consequence: "Two connections that
+        named the same session thus never resolve to the same Layer-1 identity
+        — isolation holds by construction, not by hoping peers pick distinct
+        names".
 
-        The token is ``sha256(f"{node_salt}:{client_id}")[:16]`` where
+        THIS TOKEN WAS DURABLE ACROSS RECONNECT AND THAT WAS THE DEFECT
+        (#299, corrected under T-6696). Keyed on the durable DB row alone, two
+        LIVE connections sharing one access key — the ordinary household
+        deployment — resolved the same declared session name to the same
+        Layer-1 id, so the orchestrator merged two devices into one
+        conversation: the second peer reading and writing the first's state,
+        which is the consequence §4 names. The peer ids stayed distinct
+        because ``handle_hello_message`` appends a collision suffix, so
+        replies routed to the right socket and the logs looked right while the
+        sessions were shared. That is why it was not noticed.
+
+        THE DURABILITY GOAL IS NOT MERELY OUTWEIGHED, IT IS FORBIDDEN. #299
+        wanted a namespace that survives a reconnect so a replayed message
+        stays deliverable. HIVEMIND-AGENT-1 §3.3 rules that out directly: a
+        server "MUST NOT select a different peer to receive the response by
+        any identity other than the ``destination`` — in particular not by a
+        shared session namespace, a shared credential, or a shared site". A
+        namespace shared across connections is exactly the identity that
+        clause refuses. So there is no trade to make here: the post-reconnect
+        response is to be logged and dropped under §3.3, not delivered through
+        a shared namespace.
+
+        The connection nonce supplies the per-connection part
+        (:attr:`conn_nonce`, minted once and stable for this connection's
+        life), and the durable client row is kept in the hash so the token
+        stays identity-scoped and node-salted.
+
+        The token is ``sha256(f"{node_salt}:{client_id}:{conn_nonce}")[:16]``
+        where
         ``client_id`` is the durable DB row id (via :meth:`resolve_user`,
         which already caches with a TTL) and ``node_salt`` is the node's
         persistent public key (:attr:`NodeIdentity.public_key`, the
@@ -334,10 +382,10 @@ class HiveMindClientConnection:
         salt also hides the small integer client_id, so the token is not
         enumerable.
 
-        Falls back to :attr:`conn_nonce` when no DB is reachable or the
+        Falls back to :attr:`conn_nonce` alone when no DB is reachable or the
         client_id cannot be resolved (unauthenticated/edge), so nothing
-        crashes — at the cost of losing reconnect durability for that
-        connection.
+        crashes. That fallback is still per-connection, so isolation holds
+        there too; only the identity scoping is lost.
         """
         db = getattr(getattr(self, "hm_protocol", None), "db", None)
         client_id = None
@@ -354,13 +402,17 @@ class HiveMindClientConnection:
             return self.conn_nonce
         identity = getattr(getattr(self, "hm_protocol", None), "identity", None)
         node_salt = getattr(identity, "public_key", None) or ""
+        # ``conn_nonce`` is what makes this unique per LIVE connection, which
+        # BRIDGE-1 §4 requires. Without it two connections on one access key
+        # collapse onto one Layer-1 session (T-6696).
         return hashlib.sha256(
-            f"{node_salt}:{client_id}".encode()).hexdigest()[:16]
+            f"{node_salt}:{client_id}:{self.conn_nonce}".encode()
+        ).hexdigest()[:16]
 
     @property
     def layer1_session_id(self) -> str:
         """The orchestrator-side (Layer-1) session id for this connection's
-        CURRENT declared session — the durable ``session_namespace``
+        CURRENT declared session — the per-connection ``session_namespace``
         namespaces the client-declared session_id, so two connections that
         chose the same name get distinct Layer-1 sessions (HIVEMIND-BRIDGE-1
         §4) while one connection's distinct declared sessions (a re-HELLO, or
@@ -368,10 +420,18 @@ class HiveMindClientConnection:
         connection) stay distinct too — session travels per message, the
         client declares it.
 
-        The namespace is identity-scoped (see ``session_namespace``), so this
-        id — and the disconnect notification that carries it — is stable
-        across a reconnect: it matches the id ``_install_client_session``
-        stamped on the connection's inbound bus messages."""
+        The namespace is per-connection and identity-scoped (see
+        ``session_namespace``), so this id matches the one
+        ``_install_client_session`` stamped on THIS connection's inbound bus
+        messages, including the disconnect notification that carries it.
+
+        It is deliberately NOT stable across a reconnect. It was, and that was
+        the T-6696 defect: a namespace shared between live connections merged
+        two devices into one Layer-1 session. A response that arrives for a
+        session whose connection is gone is logged and dropped under
+        HIVEMIND-AGENT-1 §3.3, which forbids selecting a receiver by a shared
+        session namespace; it is not delivered to whatever connection now
+        holds that name."""
         return f"{self.session_namespace}:{self.sess.session_id}"
 
     def resolve_user(self, db, ttl: float = 5.0,
@@ -456,6 +516,15 @@ class HiveMindClientConnection:
                 # point) means every agent/binary protocol plugin inherits it
                 # instead of each having to reimplement the un-NAT.
                 unnatted = self._unnat_outbound_session(message)
+                if unnatted is None:
+                    # A response carrying ANOTHER live connection's Layer-1
+                    # namespace. AGENT-1 §3.3 forbids picking the receiver "by
+                    # any identity other than the ``destination`` — in
+                    # particular not by a shared session namespace", and the
+                    # reconnected peer takes back the same ``peer`` key, so
+                    # delivering here would do exactly that. Already logged at
+                    # WARNING by the un-NAT; drop it for this peer.
+                    return
                 if unnatted is not message:
                     # A per-peer deepcopy was made because the prefix matched;
                     # the input ``message`` is shared across a fan-out and was
@@ -497,7 +566,7 @@ class HiveMindClientConnection:
             _log.debug("sent unencrypted (pre-handshake)!")
             self.send_msg(payload, is_bin)
 
-    def _unnat_outbound_session(self, message: HiveMessage) -> HiveMessage:
+    def _unnat_outbound_session(self, message: HiveMessage) -> Optional[HiveMessage]:
         """Restore this connection's declared session_id on an outbound BUS
         message, undoing the inbound NAT (BRIDGE-1 §4).
 
@@ -507,20 +576,73 @@ class HiveMindClientConnection:
         an ``ovos_bus_client`` ``Message`` or a raw dict (mirroring the
         dict-vs-Message handling in :meth:`send`).
 
-        Returns a per-peer deepcopy with the session_id restored when the
-        prefix matches, otherwise the input ``message`` unchanged. The input is
-        shared across a fan-out to multiple peers and is never mutated. When the
-        session id carries no namespace prefix (an admin bare id, another
-        client's namespace, or no session at all) the message is left as-is.
+        Three outcomes:
+
+        * **This connection's own prefix** — returns a per-peer deepcopy with
+          ``declared`` restored. BRIDGE-1 §4's outbound MUST: "the server MUST
+          translate the Layer-1 session id back to the name the client used
+          before returning the message".
+        * **Another live connection's prefix** — returns ``None``, meaning
+          deliver to nobody, after logging at WARNING. See below.
+        * **No namespace prefix at all** — returns the input ``message``
+          unchanged: an admin bare id (translation-exempt, §4.1) or a session
+          this node never namespaced.
+
+        The input is shared across a fan-out to multiple peers and is never
+        mutated.
+
+        WHY A FOREIGN PREFIX IS DROPPED AND NOT PASSED THROUGH. A delayed bus
+        reply can outlive the connection it was generated for. ``self.clients``
+        is keyed on :attr:`peer`, the collision suffix is minted only while a
+        LIVE other connection holds that key, and a clean disconnect pops the
+        old connection first — so a reconnecting peer takes back the SAME peer
+        key and the stale reply is addressed to a live socket. Passing it
+        through here sent the peer the raw internal token
+        (``<namespace>:<name>``), which breaks the §4 outbound MUST twice over:
+        it is not the name the client used, and it is not stable across turns.
+
+        HIVEMIND-AGENT-1 §3.3 ("A response whose peer is gone") settles what is
+        owed instead. The server "**MUST NOT** select a different peer to
+        receive the response by any identity other than the ``destination`` — in
+        particular not by a shared session namespace, a shared credential, or a
+        shared site", and "**MUST** log the undelivered response at
+        **WARNING**, naming the ``destination`` it could not resolve, and the
+        session when the response carries one". A reconnected peer reached
+        through the recycled peer key is precisely selection by a shared
+        identity other than the destination, so the response is dropped and
+        logged. §3.3 also records why nothing better is available: "A deployment
+        that needs a delayed event to reach the device that asked for it across
+        a reconnect needs a durable identity for the device. This version
+        defines no such identity".
+
+        The log is a diagnostic obligation, not a wire conformance point (§3.3
+        says so: "no peer can observe it"), so it is the only trace the loss
+        leaves.
         """
         payload = message.payload
         if isinstance(payload, dict):
-            session = (payload.get("context") or {}).get("session")
+            context = payload.get("context") or {}
         else:
-            session = getattr(payload, "context", {}).get("session")
+            context = getattr(payload, "context", {})
+        session = context.get("session")
         sid = session.get("session_id") if isinstance(session, dict) else None
+        if not isinstance(sid, str):
+            return message
         prefix = f"{self.session_namespace}:"
-        if not isinstance(sid, str) or not sid.startswith(prefix):
+        if not sid.startswith(prefix):
+            # An admin is translation-exempt (§4.1), so its ids were never
+            # namespaced and a hex-shaped declared id of its own choosing must
+            # not be mistaken for one of ours.
+            if not self.is_admin and _NAMESPACE_PREFIX_RE.match(sid):
+                _log.warning(
+                    "dropping an undelivered bus response: session %r carries "
+                    "another connection's Layer-1 namespace, destination %r "
+                    "resolves to this connection (%s) only because the peer key "
+                    "was recycled across a reconnect; delivering it would select "
+                    "the receiver by a shared session namespace "
+                    "(HIVEMIND-AGENT-1 3.3)",
+                    sid, context.get("destination"), self.peer)
+                return None
             return message
         declared = sid[len(prefix):]
         if not declared:
@@ -3637,14 +3759,21 @@ class HiveMindListenerProtocol:
 
         BRIDGE-1 §4: the namespace token IDENTIFIES, it does not
         AUTHENTICATE — possession grants nothing; admission still runs the
-        ACL. It is derived from the durable client identity (via
-        ``client.session_namespace``), not the secret access key, so a
-        session is a durable route that survives reconnect, and node-salted
-        so it is not linkable across nodes. Using the durable identity rather
-        than the per-connection ``conn_nonce`` is what keeps a session
-        routable across a reconnect (a new connection reuses the same
-        namespace) and across a hub restart (the salt is the persistent node
-        identity).
+        ACL. It is derived (via ``client.session_namespace``) from the
+        durable client identity AND the per-connection ``conn_nonce``, and
+        never from the secret access key. The ``conn_nonce`` term is what
+        §4 requires: "The server MUST guarantee that no two live connections
+        resolve to the same Layer-1 identity, whatever ids their peers
+        chose." Two satellites on one access key declaring one session name
+        therefore get two Layer-1 sessions.
+
+        A namespace is deliberately NOT stable across a reconnect, because
+        the ``conn_nonce`` is new on the new connection. A message replayed
+        after a reconnect does not resolve to the old session. That is the
+        recorded trade: panel decision ``t6696-namespace-per-connection``
+        chose isolation over the post-reconnect durability of #299, and
+        AGENT-1 §3.3 forbids the peer substitution that durability relied
+        on. The node salt still keeps the token unlinkable across nodes.
         """
         return declared_id if is_admin else f"{client.session_namespace}:{declared_id}"
 
