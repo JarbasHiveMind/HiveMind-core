@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.2a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.2a2) (2026-09-28)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.2a1...5.3.2a2)
+
+**Merged pull requests:**
+
+- test: measure the relay leg at root, and stop test\_db\_default.py leaking into the shared tmp [\#375](https://github.com/JarbasHiveMind/HiveMind-core/pull/375) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.2a1) (2026-09-26)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.1a2...5.3.2a1)
@@ -374,10 +382,6 @@
 ## [4.13.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.12a1) (2026-08-16)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.11a2...4.13.12a1)
-
-**Merged pull requests:**
-
-- fix: disable rendezvous mailbox when hivemind-rendezvous is too old to deliver [\#271](https://github.com/JarbasHiveMind/HiveMind-core/pull/271) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.11a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.11a2) (2026-08-15)
 
