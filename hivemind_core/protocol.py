@@ -149,6 +149,12 @@ OUTSTANDING_QUERY_TTL = 300.0
 # Hard cap on distinct outstanding queries, mirroring the _pending_cascades
 # bound, so a flood of unique query_ids cannot grow the store without limit.
 OUTSTANDING_QUERY_MAX = 256
+# A peer id is ``name::session_id`` plus a collision suffix this node appends
+# (see ``HiveMindClientConnection.peer``), so ``::`` marks the namespace this
+# node issues. A service label on the agent bus -- "audio", "skills",
+# "enclosure" -- never contains it, which is the same test the OVOS agent
+# plugin uses to tell a peer id from a label.
+PEER_ID_SEPARATOR = "::"
 
 # Close code for an origination-permission kick (HIVEMIND-NODE-1 §4).
 #
@@ -3720,6 +3726,47 @@ class HiveMindListenerProtocol:
         message.context["session"] = session
         return message
 
+    @staticmethod
+    def _agent_destination(message: Message) -> str:
+        """The agent-side routing key for an injected client message.
+
+        The client does not write this key. It is the same rule the QUERY
+        return path already states: a client-supplied identity may select a
+        candidate, it never authorizes a send, and the address that receives
+        is the server-observed one (see ``_outstanding_return_path``).
+
+        ``destination`` is opaque to OVOS -- ovos-core never reads it, and
+        ovos-bus-client only swaps it with ``source`` in ``Message.reply()``,
+        which is what carries a response back to the peer this node stamped as
+        ``source``. The only consumer of the key is this fleet's own relay,
+        which delivers a bus message to the connection whose peer id the key
+        names. So a client that wrote another connection's peer id here had
+        the node relay its message to that connection as though the node had
+        sent it: an injected ``speak`` the other device says aloud, or a reply
+        recorded against the other client.
+
+        A peer id lives in the ``name::session_id`` namespace, which this node
+        issues; a service label such as ``audio``, ``skills`` or ``enclosure``
+        never contains ``::``. So peer-id entries are dropped and labels are
+        kept, which needs no table of who is connected and no exemption for
+        anyone.
+
+        OVOS-MSG-1 §3.3: ``destination`` is a single string. A Message
+        addresses one consumer or all of them; there is no array form.
+        """
+        if message.msg_type == "speak":
+            # an injected speak is for the client to say, not a message FROM
+            # its audio stack
+            return "audio"
+        declared = message.context.get("destination")
+        if declared is None:
+            # not a broadcast: an injected message is a request to the agent
+            return "skills"
+        entries = declared if isinstance(declared, list) else [declared]
+        kept = [e for e in entries
+                if isinstance(e, str) and PEER_ID_SEPARATOR not in e]
+        return kept[0] if kept else "skills"
+
     def handle_inject_agent_msg(
             self, message: Message, client: HiveMindClientConnection
     ):
@@ -3746,12 +3793,7 @@ class HiveMindListenerProtocol:
 
         # ensure client specific session data is injected in query to ovos
         message = self._install_client_session(message, client)
-        if message.msg_type == "speak":
-            # OVOS-MSG-1 §3.3: ``destination`` is a single string. A Message
-            # addresses one consumer or all of them; there is no array form.
-            message.context["destination"] = "audio"  # make audible, this is injected "speak" command
-        elif message.context.get("destination") is None:
-            message.context["destination"] = "skills"  # ensure not treated as a broadcast
+        message.context["destination"] = self._agent_destination(message)
 
         # policy admission chain — issue #85
         verdict = self.policy_chain.review(message, client)
