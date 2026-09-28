@@ -26,6 +26,10 @@ if TYPE_CHECKING:
 #: decision — the message is lost and the client should retry.
 BACKEND_UNAVAILABLE = "backend_unavailable"
 
+#: Reported to a client whose message names another connection of this node
+#: in its ``destination``: see :class:`PeerDestinationPolicy`.
+PEER_DESTINATION_FORBIDDEN = "peer_destination_forbidden"
+
 #: Reported to the client when the payload of a message can not be
 #: reconstructed — a wrapper message (QUERY, BROADCAST, PROPAGATE, ESCALATE,
 #: CASCADE) that does not carry a nested ``HiveMessage`` as HIVEMIND-MSG-1 §4
@@ -285,6 +289,66 @@ class DefaultSessionPolicy(PolicyPlugin):
                 session_id="default",
             )
         return Verdict.allow()
+
+
+class PeerDestinationPolicy(PolicyPlugin):
+    """Built-in admission policy: a client addresses only its own connection.
+    Always present in the chain — non-removable.
+
+    The node stamps ``source`` and ``peer`` on every message a client injects
+    (HIVEMIND-BRIDGE-1 §3.1), but ``destination`` reaches the agent bus as the
+    client wrote it, and the agent relays every Layer-1 message whose
+    ``destination`` names one of the node's peers to that peer
+    (HIVEMIND-BRIDGE-1 §3.2). A peer id is ``name::session_id``, both chosen
+    by the connecting software, so without this gate a client that knows or
+    guesses another connection's id can deliver any message it may send to
+    that connection as though the agent had sent it: make its device speak,
+    answer in its place, or feed whatever records the agent's replies.
+
+    A non-admin message is denied when its ``destination`` — a string, or any
+    entry of a list — is the peer id of a live connection of this node other
+    than the sender's own. Everything else passes unchanged: a service label
+    such as ``skills`` or ``audio``, the sender's own peer id, and an id no
+    connection of this node holds (a relay's downstream peer, say, which only
+    the relay can resolve).
+
+    Admins are exempt, as for :class:`DefaultSessionPolicy`: administrative
+    standing already lets a connection address the orchestrator directly
+    (HIVEMIND-BRIDGE-1 §4.1). The standing is read from the database row,
+    like the session NAT reads it, so a revoked admin loses the exemption
+    within ``resolve_user``'s TTL rather than at reconnect; a database error
+    propagates and the chain fails closed.
+    """
+
+    def review(self, message: Message,
+               client: "HiveMindClientConnection") -> Verdict:
+        context = getattr(message, "context", None)
+        destination = context.get("destination") if isinstance(context, dict) else None
+        if destination is None:
+            return Verdict.allow()
+        entries = destination if isinstance(destination, (list, tuple)) else [destination]
+        peers = self.hm_protocol.clients if self.hm_protocol is not None else {}
+        foreign = []
+        for entry in entries:
+            if not isinstance(entry, str):
+                continue  # only a string can equal a peer id
+            connection = peers.get(entry)
+            if connection is not None and connection is not client:
+                foreign.append(entry)
+        if not foreign or self._is_admin(client):
+            return Verdict.allow()
+        return Verdict.deny(
+            PEER_DESTINATION_FORBIDDEN,
+            "a client may not address another client's connection",
+            destination=foreign,
+        )
+
+    def _is_admin(self, client: "HiveMindClientConnection") -> bool:
+        db = self.hm_protocol.db if self.hm_protocol is not None else None
+        if db is None:
+            return bool(client.is_admin)
+        user = client.resolve_user(db)
+        return bool(user is not None and user.is_admin)
 
 
 class MessageTypeACLPolicy(PolicyPlugin):

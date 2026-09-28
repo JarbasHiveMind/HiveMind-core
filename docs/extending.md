@@ -238,8 +238,8 @@ my-policy = "my_package.policy:MyPolicy"
 }
 ```
 
-`MessageTypeACLPolicy` and `DefaultSessionPolicy` are implicit and
-always first. Do not list them.
+`MessageTypeACLPolicy`, `DefaultSessionPolicy` and
+`PeerDestinationPolicy` are implicit and always first. Do not list them.
 Full guide: [docs/policy.md](policy.md) and
 [hivemind-plugin-manager/docs/plugins/policy.md](https://github.com/JarbasHiveMind/hivemind-plugin-manager/blob/dev/docs/plugins/policy.md)
 

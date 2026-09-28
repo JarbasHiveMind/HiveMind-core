@@ -1405,14 +1405,18 @@ class HiveMindListenerProtocol:
 
         MessageTypeACLPolicy is the canonical ``allowed_types`` whitelist
         enforcement; DefaultSessionPolicy protects the reserved "default"
-        session. Both are prepended to whatever chain we were given,
-        deduping an explicitly listed copy so the operator cannot reorder
-        or drop them. Always mandatory \u2014 their ``_optional`` entries are
-        False, so an exception in a gate fails the chain closed.
+        session; PeerDestinationPolicy keeps a client from addressing
+        another client's connection. All three are prepended to whatever
+        chain we were given, deduping an explicitly listed copy so the
+        operator cannot reorder or drop them. Always mandatory \u2014 their
+        ``_optional`` entries are False, so an exception in a gate fails the
+        chain closed.
         """
         from hivemind_core.policy import (DefaultSessionPolicy,
-                                          MessageTypeACLPolicy)
-        builtins = (MessageTypeACLPolicy, DefaultSessionPolicy)
+                                          MessageTypeACLPolicy,
+                                          PeerDestinationPolicy)
+        builtins = (MessageTypeACLPolicy, DefaultSessionPolicy,
+                    PeerDestinationPolicy)
         policies: List[PolicyPlugin] = []
         optional: List[bool] = []
         for i, p in enumerate(chain.policies):
@@ -1423,7 +1427,8 @@ class HiveMindListenerProtocol:
                 chain._optional[i] if i < len(chain._optional) else False
             )
         mandatory = [MessageTypeACLPolicy(hm_protocol=self),
-                     DefaultSessionPolicy(hm_protocol=self)]
+                     DefaultSessionPolicy(hm_protocol=self),
+                     PeerDestinationPolicy(hm_protocol=self)]
         return PolicyChain(
             policies=[*mandatory, *policies],
             _optional=[*[False] * len(mandatory), *optional],

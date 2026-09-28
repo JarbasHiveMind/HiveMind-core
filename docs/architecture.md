@@ -24,8 +24,8 @@ HiveMindListenerProtocol   ← core router (hivemind_core/protocol.py)
    |
    +-- Auth / Handshake
    |
-   +-- PolicyChain.review()   ← MessageTypeACLPolicy, DefaultSessionPolicy
-   |                            (built-in, always first)
+   +-- PolicyChain.review()   ← MessageTypeACLPolicy, DefaultSessionPolicy,
+   |                            PeerDestinationPolicy (built-in, always first)
    |                          ← configured plugins (OVOSAgentPolicy, …)
    |
    +-- AgentProtocol          ← agent plugin (OVOS bus, Persona/LLM, …)
@@ -99,7 +99,9 @@ agent:
    whitelist. Deny-by-default: an empty whitelist blocks everything.
 2. `DefaultSessionPolicy` runs second, always. It denies non-admin clients that inject
    the reserved `default` session id.
-3. Configured plugins in `policy.chain` (e.g. `OVOSAgentPolicy` for skill/intent
+3. `PeerDestinationPolicy` runs third, always. It denies non-admin clients whose
+   `destination` names another connection of this node.
+4. Configured plugins in `policy.chain` (e.g. `OVOSAgentPolicy` for skill/intent
    blacklists, custom quota or rate-limit plugins).
 
 The chain is fail-closed: any exception in a policy becomes a deny. See [policy.md](policy.md)

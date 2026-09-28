@@ -699,9 +699,11 @@ def policy_list():
     """List the built-in policies (always first, non-removable) followed
     by every plugin built from ``policy.chain`` in server config."""
     from hivemind_core.policy import (DefaultSessionPolicy,
-                                      MessageTypeACLPolicy, PolicyChain)
+                                      MessageTypeACLPolicy,
+                                      PeerDestinationPolicy, PolicyChain)
     cfg = get_server_config()
-    builtins = [MessageTypeACLPolicy(), DefaultSessionPolicy()]
+    builtins = [MessageTypeACLPolicy(), DefaultSessionPolicy(),
+                PeerDestinationPolicy()]
     try:
         chain = PolicyChain.from_config(cfg)
     except Exception as e:
@@ -727,14 +729,16 @@ def policy_test(api_key, msg_type):
     plugins), and print the verdict."""
     from ovos_bus_client.message import Message
     from hivemind_core.policy import (DefaultSessionPolicy,
-                                      MessageTypeACLPolicy, PolicyChain)
+                                      MessageTypeACLPolicy,
+                                      PeerDestinationPolicy, PolicyChain)
     db = ClientDatabase()
     client = db.get_client_by_api_key(api_key)
     if client is None:
         click.echo(f"no client found for api_key={api_key!r}", err=True)
         raise click.Abort()
     cfg = get_server_config()
-    policies = [MessageTypeACLPolicy(), DefaultSessionPolicy()]
+    policies = [MessageTypeACLPolicy(), DefaultSessionPolicy(),
+                PeerDestinationPolicy()]
     try:
         chain = PolicyChain.from_config(cfg)
         policies.extend(chain.policies)

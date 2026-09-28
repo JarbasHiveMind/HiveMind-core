@@ -78,6 +78,17 @@ Mutation classes are agent-specific and live with the agent plugin
   `context["session"]["session_id"]` is the reserved `default`. That id
   addresses the host's own device-local session, so a peer must not be
   able to write into it. Admins are exempt.
+- **`PeerDestinationPolicy`**: always present, non-removable, runs
+  third. It denies any message from a non-admin client whose
+  `context["destination"]` (a string, or any entry of a list) is the peer
+  id of another live connection of this node. The node stamps `source`
+  and `peer` itself, but a client writes `destination`, and the agent
+  relays a message to whichever peer its `destination` names, so without
+  this gate a client that knows or guesses another connection's peer id
+  could deliver messages to it as if the agent had sent them. Service
+  labels (`skills`, `audio`, …), the sender's own peer id and ids no
+  connection of this node holds pass unchanged. Admins are exempt, read
+  from the database row.
 - **`DenyAllPolicy`**: fail-closed fallback installed when
   `PolicyChain.from_config` raises. Denies every message and binary
   payload with `code="policy_chain_unavailable"`.
@@ -98,8 +109,8 @@ policy:
       optional: true
 ```
 
-`MessageTypeACLPolicy` and `DefaultSessionPolicy` are implicit and
-always first. Do not list them.
+`MessageTypeACLPolicy`, `DefaultSessionPolicy` and
+`PeerDestinationPolicy` are implicit and always first. Do not list them.
 
 ### `optional` flag
 
@@ -126,6 +137,7 @@ Codes returned by built-in policies and the chain runner:
 | `policy_error` | `PolicyChain` | A policy or mutation raised. Data carries `policy`, `error`, and optionally `mutation` |
 | `policy_chain_unavailable` | `DenyAllPolicy` | Chain construction failed at startup |
 | `session_id_default_forbidden` | `DefaultSessionPolicy` | Client tried to use the reserved `default` session id |
+| `peer_destination_forbidden` | `PeerDestinationPolicy` | Client addressed another connection of this node in `destination`. Data carries the offending `destination` entries |
 | `backend_unavailable` | `HiveMindListenerProtocol` | The message passed admission, but the agent bus is unreachable, so nothing was forwarded. Not a policy decision — retry later |
 | `malformed_payload` | `HiveMindListenerProtocol` | The payload of the message can not be reconstructed, at any nesting level: a QUERY, BROADCAST, PROPAGATE, ESCALATE or CASCADE that does not carry a nested `HiveMessage` as HIVEMIND-MSG-1 §4 requires, a BUS or SHARED_BUS whose payload is not a bus `Message`, or a payload that is not a dict. The node catches every `Exception` the reconstruction raises. Not a policy decision — the frame is unusable and the sender must fix it |
 

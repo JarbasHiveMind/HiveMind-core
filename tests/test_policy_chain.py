@@ -25,7 +25,8 @@ from hivemind_plugin_manager import Mutation, PolicyPlugin, Verdict
 from ovos_bus_client.message import Message
 
 from hivemind_core.policy import (MessageTypeACLPolicy, DefaultSessionPolicy,
-                                  DenyAllPolicy, PolicyChain)
+                                  DenyAllPolicy, PeerDestinationPolicy,
+                                  PolicyChain)
 
 
 class AddBlacklistedSkill(Mutation):
@@ -1052,8 +1053,9 @@ class TestACLGateIsNonRemovable(unittest.TestCase):
     and cannot be removed or reordered — including by an embedder that
     hands HiveMindListenerProtocol a ready-made chain.
 
-    The built-ins are MessageTypeACLPolicy (allowed_types whitelist) and
-    DefaultSessionPolicy (reserved "default" session), in that order."""
+    The built-ins are MessageTypeACLPolicy (allowed_types whitelist),
+    DefaultSessionPolicy (reserved "default" session) and
+    PeerDestinationPolicy (a client addresses only itself), in that order."""
 
     def _make_protocol(self, policy_chain, db=None):
         from unittest.mock import MagicMock
@@ -1079,19 +1081,22 @@ class TestACLGateIsNonRemovable(unittest.TestCase):
         chain = proto.policy_chain
         self.assertIsInstance(chain.policies[0], MessageTypeACLPolicy)
         self.assertIsInstance(chain.policies[1], DefaultSessionPolicy)
-        self.assertIs(chain.policies[2], supplied)
+        self.assertIsInstance(chain.policies[2], PeerDestinationPolicy)
+        self.assertIs(chain.policies[3], supplied)
         self.assertFalse(chain._optional[0])
         self.assertFalse(chain._optional[1])
+        self.assertFalse(chain._optional[2])
 
     def test_supplied_chain_cannot_reorder_the_acl_gate(self):
         supplied = _AllowPolicy()
         proto = self._make_protocol(
-            PolicyChain(policies=[DefaultSessionPolicy(), supplied,
-                                  MessageTypeACLPolicy()])
+            PolicyChain(policies=[PeerDestinationPolicy(), DefaultSessionPolicy(),
+                                  supplied, MessageTypeACLPolicy()])
         )
         kinds = [type(p) for p in proto.policy_chain.policies]
         self.assertEqual(
-            kinds, [MessageTypeACLPolicy, DefaultSessionPolicy, _AllowPolicy]
+            kinds, [MessageTypeACLPolicy, DefaultSessionPolicy,
+                    PeerDestinationPolicy, _AllowPolicy]
         )
 
     def test_supplied_chain_gate_denies_empty_whitelist(self):

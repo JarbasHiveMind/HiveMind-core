@@ -302,8 +302,9 @@ the number of clients that handshake at the same time, or the server queues on t
 
 ## `policy`
 
-Configures the admission-control chain. `MessageTypeACLPolicy` and
-`DefaultSessionPolicy` are always prepended and cannot be removed. See [policy.md](policy.md) for the full policy chain specification.
+Configures the admission-control chain. `MessageTypeACLPolicy`,
+`DefaultSessionPolicy` and `PeerDestinationPolicy` are always prepended and
+cannot be removed. See [policy.md](policy.md) for the full policy chain specification.
 
 ```json
 "policy": {
