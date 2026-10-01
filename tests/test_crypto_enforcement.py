@@ -19,7 +19,8 @@ is encrypted and the enforcement paths are:
   PSK, tampered negotiation, or a pinned-key contradiction.
 """
 
-import os
+import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -33,6 +34,22 @@ from hivemind_bus_client import HiveMessage, HiveMessageType
 from hivemind_core.protocol import (HiveMindClientConnection,
                                     HiveMindListenerProtocol,
                                     UnencryptedMessageError)
+
+
+def _write_key(case, privkey_pem):
+    """Write *privkey_pem* into a directory this test case owns, and return it.
+
+    ``NamedTemporaryFile(delete=False)`` with an ``os.unlink`` in ``tearDown``
+    stood here. It removed the file on a pass and on a failure, but not when
+    setUp itself raised after the file was made, and it wrote into the shared
+    tmp either way. TemporaryDirectory removes itself, and addCleanup runs
+    whatever happens.
+    """
+    keydir = tempfile.TemporaryDirectory()
+    case.addCleanup(keydir.cleanup)
+    keyfile = Path(keydir.name) / "node.pem"
+    keyfile.write_text(privkey_pem)
+    return str(keyfile)
 
 
 def _make_protocol():
@@ -112,18 +129,10 @@ class TestIntercomSignatureVerification(unittest.TestCase):
 
     def setUp(self):
         self.proto = _make_protocol()
-        import tempfile
-        self._priv_file = tempfile.NamedTemporaryFile(
-            "w", suffix=".pem", delete=False)
-        self._priv_file.write(self.server_priv)
-        self._priv_file.close()
         self.proto.identity = MagicMock()
-        self.proto.identity.private_key = self._priv_file.name
+        self.proto.identity.private_key = _write_key(self, self.server_priv)
         self.proto.identity.public_key = self.server_pub
         self.client = _make_client(self.proto)
-
-    def tearDown(self):
-        os.unlink(self._priv_file.name)
 
     def _intercom(self, sign_key):
         inner = HiveMessage(HiveMessageType.SHARED_BUS,
@@ -272,14 +281,9 @@ class TestRejectedIntercomIsNotRelayed(unittest.TestCase):
         cls.forger_pub, cls.forger_priv = create_RSA_key()
 
     def setUp(self):
-        import tempfile
         self.proto = _make_protocol()
-        self._priv_file = tempfile.NamedTemporaryFile(
-            "w", suffix=".pem", delete=False)
-        self._priv_file.write(self.server_priv)
-        self._priv_file.close()
         self.proto.identity = MagicMock()
-        self.proto.identity.private_key = self._priv_file.name
+        self.proto.identity.private_key = _write_key(self, self.server_priv)
         self.proto.identity.public_key = self.server_pub
         self.proto._upstream_hm = MagicMock()
 
@@ -289,9 +293,6 @@ class TestRejectedIntercomIsNotRelayed(unittest.TestCase):
 
         self.peer = MagicMock()
         self.proto.clients["peer-1"] = self.peer
-
-    def tearDown(self):
-        os.unlink(self._priv_file.name)
 
     def _forged_intercom(self):
         inner = HiveMessage(HiveMessageType.SHARED_BUS,

@@ -12,6 +12,7 @@ being dropped, is not relayed to peers or escalated upstream.
 """
 
 import tempfile
+from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -30,17 +31,20 @@ def _make_protocol():
     return HiveMindListenerProtocol(agent_protocol=agent, db=db)
 
 
-def _real_key_identity(pubkey, privkey_pem):
-    """Identity backed by a real RSA key file.
+def _real_key_identity(pubkey, privkey_pem, directory):
+    """Identity backed by a real RSA key file, written inside *directory*.
 
     ``HiveMindClientConnection`` builds an RSA HandShake from
     ``identity.private_key`` on construction, so it must be a usable key path.
+
+    *directory* is REQUIRED, and the caller owns its removal. This used to
+    call ``tempfile.NamedTemporaryFile(delete=False)``, which nothing deleted:
+    every run left another ``.pem`` in the shared tmp.
     """
-    handle = tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False)
-    handle.write(privkey_pem)
-    handle.close()
+    keyfile = Path(directory) / "node.pem"
+    keyfile.write_text(privkey_pem)
     identity = MagicMock()
-    identity.private_key = handle.name
+    identity.private_key = str(keyfile)
     identity.public_key = pubkey
     return identity
 
@@ -70,7 +74,12 @@ class TestUnauthenticatedIntercomRefused(unittest.TestCase):
 
     def setUp(self):
         self.proto = _make_protocol()
-        self.proto.identity = _real_key_identity(self.server_pub, self.server_priv)
+        # TemporaryDirectory removes itself, and addCleanup runs it whatever
+        # the test does, including an error inside this setUp after this line.
+        keydir = tempfile.TemporaryDirectory()
+        self.addCleanup(keydir.cleanup)
+        self.proto.identity = _real_key_identity(
+            self.server_pub, self.server_priv, keydir.name)
         self.proto.handle_bus_message = MagicMock()
         self.proto._upstream_hm = MagicMock()
         self.client = _make_client(self.proto)
