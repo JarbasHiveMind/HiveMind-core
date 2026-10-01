@@ -8,6 +8,7 @@ import socket
 import sys
 import threading
 import time
+from functools import partial
 from typing import Callable, Mapping, Optional, Type
 
 
@@ -44,9 +45,30 @@ def _missing_transport_message(name: str) -> str:
 
 
 def get_agent_protocol():
+    """The agent builder and its config, for :meth:`HiveMindService.run`.
+
+    Returns a BUILDER, not the class, and the builder goes through
+    ``AgentProtocolFactory.create`` rather than calling the class directly.
+    That is the whole point of this function: ``create`` is the only place the
+    entry-point name is recorded on the instance (as ``plugin_id``, see
+    hivemind-plugin-manager), and the service used to construct
+    ``get_class(name)(config=config)`` itself. ``create`` was therefore never
+    reached on the service path, ``plugin_id`` was never set, and the Layer-1
+    ``destination`` this node stamps fell back to the generic ``hivemind``
+    label on every deployment (see ``_agent_label`` in ``protocol.py``).
+
+    ``bus`` IS DELIBERATELY NOT PASSED. ``create`` forwards ``bus=None``, and
+    an agent plugin treats a false ``bus`` as "build your own", which is what
+    the OVOS plugin does and what the service has always ended up with. Do not
+    "fix" this by passing a ``FakeBus`` from here: the plugins compare against
+    ``ovos_utils.fakebus.FakeBus`` while this module imports
+    ``hivemind_bus_client.fakebus.FakeBus``, a DIFFERENT class, so an
+    ``isinstance`` check against it fails and the agent would keep the fake bus
+    and never connect to the real one.
+    """
     config = get_server_config()["agent_protocol"]
     name = config["module"]
-    return AgentProtocolFactory.get_class(name), config.get(name, {})
+    return partial(AgentProtocolFactory.create, name), config.get(name, {})
 
 
 def get_binary_protocol():
@@ -368,8 +390,14 @@ class HiveMindService:
         self._upstream = slave
         return slave
 
-    def _start_agent_protocol(self, agent_class: Type, config: Mapping):
+    def _start_agent_protocol(self, agent_builder: Callable, config: Mapping):
         """Build the agent protocol, retrying while its backend is unreachable.
+
+        ``agent_builder`` is anything callable with ``config=``:
+        :func:`get_agent_protocol` supplies ``AgentProtocolFactory.create``
+        bound to the configured entry-point name. The indirection is kept so a
+        test can hand in a plain callable without going near the plugin
+        machinery.
 
         Agents are expected to degrade rather than raise: the OVOS plugin comes
         up with a disconnected bus, its client reconnects on its own, and Core
@@ -381,9 +409,11 @@ class HiveMindService:
         """
         while True:
             try:
-                return agent_class(config=config)
+                return agent_builder(config=config)
             except ConnectionError as e:
-                LOG.error(f"{agent_class.__name__} can not reach its backend "
+                # The builder is a partial, which has no ``__name__``; the
+                # configured module name is the useful thing to print anyway.
+                LOG.error(f"the agent protocol can not reach its backend "
                           f"({e}); retrying in {self.agent_retry_delay}s. No "
                           f"client can be served until it answers.")
                 time.sleep(self.agent_retry_delay)
@@ -437,10 +467,16 @@ class HiveMindService:
         self._status.set_started()
 
         # start/connect agent protocol that will handle HiveMessage payloads
-        agent_class, agent_config = get_agent_protocol()
-        LOG.info(f"Agent protocol: {agent_class.__name__}")
+        agent_builder, agent_config = get_agent_protocol()
 
-        agent_protocol = self._start_agent_protocol(agent_class, agent_config)
+        agent_protocol = self._start_agent_protocol(agent_builder, agent_config)
+        # Logged AFTER construction, and the plugin_id is logged with the class:
+        # that id is what this node stamps as the Layer-1 ``destination``, and
+        # an empty one means the generic ``hivemind`` label went on the wire. An
+        # operator reading this line can now see which of the two happened.
+        LOG.info(f"Agent protocol: {type(agent_protocol).__name__} "
+                 f"(plugin_id: "
+                 f"{getattr(agent_protocol, 'plugin_id', '') or 'unset'})")
         self._status.bind(agent_protocol.bus)
 
         # binary data handling protocol
