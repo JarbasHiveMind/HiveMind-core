@@ -2381,7 +2381,8 @@ class HiveMindListenerProtocol:
         try:
             transport = NoiseTransport(client.noise_handshake)
         except NoiseHandshakeFailed as e:
-            self._abort_noise_handshake(client, str(e))
+            self._abort_noise_handshake(
+                client, f"handshake failure: {_handshake_failure_text(e)}")
             return
 
         # TOFU-then-pin the node's static key (§3.5)

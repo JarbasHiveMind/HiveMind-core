@@ -61,10 +61,10 @@ class TestTheFailureTextNamesSomething(unittest.TestCase):
 
 
 class TestBothAbortSitesUseIt(unittest.TestCase):
-    """Neither site may keep the bare interpolation.
+    """No abort site may keep the bare interpolation.
 
-    Only one of the two was reached by the burst; a fix to one alone leaves
-    the other silent in exactly the same way.
+    Only one of the three was reached by the burst; a fix to one alone
+    leaves the others silent in exactly the same way.
     """
 
     def test_no_abort_site_interpolates_the_exception_bare(self):
@@ -83,12 +83,16 @@ class TestBothAbortSitesUseIt(unittest.TestCase):
                          "an abort site still renders the exception bare, so "
                          "an argument-less exception names nothing")
 
-    def test_both_sites_route_through_the_helper(self):
+    def test_all_three_sites_route_through_the_helper(self):
+        """``handle_noise_handshake_message`` has two abort sites; the
+        transport's own ``NoiseHandshakeFailed`` in ``_finish_noise_handshake``
+        is a third. All three render an argument-less exception as its type
+        name, not as the empty string."""
         import inspect
 
         from hivemind_core import protocol
 
         source = inspect.getsource(protocol)
         self.assertEqual(
-            source.count("_handshake_failure_text(e)"), 2,
-            "both Noise handshake abort sites must name the exception")
+            source.count("_handshake_failure_text(e)"), 3,
+            "every Noise handshake abort site must name the exception")
