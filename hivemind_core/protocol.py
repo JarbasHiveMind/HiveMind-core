@@ -29,7 +29,9 @@ from ovos_utils.fakebus import FakeBus
 from ovos_utils.log import LOG
 from hivemind_core.config import get_server_config
 from hivemind_bus_client.identity import NodeIdentity
-from hivemind_bus_client.message import HiveMessage, HiveMessageType, HiveMindBinaryPayloadType
+from hivemind_bus_client.message import (HiveMessage, HiveMessageType,
+                                          HiveMindBinaryPayloadType,
+                                          MalformedWirePayload)
 from hivemind_bus_client.serialization import BINARY_ENCODABLE_TYPES, decode_bitstring, get_bitstring
 from hivemind_bus_client.encryption import (SupportedEncodings, SupportedCiphers,
                                             hybrid_decrypt, _norm_encoding)
@@ -581,7 +583,17 @@ class HiveMindClientConnection:
         else:
             if isinstance(payload, str):
                 payload = json.loads(payload)
-            message = HiveMessage(**payload)
+            try:
+                message = HiveMessage(**payload)
+            except MalformedWirePayload as e:
+                # HIVEMIND-MSG-1 §4: the payload MUST be a JSON object.
+                # The constructor already refuses a str payload (e.g. a
+                # HELLO carrying '{"site_id": "injected"}' as text); this
+                # records that refusal in recent_rejections instead of
+                # leaving it as an uncaught exception the operator never
+                # sees.
+                self._reject(1008, str(e), "malformed_wire_payload")
+                raise
 
         # HIVEMIND-CRYPTO-1 §3.5 - when the server requires crypto, drop any
         # cleartext frame that is not part of key establishment. HELLO and
@@ -794,7 +806,8 @@ class HiveMindListenerProtocol:
         "noise_handshake_failed", "noise_pin_mismatch", "non_noise_frame",
         "invalid_noise_frame", "unencrypted_frame", "internal_error",
         "illegal_broadcast", "illegal_propagate", "illegal_query",
-        "illegal_cascade", "illegal_escalate", "other",
+        "illegal_cascade", "illegal_escalate", "malformed_wire_payload",
+        "other",
     })
     # backing store for ``recent_rejections``; None so a bypass-built
     # instance still sees a class default. One lock for every instance:
