@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.7a1) (2026-10-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.6a1...5.3.7a1)
+
+**Merged pull requests:**
+
+- fix: do not escalate or fan out a QUERY or CASCADE the node's policy chain denied [\#390](https://github.com/JarbasHiveMind/HiveMind-core/pull/390) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.6a1) (2026-10-20)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.5a1...5.3.6a1)
@@ -367,10 +375,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a3...4.13.16a1)
 
-**Merged pull requests:**
-
-- fix: re-assert Layer-1 session after transformers and refresh is\_admin for all admin gates [\#283](https://github.com/JarbasHiveMind/HiveMind-core/pull/283) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.15a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a3) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a2...4.13.15a3)
@@ -521,15 +525,15 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
-
-## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
 
 ## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+
+## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
@@ -553,15 +557,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
-
-## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
 
 ## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+
+## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
