@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.6a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.6a1) (2026-10-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.5a1...5.3.6a1)
+
+**Merged pull requests:**
+
+- fix: answer QUERY and CASCADE off the IOLoop [\#389](https://github.com/JarbasHiveMind/HiveMind-core/pull/389) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.5a1) (2026-10-20)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.4a1...5.3.5a1)
@@ -366,10 +374,6 @@
 ## [4.13.15a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a3) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a2...4.13.15a3)
-
-**Merged pull requests:**
-
-- Re-check is\_admin from the DB at the session-NAT boundary [\#281](https://github.com/JarbasHiveMind/HiveMind-core/pull/281) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.15a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a2) (2026-09-01)
 
