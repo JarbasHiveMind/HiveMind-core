@@ -161,3 +161,66 @@ def test_an_existing_server_json_is_not_rewritten(tmp_path, monkeypatch):
     cfg = cfg_mod.get_server_config()
 
     assert list(cfg["network_protocol"]) == ["hivemind-websocket-plugin", "hivemind-http-plugin"]
+
+
+# --- server.json without a network_protocol key -----------------------------
+
+def _write_server_json(tmp_path, content):
+    path = tmp_path / "hivemind-core" / "server.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(content))
+    return path
+
+
+def test_a_server_json_without_network_protocol_gets_the_first_run_transports(
+        tmp_path, monkeypatch):
+    cfg_mod = _fresh_config(tmp_path, monkeypatch, ["hivemind-websocket-plugin"])
+    path = _write_server_json(tmp_path, {"allow_unlisted": True,
+                                         "agent_protocol": {"module": "hivemind-ovos-agent-plugin"}})
+
+    cfg = cfg_mod.get_server_config()
+
+    assert set(cfg["network_protocol"]) == {"hivemind-websocket-plugin"}
+    on_disk = json.loads(path.read_text())
+    assert set(on_disk["network_protocol"]) == {"hivemind-websocket-plugin"}
+    assert on_disk["allow_unlisted"] is True
+    assert on_disk["agent_protocol"] == {"module": "hivemind-ovos-agent-plugin"}
+
+
+def test_an_explicit_http_block_is_kept_when_http_is_not_installed(tmp_path, monkeypatch):
+    cfg_mod = _fresh_config(tmp_path, monkeypatch, ["hivemind-websocket-plugin"])
+    block = {"hivemind-http-plugin": {"port": 9999}}
+    path = _write_server_json(tmp_path, {"network_protocol": block})
+
+    cfg = cfg_mod.get_server_config()
+
+    assert dict(cfg["network_protocol"]) == block
+    assert json.loads(path.read_text())["network_protocol"] == block
+
+
+def test_a_null_network_protocol_falls_back_to_the_installed_transports(
+        tmp_path, monkeypatch):
+    cfg_mod = _fresh_config(tmp_path, monkeypatch, ["hivemind-websocket-plugin"])
+    _write_server_json(tmp_path, {"network_protocol": None})
+
+    cfg = cfg_mod.get_server_config()
+
+    assert set(cfg["network_protocol"]) == {"hivemind-websocket-plugin"}
+
+
+def test_a_null_network_protocol_is_repaired_on_disk_and_logged_once(
+        tmp_path, monkeypatch):
+    cfg_mod = _fresh_config(tmp_path, monkeypatch, ["hivemind-websocket-plugin"])
+    path = _write_server_json(tmp_path, {"allow_unlisted": True, "network_protocol": None})
+    info = mock.MagicMock()
+    monkeypatch.setattr(cfg_mod.LOG, "info", info)
+
+    for _ in range(4):
+        cfg = cfg_mod.get_server_config()
+
+    assert set(cfg["network_protocol"]) == {"hivemind-websocket-plugin"}
+    on_disk = json.loads(path.read_text())
+    assert set(on_disk["network_protocol"]) == {"hivemind-websocket-plugin"}
+    assert on_disk["allow_unlisted"] is True
+    first_run = [c for c in info.call_args_list if "first run" in str(c)]
+    assert len(first_run) == 1
