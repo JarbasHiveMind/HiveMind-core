@@ -50,3 +50,27 @@ def _isolate_xdg_config(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(xdg / "data"))
     monkeypatch.setenv("XDG_STATE_HOME", str(xdg / "state"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(xdg / "cache"))
+
+
+class _InlineExecutor:
+    """Runs a submitted job on the calling thread, so a unit test that stubs
+    the answering backend sees its escalation before the handler returns."""
+
+    def submit(self, fn, *args, **kwargs):
+        fn(*args, **kwargs)
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _answer_queries_inline(request, monkeypatch):
+    """QUERY/CASCADE answers run on a worker thread in production. Unit tests
+    assert on the handler's effects right after it returns, so they get an
+    inline executor. The end-to-end tests and the off-loop tests keep the real
+    pool."""
+    if "e2e" in request.node.path.parts or "off_loop" in request.node.path.name:
+        return
+    from hivemind_core.protocol import HiveMindListenerProtocol
+    monkeypatch.setattr(HiveMindListenerProtocol, "_query_executor",
+                        _InlineExecutor())
