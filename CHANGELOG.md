@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.4a1) (2026-10-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.3a1...5.3.4a1)
+
+**Merged pull requests:**
+
+- fix: apply first-run transport defaults to a server.json without network\_protocol [\#386](https://github.com/JarbasHiveMind/HiveMind-core/pull/386) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.3a1) (2026-09-28)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.2a2...5.3.3a1)
@@ -366,10 +374,6 @@
 ## [4.13.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a1) (2026-08-31)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.14a1...4.13.15a1)
-
-**Merged pull requests:**
-
-- fix: translate session\_id to a per-connection Layer-1 id at the bridge [\#277](https://github.com/JarbasHiveMind/HiveMind-core/pull/277) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.14a1) (2026-08-31)
 
