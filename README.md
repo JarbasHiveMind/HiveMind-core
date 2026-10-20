@@ -137,6 +137,7 @@ To grant a message type:
 
 ```bash
 $ hivemind-core allow-msg "recognizer_loop:utterance" 1
+$ hivemind-core allow-msg "ovos.utterance.handle" 1
 $ hivemind-core allow-msg "speak" 1
 ```
 
@@ -205,6 +206,7 @@ message, and every binary payload, from that client until you grant the types it
 
 ```bash
 $ hivemind-core allow-msg "recognizer_loop:utterance" 3
+$ hivemind-core allow-msg "ovos.utterance.handle" 3
 $ hivemind-core allow-msg "speak" 3
 ```
 
@@ -333,6 +335,7 @@ Grant a specific message type to a client's `allowed_types` whitelist. New clien
 
 ```bash
 $ hivemind-core allow-msg "recognizer_loop:utterance" 1
+$ hivemind-core allow-msg "ovos.utterance.handle" 1
 $ hivemind-core allow-msg "speak" 1
 ```
 

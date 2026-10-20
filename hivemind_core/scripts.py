@@ -220,7 +220,9 @@ def add_client(name, access_key, password, admin, metadata, allow_weak_password,
             print(
                 "\nNOTE: Allowed message types is empty — this client will be DENIED on every message.\n"
                 "      Grant access explicitly, e.g.:\n"
-                f"      hivemind-core allow-msg recognizer_loop:utterance {user.client_id}\n"
+                f"      hivemind-core allow-msg ovos.utterance.handle recognizer_loop:utterance {user.client_id}\n"
+                "      (a client is admitted on the exact topic it sends: ovos.utterance.handle is\n"
+                "      the current name, recognizer_loop:utterance the legacy one)\n"
                 "      (admin status does not exempt a client from the message type whitelist)"
             )
 

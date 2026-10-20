@@ -4,7 +4,8 @@ hivemind-core can run OVOS transformer plugins on the text/bus path, so
 **plain-text clients** (CLI, webchat, bridges — anything without the audio
 binary protocol) get the same rewriting machinery voice clients get.
 
-- **Utterance transformers** rewrite `recognizer_loop:utterance` messages
+- **Utterance transformers** rewrite `ovos.utterance.handle` (and the legacy
+  `recognizer_loop:utterance`) messages
   after policy admission and before they are injected into the agent bus.
 - **Metadata transformers** enrich the message context at the same point.
 - **Dialog transformers** rewrite QUERY/CASCADE answer chunks (`speak`
