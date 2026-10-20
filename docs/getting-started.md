@@ -67,6 +67,7 @@ every binary payload, until you grant access. For a typical voice satellite:
 
 ```bash
 hivemind-core allow-msg "recognizer_loop:utterance" 1
+hivemind-core allow-msg "ovos.utterance.handle" 1
 hivemind-core allow-msg "speak" 1
 ```
 

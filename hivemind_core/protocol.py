@@ -82,6 +82,11 @@ from poorman_handshake import HandShake, PasswordHandShake
 from poorman_handshake.asymmetric.utils import decrypt_RSA, load_RSA_key, verify_RSA
 from Cryptodome.PublicKey import RSA
 
+#: The utterance entry-point topic (OVOS-PIPELINE-1 §9.1) and the legacy name
+#: older satellites still send. The hub forwards the topic unchanged and treats
+#: both as an utterance for transformers and QUERY/CASCADE extraction.
+UTTERANCE_TOPICS = frozenset({"ovos.utterance.handle", "recognizer_loop:utterance"})
+
 #: Stdlib logger used ONLY in ``HiveMindClientConnection.send()``'s per-peer hot
 #: path. ``ovos_utils.log.LOG.debug`` is a classmethod that calls
 #: ``inspect.stack()`` before checking the log level, so a *suppressed* call
@@ -3147,7 +3152,7 @@ class HiveMindListenerProtocol:
         if inner.msg_type != HiveMessageType.BUS or not isinstance(inner.payload, Message):
             return False
         bus_msg = inner.payload
-        if bus_msg.msg_type != "recognizer_loop:utterance":
+        if bus_msg.msg_type not in UTTERANCE_TOPICS:
             return False  # QUERY/CASCADE answer natural-language utterances only
         admitted = self._admit_for_query(bus_msg, client)
         if admitted is None:
@@ -3801,7 +3806,7 @@ class HiveMindListenerProtocol:
         # OVOS transformer pipelines: rewrite utterances / context before
         # they reach the agent bus. A cancellation terminates the lifecycle
         # here, the message never reaches the agent.
-        if message.msg_type == "recognizer_loop:utterance":
+        if message.msg_type in UTTERANCE_TOPICS:
             message = self._apply_utterance_transformers(message, client)
             if message is None:
                 return
@@ -3861,7 +3866,7 @@ class HiveMindListenerProtocol:
                                       client: HiveMindClientConnection
                                       ) -> Optional[Message]:
         """Run the utterance + metadata transformer chains on an inbound
-        ``recognizer_loop:utterance`` message.
+        utterance message (either name in ``UTTERANCE_TOPICS``).
 
         Returns the (possibly rewritten) message, or ``None`` when a
         transformer canceled the utterance — in that case the terminal

@@ -132,9 +132,14 @@ Manage the `allowed_types` whitelist for a client. The whitelist is the primary 
 enforced by `MessageTypeACLPolicy` (always first in the policy chain). An empty whitelist
 denies all messages.
 
+The gate admits the exact topic a client sends. Current
+satellites send `ovos.utterance.handle`. Older satellites send the legacy
+`recognizer_loop:utterance`. Grant both names to cover either kind.
+
 ```bash
 # Grant a message type
 hivemind-core allow-msg "recognizer_loop:utterance" 1
+hivemind-core allow-msg "ovos.utterance.handle" 1
 hivemind-core allow-msg "speak" 1
 
 # Revoke a message type
