@@ -3179,23 +3179,38 @@ class HiveMindListenerProtocol:
         self.policy_chain.observe(message, client)
         return message
 
-    def _answer_query_locally(self, message: HiveMessage,
+    def _admit_query_request(self, message: HiveMessage,
+                             client: HiveMindClientConnection
+                             ) -> Tuple[bool, Optional[Message]]:
+        """Run the admission gate over the utterance a QUERY/CASCADE carries.
+
+        Returns ``(denied, admitted)``. ``denied`` is True when the gate
+        refused the utterance; the client has then already received
+        ``hive.policy.denied`` (HIVEMIND-POLICY-1 §6) and the caller must drop
+        the request: a refusal is handled, never relayed (HIVEMIND-MSG-1 §5.1).
+        ``admitted`` is the admitted utterance, or None when the request holds
+        no natural-language utterance for this node to answer, in which case
+        it is only forwarded.
+        """
+        inner = message.payload
+        if inner.msg_type != HiveMessageType.BUS or not isinstance(inner.payload, Message):
+            return False, None
+        bus_msg = inner.payload
+        if bus_msg.msg_type not in UTTERANCE_TOPICS:
+            return False, None  # QUERY/CASCADE answer natural-language utterances only
+        admitted = self._admit_for_query(bus_msg, client)
+        return admitted is None, admitted
+
+    def _answer_query_locally(self, admitted: Optional[Message],
                               client: HiveMindClientConnection, query_id: str,
                               originator_peer: str, msg_type: HiveMessageType,
                               route, send_fn) -> bool:
-        """Stream a local-agent answer for a QUERY/CASCADE request. Extracts the
-        natural-language utterance, runs it through the policy admission gate,
-        then streams the agent's answer chunks via ``send_fn`` (one ``speak``
-        per chunk) followed by a ``QUERY_STREAM_END`` end-of-stream control message. Returns
-        True if the agent answered (caller stops), False if it declined (caller
-        escalates)."""
-        inner = message.payload
-        if inner.msg_type != HiveMessageType.BUS or not isinstance(inner.payload, Message):
-            return False
-        bus_msg = inner.payload
-        if bus_msg.msg_type not in UTTERANCE_TOPICS:
-            return False  # QUERY/CASCADE answer natural-language utterances only
-        admitted = self._admit_for_query(bus_msg, client)
+        """Stream a local-agent answer for the admitted utterance of a
+        QUERY/CASCADE request (see :meth:`_admit_query_request`). Streams the
+        agent's answer chunks via ``send_fn`` (one ``speak`` per chunk)
+        followed by a ``QUERY_STREAM_END`` end-of-stream control message.
+        Returns True if the agent answered (caller stops), False if it declined
+        (caller escalates)."""
         if admitted is None:
             return False
         utts = admitted.data.get("utterances") or []
@@ -3443,6 +3458,13 @@ class HiveMindListenerProtocol:
             self._route_query_response(message, client)
             return
 
+        # Admission runs before anything else, on the loop and ahead of the
+        # worker pool, so a denied query is neither answered, nor escalated,
+        # nor lost to a full pool that counts a request as declined.
+        denied, admitted = self._admit_query_request(message, client)
+        if denied:
+            return
+
         payload = self._unpack_message(message, client)
         query_id = metadata.get("query_id", str(uuid.uuid4()))
         originator_peer = metadata.get("originator_peer", client.peer)
@@ -3475,7 +3497,7 @@ class HiveMindListenerProtocol:
         self._answer_query_off_loop(
             client, "QUERY",
             lambda: self._answer_query_locally(
-                message, client, query_id, originator_peer,
+                admitted, client, query_id, originator_peer,
                 HiveMessageType.QUERY, message.route, client.send),
             on_declined=escalate)
 
@@ -3527,6 +3549,12 @@ class HiveMindListenerProtocol:
             self._route_query_response(message, client)
             return
 
+        # A denied cascade is dropped here: it is not answered, not fanned out
+        # to peers and not forwarded upstream (HIVEMIND-MSG-1 §5.1).
+        denied, admitted = self._admit_query_request(message, client)
+        if denied:
+            return
+
         payload = self._unpack_message(message, client)
 
         # HIVEMIND-MSG-1 §5 gates re-forwarding of a looped message, not local
@@ -3556,7 +3584,7 @@ class HiveMindListenerProtocol:
         self._answer_query_off_loop(
             client, "CASCADE",
             lambda: self._answer_query_locally(
-                message, client, query_id, originator_peer,
+                admitted, client, query_id, originator_peer,
                 HiveMessageType.CASCADE, message.route,
                 lambda hm: self._route_query_response(hm, client)))
 

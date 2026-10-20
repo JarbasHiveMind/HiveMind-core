@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from ovos_bus_client.message import Message
 from ovos_bus_client.session import Session
 
-from hivemind_bus_client import HiveMessage, HiveMessageType
+from hivemind_bus_client import HiveMessageType
 from hivemind_core.protocol import HiveMindClientConnection, HiveMindListenerProtocol
 
 
@@ -162,10 +162,8 @@ class TestInjectPathTransformers(unittest.TestCase):
 
 class TestQueryPathTransformers(unittest.TestCase):
     def _query_message(self):
-        bus_msg = Message("recognizer_loop:utterance",
-                          {"utterances": ["hello"], "lang": "en-US"}, {})
-        inner = HiveMessage(HiveMessageType.BUS, payload=bus_msg)
-        return HiveMessage(HiveMessageType.QUERY, payload=inner)
+        return Message("recognizer_loop:utterance",
+                       {"utterances": ["hello"], "lang": "en-US"}, {})
 
     def test_dialog_transformers_rewrite_answer_chunks(self):
         protocol = _make_protocol(dialog_transformers=FakeDialogService())

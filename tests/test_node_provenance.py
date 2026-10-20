@@ -93,16 +93,14 @@ def test_query_response_responder_peer_is_the_node_key():
     node = _make_node()
     node.default_lang = "en-US"
     node.agent_protocol.answer_query.return_value = iter(["hello there"])
-    node._admit_for_query = lambda message, client: message
 
-    inner = HiveMessage(HiveMessageType.BUS,
-                        payload=Message("recognizer_loop:utterance",
-                                        {"utterances": ["hi"]}))
-    query = HiveMessage(HiveMessageType.QUERY, payload=inner,
+    utterance = Message("recognizer_loop:utterance", {"utterances": ["hi"]})
+    query = HiveMessage(HiveMessageType.QUERY,
+                        payload=HiveMessage(HiveMessageType.BUS, payload=utterance),
                         metadata={"query_id": "q1"})
     sent = []
     answered = node._answer_query_locally(
-        query, _client(), "q1", "satellite::1",
+        utterance, _client(), "q1", "satellite::1",
         HiveMessageType.QUERY, query.route, sent.append)
 
     assert answered and sent
