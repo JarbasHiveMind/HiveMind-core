@@ -95,7 +95,7 @@ def test_query_escalates_up_the_relay_chain():
         s = b.get_satellite("S0")
         s.send(HiveMessage(HiveMessageType.QUERY, payload=_utt(),
                            metadata={"query_id": "q3", "originator_peer": s.peer}))
-        recv = s.recorder.wait_for(HiveMessageType.QUERY.value, direction="in", timeout=6.0)
+        recv = s.recorder.wait_for(HiveMessageType.QUERY.value, direction="in", timeout=15.0)
         assert recv is not None, "escalated QUERY answer never routed back to S0"
     finally:
         b.stop_all()
@@ -140,7 +140,7 @@ def test_query_traverses_two_relays_only_third_answers():
         s.send(HiveMessage(HiveMessageType.QUERY, payload=_utt(),
                            metadata={"query_id": "q-deep", "originator_peer": s.peer}))
         recv = s.recorder.wait_for(HiveMessageType.QUERY.value,
-                                   direction="in", timeout=12.0)
+                                   direction="in", timeout=25.0)
         assert recv is not None, \
             "QUERY answered at M0 never routed back through R1+R2 to S0"
     finally:

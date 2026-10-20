@@ -16,7 +16,7 @@ from collections import OrderedDict, deque
 from concurrent.futures import Future as ConcurrentFuture, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from enum import Enum, IntEnum
-from typing import Union, List, Dict, Optional, Callable, Literal, Tuple
+from typing import ClassVar, Union, List, Dict, Optional, Callable, Literal, Tuple
 
 import pybase64
 from ovos_bus_client import MessageBusClient
@@ -668,6 +668,37 @@ class CascadeCollector:
             if isinstance(bus_msg, Message):
                 resp.messages.append(bus_msg)
         return resp
+
+
+class _DaemonWorkerPool:
+    """Runs submitted jobs on daemon threads, at most ``workers`` at a time.
+
+    A job that waits for a worker blocks on a semaphore and is dropped, never
+    run, once the pool is shut down. The threads are daemons because a job can
+    wait on a backend stream that never ends, and such a job must not hold the
+    process open at exit, which the threads of a ``ThreadPoolExecutor`` do.
+    """
+
+    def __init__(self, workers: int, name: str):
+        self._slots = threading.BoundedSemaphore(workers)
+        self._name = name
+        self._closed = threading.Event()
+
+    def submit(self, fn: Callable[[], None]) -> None:
+        if self._closed.is_set():
+            raise RuntimeError("cannot schedule new jobs after shutdown")
+        threading.Thread(target=self._run, args=(fn,), name=self._name,
+                         daemon=True).start()
+
+    def _run(self, fn: Callable[[], None]) -> None:
+        with self._slots:
+            if not self._closed.is_set():
+                fn()
+
+    def shutdown(self, wait: bool = True, cancel_futures: bool = False) -> None:
+        """Refuse new jobs and drop the ones still waiting for a worker.
+        Running jobs are not interrupted, and never waited for."""
+        self._closed.set()
 
 
 @dataclass
@@ -1375,7 +1406,17 @@ class HiveMindListenerProtocol:
         embedder assigned, a real ``ThreadPoolExecutor`` included, is left
         alone, the same as the idle release: it may carry the embedder's own
         work, and cancelling that is not this class's call.
+
+        The query workers are released too. Queued answers are dropped and
+        running ones are left to finish on their daemon threads, so an answer
+        stream that never ends does not hold the process open.
         """
+        with self._query_pool_lock:
+            query_executor = self._query_executor
+            self._query_executor = None
+            self._query_in_flight = 0
+        if query_executor is not None:
+            query_executor.shutdown(wait=False, cancel_futures=True)
         with self._psk_lock:
             executor = self._noise_psk_executor
             if executor is None or not self._noise_psk_executor_owned:
@@ -3302,6 +3343,77 @@ class HiveMindListenerProtocol:
                     f"return path: query_id={metadata.get('query_id', '')} "
                     f"originator_peer={originator_peer} return_peer={return_peer}")
 
+    # Worker threads answering QUERY/CASCADE requests, and the most requests
+    # running or waiting for one. A request over the limit counts as declined.
+    QUERY_WORKERS = 8
+    QUERY_MAX_IN_FLIGHT = 64
+    _query_executor: ClassVar[Optional[_DaemonWorkerPool]] = None
+    _query_in_flight = 0
+    _query_pool_lock = threading.Lock()
+
+    def _answer_query_off_loop(self, client: HiveMindClientConnection,
+                               label: str, answer: Callable[[], bool],
+                               on_declined: Optional[Callable[[], None]] = None
+                               ) -> None:
+        """Run ``answer`` on a worker thread and call ``on_declined`` if it
+        returns False.
+
+        The answering backend streams its chunks from a blocking generator that
+        waits as long as a skill takes to speak (HIVEMIND-AGENT-1 §4.1 asks for
+        each chunk to be relayed as it is produced). Iterating it on the IOLoop
+        thread would hold every other client's traffic until the stream ended.
+        The worker sends each chunk itself, so the transport's ``send`` must be
+        safe to call from any thread, as it already is for the OVOS bus and
+        upstream threads. The websocket transport hands the frame to the loop;
+        a transport that appends to a queue the loop drains must lock it.
+
+        ``on_declined`` is the escalation continuation (HIVEMIND-AGENT-1 §5),
+        and runs on the worker once the backend has declined.
+        """
+        with self._query_pool_lock:
+            admitted = self._query_in_flight < self.QUERY_MAX_IN_FLIGHT
+            if admitted:
+                self._query_in_flight += 1
+                if self._query_executor is None:
+                    self._query_executor = _DaemonWorkerPool(
+                        self.QUERY_WORKERS, "hm-query")
+                executor = self._query_executor
+        if not admitted:
+            LOG.warning(f"{label} from {client.peer} declined: "
+                        f"{self.QUERY_MAX_IN_FLIGHT} queries already in flight")
+            if on_declined is not None:
+                on_declined()
+            return
+
+        def run() -> None:
+            try:
+                if not answer() and on_declined is not None:
+                    on_declined()
+            except Exception:
+                LOG.exception(f"unhandled error answering {label} "
+                              f"for {client.peer}")
+                self.record_rejection(client, 1011, "internal_error")
+                close_connection(client, 1011,
+                                 f"internal error handling {label}")
+            finally:
+                self._release_query_slot(executor)
+
+        try:
+            executor.submit(run)
+        except RuntimeError:
+            LOG.warning(f"{label} from {client.peer} declined: "
+                        "the query pool is shut down")
+            self._release_query_slot(executor)
+            if on_declined is not None:
+                on_declined()
+
+    def _release_query_slot(self, executor: _DaemonWorkerPool) -> None:
+        """Give back a slot, unless ``shutdown`` already replaced the pool the
+        slot was taken from."""
+        with self._query_pool_lock:
+            if self._query_executor is executor:
+                self._query_in_flight -= 1
+
     def handle_query_message(self, message: HiveMessage,
                              client: HiveMindClientConnection):
         """QUERY — like ESCALATE but expects a response. Request: try the local
@@ -3350,19 +3462,22 @@ class HiveMindListenerProtocol:
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
 
-        if self._answer_query_locally(message, client, query_id, originator_peer,
-                                      HiveMessageType.QUERY, message.route,
-                                      client.send):
-            return
+        def escalate() -> None:
+            if self._upstream_hm is not None:
+                self.query_to_master(self._rewrap(message, payload, metadata))
+            else:
+                error_bus = Message("hive.query.timeout",
+                                    {"query_id": query_id, "error": "no_answer"})
+                client.send(self._build_query_response(
+                    HiveMessageType.QUERY, error_bus, query_id,
+                    originator_peer, self._node_id, route=message.route))
 
-        if self._upstream_hm is not None:
-            self.query_to_master(self._rewrap(message, payload, metadata))
-        else:
-            error_bus = Message("hive.query.timeout",
-                                {"query_id": query_id, "error": "no_answer"})
-            client.send(self._build_query_response(
-                HiveMessageType.QUERY, error_bus, query_id,
-                originator_peer, self._node_id, route=message.route))
+        self._answer_query_off_loop(
+            client, "QUERY",
+            lambda: self._answer_query_locally(
+                message, client, query_id, originator_peer,
+                HiveMessageType.QUERY, message.route, client.send),
+            on_declined=escalate)
 
     def cascade_from_master(self, message: HiveMessage) -> None:
         """Relay a CASCADE received from the upstream master.
@@ -3438,9 +3553,12 @@ class HiveMindListenerProtocol:
                          {"source": client.peer}))
 
         # local delivery: this node answers the cascade (runs even when looped)
-        self._answer_query_locally(
-            message, client, query_id, originator_peer, HiveMessageType.CASCADE,
-            message.route, lambda hm: self._route_query_response(hm, client))
+        self._answer_query_off_loop(
+            client, "CASCADE",
+            lambda: self._answer_query_locally(
+                message, client, query_id, originator_peer,
+                HiveMessageType.CASCADE, message.route,
+                lambda hm: self._route_query_response(hm, client)))
 
         # MSG-1 §5: do not re-forward a looped CASCADE
         if looped:
