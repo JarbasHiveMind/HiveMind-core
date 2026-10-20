@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.5a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.5a1) (2026-10-20)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.4a1...5.3.5a1)
+
+**Merged pull requests:**
+
+- fix: treat ovos.utterance.handle like recognizer\_loop:utterance [\#388](https://github.com/JarbasHiveMind/HiveMind-core/pull/388) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.4a1) (2026-10-20)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.3a1...5.3.4a1)
@@ -367,10 +375,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.15a1...4.13.15a2)
 
-**Merged pull requests:**
-
-- Accept a remote 'default' session; admin connections skip NAT \(BRIDGE-1 §4.1\) [\#279](https://github.com/JarbasHiveMind/HiveMind-core/pull/279) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.15a1) (2026-08-31)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.14a1...4.13.15a1)
@@ -465,15 +469,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
-
-## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
 
 ## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+
+## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
