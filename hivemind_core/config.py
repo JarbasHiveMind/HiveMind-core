@@ -184,6 +184,17 @@ def get_server_config() -> JsonStorageXDG:
     if not os.path.isfile(db.path):
         db.merge(_first_run_defaults(defaults))
         db.store()
+    elif not isinstance(db.get("network_protocol"), dict):
+        # a server.json without a transport block, or with a value that is not
+        # one, gets the transports a first run would have written
+        if "network_protocol" in db:
+            LOG.warning(
+                f"server.json 'network_protocol' is "
+                f"{type(db['network_protocol']).__name__}, not a block of "
+                f"settings — writing the installed transports in its place."
+            )
+        db["network_protocol"] = _first_run_defaults(defaults)["network_protocol"]
+        db.store()
     # ensure all top level keys are present
     for k, v in defaults.items():
         if k not in db:
@@ -224,19 +235,6 @@ def get_server_config() -> JsonStorageXDG:
     # satellites included. Deep-merge it against the defaults, like the policy
     # block above, so every sub-key is always present.
     db["upstream"] = upstream_config(db)
-    # `network_protocol` is only backfilled sub-key by sub-key above, so a
-    # hand-edited `null` (or any other non-dict) survives untouched and
-    # `.items()` at the use site (`HiveMindService`) raises AttributeError
-    # before the graceful "no network protocols" exit path ever runs.
-    # Fall back to the default block, like the policy/upstream blocks above.
-    if not isinstance(db.get("network_protocol"), dict):
-        if "network_protocol" in db:
-            LOG.warning(
-                f"server.json 'network_protocol' is "
-                f"{type(db['network_protocol']).__name__}, not a block of "
-                f"settings — using the defaults."
-            )
-        db["network_protocol"] = dict(_DEFAULT["network_protocol"])
     return db
 
 

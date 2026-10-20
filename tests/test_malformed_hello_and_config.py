@@ -104,8 +104,11 @@ class TestNetworkProtocolNonConformingConfig(unittest.TestCase):
             path = Path(tmp) / "hivemind-core" / "server.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({"network_protocol": None}))
+            installed = {name: object for name in _DEFAULT["network_protocol"]}
             with patch("hivemind_core.config.xdg_config_home",
-                       return_value=tmp):
+                       return_value=tmp), \
+                    patch("hivemind_core.config.find_plugins",
+                          return_value=installed):
                 cfg = get_server_config()
             self.assertIsInstance(cfg["network_protocol"], dict)
             self.assertEqual(cfg["network_protocol"].items(),
