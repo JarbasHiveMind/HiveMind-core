@@ -31,8 +31,8 @@ def _single():
 def _relay_chain():
     b = TopologyBuilder()
     m = b.add_master("M0")
-    m.register_satellite("relay-key", password="relay-pw")
-    master_side = b.add_relay("R0", upstream=m).listener
+    master_side = b.add_relay("R0", upstream=m,
+                              allowed_types=["recognizer_loop:utterance"]).listener
     master_side.register_satellite("sat-key", password="sat-pw",
                                    allowed_types=["recognizer_loop:utterance"])
     b.add_satellite("S0", upstream=master_side, allowed_types=["recognizer_loop:utterance"])
@@ -97,6 +97,7 @@ def test_query_escalates_up_the_relay_chain():
                            metadata={"query_id": "q3", "originator_peer": s.peer}))
         recv = s.recorder.wait_for(HiveMessageType.QUERY.value, direction="in", timeout=15.0)
         assert recv is not None, "escalated QUERY answer never routed back to S0"
+        assert recv.payload["payload"]["data"]["utterance"] == "answered upstream"
     finally:
         b.stop_all()
 
@@ -120,10 +121,10 @@ def _two_relay_chain():
     answers; the response then routes back down through R1 and R2 to S0."""
     b = TopologyBuilder()
     m = b.add_master("M0")
-    m.register_satellite("r1-key", password="p")
-    r1_master = b.add_relay("R1", upstream=m).listener
-    r1_master.register_satellite("r2-key", password="p")
-    r2_master = b.add_relay("R2", upstream=r1_master).listener
+    r1_master = b.add_relay("R1", upstream=m,
+                            allowed_types=["recognizer_loop:utterance"]).listener
+    r2_master = b.add_relay("R2", upstream=r1_master,
+                            allowed_types=["recognizer_loop:utterance"]).listener
     r2_master.register_satellite("sat-key", password="p",
                                  allowed_types=["recognizer_loop:utterance"])
     b.add_satellite("S0", upstream=r2_master,
@@ -143,5 +144,7 @@ def test_query_traverses_two_relays_only_third_answers():
                                    direction="in", timeout=25.0)
         assert recv is not None, \
             "QUERY answered at M0 never routed back through R1+R2 to S0"
+        assert recv.payload["payload"]["data"]["utterance"] == \
+            "answered at the top after two hops"
     finally:
         b.stop_all()

@@ -41,6 +41,7 @@ def _make_node(node_key: str = "master-pubkey") -> HiveMindListenerProtocol:
     node._unpack_message = MagicMock(
         return_value=Message("recognizer_loop:utterance", {"utterances": ["hi"]}))
     node.get_bus = MagicMock(return_value=MagicMock())
+    node._admit_for_query = lambda message, client: message
     node._answer_query_locally = MagicMock(return_value=False)
     return node
 

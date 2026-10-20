@@ -279,3 +279,37 @@ def test_a_stuck_answer_stream_does_not_hold_the_process_open():
         env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
     assert result.returncode == 0, result.stderr
     assert float(result.stdout.splitlines()[-1]) < 1.0
+
+
+def test_denied_query_is_not_escalated_even_when_the_pool_is_full():
+    node = _make_node(lambda utterance, lang, client=None: iter(()))
+    node._admit_for_query = lambda message, client: None
+    node.QUERY_MAX_IN_FLIGHT = 0
+    node._upstream_hm = MagicMock()
+    node.query_to_master = MagicMock()
+    node.handle_query_message(_query(), _client())
+    node.query_to_master.assert_not_called()
+
+
+def test_denied_cascade_is_not_forwarded():
+    node = _make_node(lambda utterance, lang, client=None: iter(()))
+    node._admit_for_query = lambda message, client: None
+    node.cascade_to_master = MagicMock()
+    peer = MagicMock(peer="other::2")
+    node.clients = {"other::2": peer}
+    node.handle_cascade_message(_query(HiveMessageType.CASCADE), _client())
+    node.cascade_to_master.assert_not_called()
+    peer.send.assert_not_called()
+
+
+def test_query_with_a_non_utterance_inner_message_is_forwarded_not_raised():
+    node = _make_node(lambda utterance, lang, client=None: iter(()))
+    node._upstream_hm = MagicMock()
+    escalated = []
+    node.query_to_master = escalated.append
+    node._rewrap = MagicMock(return_value=_query())
+    speak = HiveMessage(HiveMessageType.QUERY, payload=HiveMessage(
+        HiveMessageType.BUS, payload=Message("speak", {"utterance": "hi"})),
+        metadata={"query_id": "q1", "originator_peer": "asker::1"})
+    node.handle_query_message(speak, _client())
+    assert _wait_for(lambda: len(escalated) == 1)

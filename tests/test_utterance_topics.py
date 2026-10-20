@@ -56,9 +56,12 @@ def test_query_extraction_accepts_the_topic(topic):
     inner = HiveMessage(HiveMessageType.BUS, payload=Message(
         topic, {"utterances": ["hello"], "lang": "en-US"}, {}))
     sent = []
+    denied, admitted = protocol._admit_query_request(
+        HiveMessage(HiveMessageType.QUERY, payload=inner), client)
+    assert not denied
     answered = protocol._answer_query_locally(
-        HiveMessage(HiveMessageType.QUERY, payload=inner), client, "qid",
-        client.peer, HiveMessageType.QUERY, None, sent.append)
+        admitted, client, "qid", client.peer, HiveMessageType.QUERY, None,
+        sent.append)
     assert answered
     assert protocol.agent_protocol.answer_query.call_args.args[0] == "corrected:hello"
 
@@ -68,9 +71,12 @@ def test_query_still_refuses_other_topics():
     client = _make_client(protocol)
     inner = HiveMessage(HiveMessageType.BUS, payload=Message(
         "ovos.utterance.handled", {"utterances": ["hello"]}, {}))
+    denied, admitted = protocol._admit_query_request(
+        HiveMessage(HiveMessageType.QUERY, payload=inner), client)
+    assert (denied, admitted) == (False, None)
     assert not protocol._answer_query_locally(
-        HiveMessage(HiveMessageType.QUERY, payload=inner), client, "qid",
-        client.peer, HiveMessageType.QUERY, None, lambda m: None)
+        admitted, client, "qid", client.peer, HiveMessageType.QUERY, None,
+        lambda m: None)
     protocol.agent_protocol.answer_query.assert_not_called()
 
 
