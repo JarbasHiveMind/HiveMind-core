@@ -1,14 +1,33 @@
 # Changelog
 
+## [5.3.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.9a2) (2026-10-21)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.9a1...5.3.9a2)
+
+**Merged pull requests:**
+
+- test: the streaming QUERY e2e reads the speak frame, not the newest frame [\#398](https://github.com/JarbasHiveMind/HiveMind-core/pull/398) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.9a1) (2026-10-21)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.7a1...5.3.9a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.8a1...5.3.9a1)
+
+## [5.3.8a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.8a1) (2026-10-21)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.7a2...5.3.8a1)
+
+**Merged pull requests:**
+
+- fix: a QUERY or CASCADE minted a query\_id carries it to the next node [\#394](https://github.com/JarbasHiveMind/HiveMind-core/pull/394) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
+## [5.3.7a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.7a2) (2026-10-21)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.7a1...5.3.7a2)
 
 **Merged pull requests:**
 
 - test: the real-OVOS QUERY e2e finds the hello-world skill and runs [\#396](https://github.com/JarbasHiveMind/HiveMind-core/pull/396) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
 - fix: shutdown releases the threads waiting for a query worker slot [\#395](https://github.com/JarbasHiveMind/HiveMind-core/pull/395) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
-- fix: a QUERY or CASCADE minted a query\_id carries it to the next node [\#394](https://github.com/JarbasHiveMind/HiveMind-core/pull/394) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
 
 ## [5.3.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.7a1) (2026-10-20)
 
@@ -353,17 +372,9 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.19a1...4.13.20a1)
 
-**Merged pull requests:**
-
-- fix: refresh can\_escalate/can\_propagate/can\_broadcast per message [\#291](https://github.com/JarbasHiveMind/HiveMind-core/pull/291) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.19a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.19a1) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.18a1...4.13.19a1)
-
-**Merged pull requests:**
-
-- fix: close 1008 on handshake-time auth/credential rejections [\#289](https://github.com/JarbasHiveMind/HiveMind-core/pull/289) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.18a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.18a1) (2026-09-01)
 
@@ -479,15 +490,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
-
-## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
 
 ## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+
+## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
@@ -527,15 +538,15 @@
 
 ## [4.11.1a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a3) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a3)
-
-## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a2...4.11.1a3)
 
 ## [4.11.1a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a2) (2026-08-03)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a2)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.1a1...4.11.1a2)
+
+## [4.11.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.1a1) (2026-08-03)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.11.0a1...4.11.1a1)
 
 ## [4.11.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.11.0a1) (2026-08-03)
 
@@ -559,15 +570,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
-
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
