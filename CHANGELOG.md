@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.10a1) (2026-10-21)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.9a2...5.3.10a1)
+
+**Merged pull requests:**
+
+- fix: a CASCADE this node answers itself is routed back to the relay [\#397](https://github.com/JarbasHiveMind/HiveMind-core/pull/397) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.9a2) (2026-10-21)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.9a1...5.3.9a2)
@@ -363,10 +371,6 @@
 ## [4.13.21a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.21a1) (2026-09-02)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.20a1...4.13.21a1)
-
-**Merged pull requests:**
-
-- fix: add-client refuses to overwrite an existing access key instead of silently demoting [\#293](https://github.com/JarbasHiveMind/HiveMind-core/pull/293) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.20a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.20a1) (2026-09-02)
 
