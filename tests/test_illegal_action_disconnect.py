@@ -1,0 +1,91 @@
+"""Regression tests for issue #116 — illegal BROADCAST/PROPAGATE/ESCALATE
+must disconnect the offending client.
+
+When a non-admin / unprivileged client sends a BROADCAST, PROPAGATE or
+ESCALATE it tried to fire ``illegal_callback`` and then ``return`` with an
+unfulfilled ``# TODO kick client``. ``handle_query_message`` and
+``handle_cascade_message`` already call ``client.disconnect()`` on the
+equivalent permission violation; these three must mirror that so a
+misbehaving peer is actually kicked.
+"""
+from unittest.mock import MagicMock
+
+from ovos_bus_client.message import Message
+from hivemind_bus_client.message import HiveMessage, HiveMessageType
+
+from hivemind_core.protocol import (POLICY_KICK_CLOSE_CODE,
+                                    HiveMindListenerProtocol)
+
+
+def _make_protocol():
+    proto = object.__new__(HiveMindListenerProtocol)
+    proto.peer = "master:0.0.0.0"
+    proto.identity = MagicMock(public_key="master-pubkey")
+    proto.clients = {}
+    proto.illegal_callback = MagicMock()
+    proto.broadcast_callback = MagicMock()
+    proto.propagate_callback = MagicMock()
+    proto.escalate_callback = MagicMock()
+    return proto
+
+
+def _make_client(**flags):
+    client = MagicMock()
+    client.peer = "evil::abc"
+    # default-deny the privilege relevant to each test
+    client.is_admin = flags.get("is_admin", False)
+    client.can_propagate = flags.get("can_propagate", False)
+    client.can_escalate = flags.get("can_escalate", False)
+    return client
+
+
+def _wrap(outer_type):
+    inner = HiveMessage(HiveMessageType.BUS, payload=Message("speak", {"utterance": "hi"}))
+    return HiveMessage(outer_type, payload=inner)
+
+
+def test_illegal_broadcast_disconnects():
+    proto = _make_protocol()
+    client = _make_client(is_admin=False)
+    proto.handle_broadcast_message(_wrap(HiveMessageType.BROADCAST), client)
+    proto.illegal_callback.assert_called_once()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "BROADCAST is not allowed for this client")
+    proto.broadcast_callback.assert_not_called()
+
+
+def test_illegal_propagate_disconnects():
+    proto = _make_protocol()
+    client = _make_client(can_propagate=False)
+    proto.handle_propagate_message(_wrap(HiveMessageType.PROPAGATE), client)
+    proto.illegal_callback.assert_called_once()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "PROPAGATE is not allowed for this client")
+    proto.propagate_callback.assert_not_called()
+
+
+def test_illegal_escalate_disconnects():
+    proto = _make_protocol()
+    client = _make_client(can_escalate=False)
+    proto.handle_escalate_message(_wrap(HiveMessageType.ESCALATE), client)
+    proto.illegal_callback.assert_called_once()
+    # the kick closes with the policy code, not 1008, and names the
+    # protocol records it for the operator (test_permission_kicks_recorded)
+    client.disconnect.assert_called_once_with(
+        POLICY_KICK_CLOSE_CODE,
+        "ESCALATE is not allowed for this client")
+    proto.escalate_callback.assert_not_called()
+
+
+def test_authorized_broadcast_does_not_disconnect():
+    proto = _make_protocol()
+    client = _make_client(is_admin=True)
+    proto.handle_broadcast_message(_wrap(HiveMessageType.BROADCAST), client)
+    client.disconnect.assert_not_called()
+    proto.broadcast_callback.assert_called_once()

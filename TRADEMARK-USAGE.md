@@ -37,7 +37,7 @@ A trademark license is required for any commercial use, including but not limite
 - Industrial deployments where HiveMind is included in the product bundle  
 - Customer documentation referencing HiveMind support
 
-This applies even if your use of HiveMind-core complies with the AGPL license.
+This applies independently of the source-code licence — the Apache-2.0 grant does not extend to trademarks (see Apache-2.0 §6).
 
 ---
 
@@ -55,12 +55,15 @@ These restrictions apply regardless of license compliance.
 
 ---
 
-## 4. Obtaining a License
+## 4. Obtaining a Trademark Licence
 
-Commercial trademark licenses are available through the project maintainer.  
-A no-cost license is available for nonprofits and permissively-licensed open-source projects.
+Commercial trademark licences are available through the project maintainer.
+A no-cost trademark grant is available for nonprofits, academic projects, and
+strictly open-source downstreams (OSI-approved licences). This is a brand
+grant only — the source code is already free to use under Apache-2.0 and
+needs no further licence.
 
-Contact information is available in the repository README.
+Contact: **jarbasai@mailfence.com**.
 
 ---
 
