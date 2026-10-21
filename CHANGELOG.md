@@ -359,17 +359,9 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.17a1...4.13.18a1)
 
-**Merged pull requests:**
-
-- fix: derive Layer-1 session per message and merge session contents [\#287](https://github.com/JarbasHiveMind/HiveMind-core/pull/287) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.13.17a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.17a1) (2026-09-01)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.16a1...4.13.17a1)
-
-**Merged pull requests:**
-
-- fix: re-resolve is\_admin fresh in the post-transformer session re-stamp [\#285](https://github.com/JarbasHiveMind/HiveMind-core/pull/285) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.16a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.16a1) (2026-09-01)
 
@@ -477,15 +469,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
-
-## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
 
 ## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+
+## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
