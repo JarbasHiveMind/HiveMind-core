@@ -21,7 +21,8 @@ from ovos_plugin_manager.transformer_services import (
     UtteranceTransformersService)
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 
-from hivemind_core.protocol import (QUERY_STREAM_END, HiveMindListenerProtocol)
+from hivemind_core.protocol import (QUERY_STREAM_END, HiveMindListenerProtocol,
+                                    _DaemonWorkerPool)
 
 NODE_KEY = "pubkey-of-this-node"
 
@@ -247,6 +248,51 @@ def test_shutdown_drops_queued_answers_and_frees_their_slots():
         assert node._query_in_flight == 0
     finally:
         release.set()
+
+
+def test_shutdown_releases_the_threads_waiting_for_a_stuck_pool():
+    forever = threading.Event()
+
+    def stuck(utterance, lang, client=None):
+        yield "partial"
+        forever.wait(30)
+
+    node = _make_node(stuck)
+    node.QUERY_WORKERS = 2
+    before = set(threading.enumerate())
+
+    def query_threads():
+        return [t for t in threading.enumerate()
+                if t not in before and t.name == "hm-query" and t.is_alive()]
+
+    try:
+        for _ in range(10):
+            node.handle_query_message(_query(), _client())
+        assert _wait_for(lambda: len(query_threads()) == 10)
+        node.shutdown()
+        # the 2 holders never finish; the 8 waiters must not wait for them
+        assert _wait_for(lambda: len(query_threads()) == 2, timeout=3.0), \
+            f"{len(query_threads())} threads still wait on the closed pool"
+    finally:
+        forever.set()
+
+
+def test_queued_jobs_start_in_arrival_order():
+    pool = _DaemonWorkerPool(1, "hm-order")
+    started = []
+    count = 20
+
+    def job(index):
+        def run():
+            started.append(index)
+            time.sleep(0.05)
+        return run
+
+    for index in range(count):
+        pool.submit(job(index))
+        time.sleep(0.01)
+    assert _wait_for(lambda: len(started) == count, timeout=10.0)
+    assert started == list(range(count))
 
 
 _STUCK_BACKEND_SCRIPT = """

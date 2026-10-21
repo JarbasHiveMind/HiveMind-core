@@ -680,7 +680,7 @@ class _DaemonWorkerPool:
     """
 
     def __init__(self, workers: int, name: str):
-        self._slots = threading.BoundedSemaphore(workers)
+        self._slots = threading.Semaphore(workers)
         self._name = name
         self._closed = threading.Event()
 
@@ -697,8 +697,12 @@ class _DaemonWorkerPool:
 
     def shutdown(self, wait: bool = True, cancel_futures: bool = False) -> None:
         """Refuse new jobs and drop the ones still waiting for a worker.
-        Running jobs are not interrupted, and never waited for."""
+        Running jobs are not interrupted, and never waited for.
+
+        The extra release wakes one waiter. It sees the closed flag, drops its
+        job, and its own release wakes the next, in arrival order."""
         self._closed.set()
+        self._slots.release()
 
 
 @dataclass
