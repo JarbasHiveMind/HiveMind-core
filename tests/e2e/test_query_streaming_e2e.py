@@ -57,6 +57,22 @@ def _answer(master, sentences, delay=0.0):
     master.agent_protocol.bus.on("recognizer_loop:utterance", _responder)
 
 
+def _spoken(satellite, msg_type, timeout):
+    """The utterances of the speak frames *satellite* received, once any arrived.
+
+    ``wait_for`` returns the newest matching record, which is the stream-end
+    frame when the stream finishes before the waiter reads the recorder, so a
+    test reads the speak frames from ``received`` instead."""
+    def frames():
+        return [r.payload["payload"]["data"]["utterance"]
+                for r in satellite.recorder.received(msg_type, direction="in")
+                if "utterance" in r.payload["payload"]["data"]]
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and not frames():
+        time.sleep(0.02)
+    return frames()
+
+
 def test_query_streams_multiple_chunks():
     b = _single(); b.start_all()
     try:
@@ -80,8 +96,9 @@ def test_query_async_agent_answer_is_collected():
         s = b.get_satellite("S0")
         s.send(HiveMessage(HiveMessageType.QUERY, payload=_utt(),
                            metadata={"query_id": "q2", "originator_peer": s.peer}))
-        recv = s.recorder.wait_for(HiveMessageType.QUERY.value, direction="in", timeout=4.0)
-        assert recv is not None, "async agent answer never reached the satellite"
+        spoken = _spoken(s, HiveMessageType.QUERY.value, timeout=4.0)
+        assert spoken == ["the async answer"], \
+            "async agent answer never reached the satellite"
     finally:
         b.stop_all()
 
@@ -95,9 +112,9 @@ def test_query_escalates_up_the_relay_chain():
         s = b.get_satellite("S0")
         s.send(HiveMessage(HiveMessageType.QUERY, payload=_utt(),
                            metadata={"query_id": "q3", "originator_peer": s.peer}))
-        recv = s.recorder.wait_for(HiveMessageType.QUERY.value, direction="in", timeout=15.0)
-        assert recv is not None, "escalated QUERY answer never routed back to S0"
-        assert recv.payload["payload"]["data"]["utterance"] == "answered upstream"
+        spoken = _spoken(s, HiveMessageType.QUERY.value, timeout=15.0)
+        assert spoken == ["answered upstream"], \
+            "escalated QUERY answer never routed back to S0"
     finally:
         b.stop_all()
 
@@ -140,11 +157,8 @@ def test_query_traverses_two_relays_only_third_answers():
         s = b.get_satellite("S0")
         s.send(HiveMessage(HiveMessageType.QUERY, payload=_utt(),
                            metadata={"query_id": "q-deep", "originator_peer": s.peer}))
-        recv = s.recorder.wait_for(HiveMessageType.QUERY.value,
-                                   direction="in", timeout=25.0)
-        assert recv is not None, \
+        spoken = _spoken(s, HiveMessageType.QUERY.value, timeout=25.0)
+        assert spoken == ["answered at the top after two hops"], \
             "QUERY answered at M0 never routed back through R1+R2 to S0"
-        assert recv.payload["payload"]["data"]["utterance"] == \
-            "answered at the top after two hops"
     finally:
         b.stop_all()
