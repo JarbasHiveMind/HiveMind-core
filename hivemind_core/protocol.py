@@ -3592,13 +3592,15 @@ class HiveMindListenerProtocol:
                          {"query_id": query_id, "originator_peer": originator_peer},
                          {"source": client.peer}))
 
-        # local delivery: this node answers the cascade (runs even when looped)
+        # local delivery: this node answers the cascade (runs even when looped).
+        # The answer arrived on no connection, so the route walk may return it
+        # to the peer that forwarded the request (MSG-1 §5.2).
         self._answer_query_off_loop(
             client, "CASCADE",
             lambda: self._answer_query_locally(
                 admitted, client, query_id, originator_peer,
                 HiveMessageType.CASCADE, message.route,
-                lambda hm: self._route_query_response(hm, client)))
+                lambda hm: self._route_query_response(hm, None)))
 
         # MSG-1 §5: do not re-forward a looped CASCADE
         if looped:
