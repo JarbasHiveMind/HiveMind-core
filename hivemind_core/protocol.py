@@ -3470,8 +3470,12 @@ class HiveMindListenerProtocol:
             return
 
         payload = self._unpack_message(message, client)
-        query_id = metadata.get("query_id", str(uuid.uuid4()))
-        originator_peer = metadata.get("originator_peer", client.peer)
+        query_id = metadata.get("query_id") or str(uuid.uuid4())
+        originator_peer = metadata.get("originator_peer") or client.peer
+        # MSG-1 §5.2: the minted id travels in the outer metadata, so the next
+        # node answers under the id this node bound the return path to.
+        metadata = {**metadata, "query_id": query_id,
+                    "originator_peer": originator_peer}
         # participation binding (MSG-1 §5.2): bind this query to the connection
         # it arrived on (client.peer, the server-observed return path — NOT the
         # client-claimed originator_peer), before any answer routes. The answer
@@ -3568,8 +3572,12 @@ class HiveMindListenerProtocol:
         if not looped:
             self._append_self_hop(payload)
 
-        query_id = metadata.get("query_id", str(uuid.uuid4()))
-        originator_peer = metadata.get("originator_peer", client.peer)
+        query_id = metadata.get("query_id") or str(uuid.uuid4())
+        originator_peer = metadata.get("originator_peer") or client.peer
+        # MSG-1 §5.2: the minted id travels in the outer metadata, so the next
+        # node answers under the id this node bound the return path to.
+        metadata = {**metadata, "query_id": query_id,
+                    "originator_peer": originator_peer}
         # participation binding (MSG-1 §5.2): bind this cascade to the arriving
         # connection (client.peer) before _answer_query_locally below, whose
         # CASCADE answer routes THROUGH _route_query_response — the return path
