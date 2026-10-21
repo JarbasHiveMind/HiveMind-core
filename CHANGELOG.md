@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.3.9a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.9a1) (2026-10-21)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.7a1...5.3.9a1)
+
+**Merged pull requests:**
+
+- test: the real-OVOS QUERY e2e finds the hello-world skill and runs [\#396](https://github.com/JarbasHiveMind/HiveMind-core/pull/396) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- fix: shutdown releases the threads waiting for a query worker slot [\#395](https://github.com/JarbasHiveMind/HiveMind-core/pull/395) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+- fix: a QUERY or CASCADE minted a query\_id carries it to the next node [\#394](https://github.com/JarbasHiveMind/HiveMind-core/pull/394) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.7a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.7a1) (2026-10-20)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.6a1...5.3.7a1)
