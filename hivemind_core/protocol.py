@@ -566,7 +566,7 @@ class HiveMindClientConnection:
         """Record ``reason_code`` on the listener, then close with code and reason."""
         if self.hm_protocol is not None:
             self.hm_protocol.record_rejection(self, code, reason_code)
-        self.disconnect(code, reason)
+        close_connection(self, code, reason)
 
     def decode(self, payload: str) -> Optional[HiveMessage]:
         encrypted = False
@@ -1577,7 +1577,8 @@ class HiveMindListenerProtocol:
             )
             self.handle_invalid_protocol_version(client)
             self.record_rejection(client, 1008, "protocol_v3_required")
-            client.disconnect(1008, "this node requires protocol v3 (the Noise handshake)")
+            close_connection(client, 1008,
+                             "this node requires protocol v3 (the Noise handshake)")
             return
 
         hello_payload = {
@@ -2283,7 +2284,7 @@ class HiveMindListenerProtocol:
             client,
             error="protocol v3 handshake failed",
             log_message=f"rejecting {client.peer}: the protocol v3 Noise handshake failed")
-        client.disconnect(1008, close_reason)
+        close_connection(client, 1008, close_reason)
 
     def handle_noise_handshake_message(
             self, message: HiveMessage, client: HiveMindClientConnection
