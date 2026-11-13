@@ -5,7 +5,8 @@ import os.path
 from typing import Mapping, Optional
 
 from hivemind_plugin_manager import HiveMindPluginTypes, find_plugins
-from json_database import JsonStorageXDG
+import click
+from json_database import JsonStorageXDG, load_commented_json
 from ovos_utils.log import LOG
 from ovos_utils.xdg_utils import xdg_config_home, xdg_data_home
 
@@ -175,12 +176,44 @@ def _first_run_defaults(defaults: dict) -> dict:
     return {**defaults, "network_protocol": enabled}
 
 
+class ServerConfigError(click.ClickException):
+    """server.json exists but cannot be read; it is never overwritten."""
+
+
 def get_server_config() -> JsonStorageXDG:
-    """from ~/.config/hivemind-core/server.json """
+    """from ~/.config/hivemind-core/server.json
+
+    Raises ``ServerConfigError`` when the file exists but does not parse
+    (an empty file included), so a hand-edit typo never replaces the
+    operator's settings with defaults.
+    """
     defaults = {**_DEFAULT, "database": _default_database()}
-    db = JsonStorageXDG("server",
-                          xdg_folder=xdg_config_home(),
-                          subfolder="hivemind-core")
+    folder = xdg_config_home()
+    path = os.path.join(folder, "hivemind-core", "server.json")
+    parsed = None
+    if os.path.isfile(path):
+        # Parse once and store only what was parsed: the storage's own load
+        # can see a file an editor has truncated mid-save.
+        try:
+            parsed = load_commented_json(path)
+        except OSError as e:
+            raise ServerConfigError(
+                f"{path} cannot be read ({e!r}); it has not been "
+                f"modified.") from e
+        except Exception as e:  # noqa: BLE001 - any parse failure
+            raise ServerConfigError(
+                f"{path} is not valid JSON ({e!r}). Fix the file or "
+                f"remove it to start from defaults; it has not been "
+                f"modified.") from e
+        if not isinstance(parsed, dict):
+            raise ServerConfigError(
+                f"{path} must hold a JSON object, not "
+                f"{type(parsed).__name__}. Fix the file or remove it to "
+                f"start from defaults; it has not been modified.")
+    db = JsonStorageXDG("server", xdg_folder=folder, subfolder="hivemind-core")
+    if parsed is not None:
+        db.clear()
+        db.update(parsed)
     if not os.path.isfile(db.path):
         db.merge(_first_run_defaults(defaults))
         db.store()
