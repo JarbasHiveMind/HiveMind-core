@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.11a1) (2026-11-13)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.10a2...5.3.11a1)
+
+**Merged pull requests:**
+
+- fix: a Noise handshake abort names the exception that caused it [\#371](https://github.com/JarbasHiveMind/HiveMind-core/pull/371) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.10a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.10a2) (2026-11-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.10a1...5.3.10a2)
@@ -355,10 +363,6 @@
 ## [4.14.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.0a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.13.23a1...4.14.0a1)
-
-**Merged pull requests:**
-
-- feat: identity-scoped durable session namespace \(survives reconnect\) [\#299](https://github.com/JarbasHiveMind/HiveMind-core/pull/299) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.13.23a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.13.23a1) (2026-09-03)
 
