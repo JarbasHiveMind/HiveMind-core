@@ -217,6 +217,16 @@ class UnencryptedMessageError(ValueError):
     """
 
 
+class MalformedFrameError(ValueError):
+    """Raised when a frame that cannot be read as a HiveMessage closes the
+    connection: a malformed HELLO or HANDSHAKE, or any unreadable frame that
+    arrives before the v3 Noise session exists (HIVEMIND-MSG-1 §4).
+
+    An unreadable frame on an established session never raises this: it is
+    dropped and the connection stays up (HIVEMIND-MSG-1 §3).
+    """
+
+
 @dataclass
 class HiveMindClientConnection:
     """represents a connection to the hivemind listener"""
@@ -552,7 +562,7 @@ class HiveMindClientConnection:
         """Record ``reason_code`` on the listener, then close with code and reason."""
         if self.hm_protocol is not None:
             self.hm_protocol.record_rejection(self, code, reason_code)
-        self.disconnect(code, reason)
+        close_connection(self, code, reason)
 
     def decode(self, payload: str) -> Optional[HiveMessage]:
         encrypted = False
@@ -573,6 +583,12 @@ class HiveMindClientConnection:
                 self._reject(1008, "invalid Noise transport message (tampered, replayed or out-of-order)",
                              "invalid_noise_frame")
                 raise
+            except UnicodeDecodeError as e:
+                # authenticated, but its JSON body is not UTF-8: unreadable
+                # on an established session, so dropped (HIVEMIND-MSG-1 §3)
+                LOG.warning(f"dropping malformed wire frame from {self.peer}: "
+                            f"{type(e).__name__} (HIVEMIND-MSG-1 §3)")
+                return None
             if payload is None:
                 # an in-progress multi-frame message: this chunk was buffered
                 # for reassembly, so there is no HiveMessage yet. Callers must
@@ -581,12 +597,48 @@ class HiveMindClientConnection:
             # a decoded Noise transport frame is authenticated + encrypted
             encrypted = True
 
-        if isinstance(payload, bytes):
-            message = decode_bitstring(payload)
-        else:
-            if isinstance(payload, str):
-                payload = json.loads(payload)
-            message = HiveMessage(**payload)
+        # Every exception the parse can raise is a ValueError or a TypeError:
+        # json.loads, the binary decoder, an unknown msg_type, an absent
+        # msg_type, and a payload the HiveMessage constructor refuses.
+        frame = payload
+        try:
+            if isinstance(frame, bytes):
+                message = decode_bitstring(frame)
+            else:
+                if isinstance(frame, str):
+                    frame = json.loads(frame)
+                if not isinstance(frame, dict):
+                    raise MalformedFrameError(
+                        f"a wire frame must be a JSON object, got "
+                        f"{type(frame).__name__} (HIVEMIND-MSG-1 §2)")
+                if (frame.get("msg_type") in (HiveMessageType.HELLO,
+                                              HiveMessageType.HANDSHAKE)
+                        and not isinstance(frame.get("payload"), dict)):
+                    # The constructor would substitute {} for null, and the
+                    # payload bytes of these two are bound into the Noise
+                    # prologue, so the check reads the frame itself.
+                    raise MalformedFrameError(
+                        f"{frame['msg_type']} payload must be a JSON object "
+                        f"(HIVEMIND-MSG-1 §4)")
+                message = HiveMessage(**frame)
+        except (ValueError, TypeError) as e:
+            handshake_frame = (isinstance(frame, dict) and frame.get("msg_type")
+                               in (HiveMessageType.HELLO,
+                                   HiveMessageType.HANDSHAKE))
+            if self.noise_transport is None or handshake_frame:
+                # A malformed HELLO or HANDSHAKE closes the connection, and so
+                # does any unreadable frame before the Noise session exists:
+                # there is no session yet to keep.
+                LOG.warning(f"rejecting malformed wire frame from {self.peer}: "
+                            f"{type(e).__name__} (HIVEMIND-MSG-1 §4)")
+                self._reject(1008, "malformed frame", "malformed_frame")
+                raise MalformedFrameError(
+                    f"malformed frame: {type(e).__name__}") from e
+            # Never log the frame: it can carry a user's speech or a
+            # credential. The exception class and the peer are enough.
+            LOG.warning(f"dropping malformed wire frame from {self.peer}: "
+                        f"{type(e).__name__} (HIVEMIND-MSG-1 §3)")
+            return None
 
         # HIVEMIND-CRYPTO-1 §3.5 - when the server requires crypto, drop any
         # cleartext frame that is not part of key establishment. HELLO and
@@ -834,7 +886,7 @@ class HiveMindListenerProtocol:
         "noise_handshake_failed", "noise_pin_mismatch", "non_noise_frame",
         "invalid_noise_frame", "unencrypted_frame", "internal_error",
         "illegal_broadcast", "illegal_propagate", "illegal_query",
-        "illegal_cascade", "illegal_escalate", "other",
+        "illegal_cascade", "illegal_escalate", "malformed_frame", "other",
     })
     # backing store for ``recent_rejections``; None so a bypass-built
     # instance still sees a class default. One lock for every instance:
