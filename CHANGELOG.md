@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.3.16a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.16a1) (2026-11-27)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.15a3...5.3.16a1)
+
+**Closed issues:**
+
+- hub has no node identity on a fresh box, every handshake fails with 1011 [\#417](https://github.com/JarbasHiveMind/HiveMind-core/issues/417)
+
+**Merged pull requests:**
+
+- fix: give the hub identity the app name hivemind-core [\#418](https://github.com/JarbasHiveMind/HiveMind-core/pull/418) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.15a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.15a3) (2026-11-27)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.15a2...5.3.15a3)
@@ -307,10 +319,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.3a1...5.1.4a1)
 
-**Closed issues:**
-
-- v3-Noise flag-day tail: crypto\_key still referenced across the ecosystem \(some real dev-red\) [\#315](https://github.com/JarbasHiveMind/HiveMind-core/issues/315)
-
 **Merged pull requests:**
 
 - fix: name a missing network transport, and enable only installed ones [\#333](https://github.com/JarbasHiveMind/HiveMind-core/pull/333) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
@@ -318,10 +326,6 @@
 ## [5.1.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.3a1) (2026-09-11)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.2a1...5.1.3a1)
-
-**Closed issues:**
-
-- handle\_binary\_message: a raising binary-data plugin kills the connection with no close code [\#316](https://github.com/JarbasHiveMind/HiveMind-core/issues/316)
 
 **Merged pull requests:**
 
@@ -518,15 +522,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
-
-## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
 
 ## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+
+## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
@@ -598,15 +602,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
-
-## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
 
 ## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+
+## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
