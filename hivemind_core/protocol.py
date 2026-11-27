@@ -307,11 +307,14 @@ def _binary_type_code(frame: bytes) -> Optional[int]:
     return int(bits[pos:pos + 5], 2) if len(bits) >= pos + 5 else None
 
 
+#: the two message types that travel in the clear, before the Noise session
+_KEY_EXCHANGE_TYPES = (HiveMessageType.HELLO, HiveMessageType.HANDSHAKE)
+
 #: the codes WIRE-1 assigns to HELLO and HANDSHAKE, read off frames the
 #: serializer builds so they are never restated here
 _BINARY_HANDSHAKE_CODES = frozenset(
     _binary_type_code(get_bitstring(t, {}).tobytes())
-    for t in (HiveMessageType.HELLO, HiveMessageType.HANDSHAKE))
+    for t in _KEY_EXCHANGE_TYPES)
 
 
 @dataclass
@@ -699,8 +702,7 @@ class HiveMindClientConnection:
                     raise MalformedFrameError(
                         f"a wire frame must be a JSON object, got "
                         f"{type(frame).__name__} (HIVEMIND-MSG-1 §2)")
-                if (frame.get("msg_type") in (HiveMessageType.HELLO,
-                                              HiveMessageType.HANDSHAKE)
+                if (frame.get("msg_type") in _KEY_EXCHANGE_TYPES
                         and not isinstance(frame.get("payload"), dict)):
                     # The constructor would substitute {} for null, and the
                     # payload bytes of these two are bound into the Noise
@@ -716,8 +718,7 @@ class HiveMindClientConnection:
             else:
                 handshake_frame = (isinstance(frame, dict)
                                    and frame.get("msg_type")
-                                   in (HiveMessageType.HELLO,
-                                       HiveMessageType.HANDSHAKE))
+                                   in _KEY_EXCHANGE_TYPES)
             if self.noise_transport is None or handshake_frame:
                 # A malformed HELLO or HANDSHAKE closes the connection, and so
                 # does any unreadable frame before the Noise session exists:
@@ -739,8 +740,7 @@ class HiveMindClientConnection:
         # session key); everything else is rejected and the client dropped.
         if (not encrypted
                 and self.crypto_required
-                and message.msg_type not in (HiveMessageType.HELLO,
-                                             HiveMessageType.HANDSHAKE)):
+                and message.msg_type not in _KEY_EXCHANGE_TYPES):
             LOG.error(f"Dropping unencrypted {message.msg_type} message from "
                       f"{self.peer}: server requires crypto")
             self._reject(1008, "unencrypted message rejected: crypto is required",
