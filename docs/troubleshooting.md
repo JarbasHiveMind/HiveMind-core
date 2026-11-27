@@ -3,7 +3,7 @@
 covers: the hub log messages and client replies that operators meet, with the cause and the fix of each
 source: hivemind_core/protocol.py, hivemind_core/service.py, hivemind_core/config.py:ServerConfigError, hivemind_core/policy.py
 generated: no
-verify: for s in 'contradicts the pinned key' 'too many failed handshakes' 'requires protocol v3' 'No network protocols were loaded' 'is not valid JSON' 'installing DenyAllPolicy' 'could not generate a node public key'; do grep -rqF "$s" hivemind_core || exit 1; grep -qF "$s" docs/troubleshooting.md || exit 1; done
+verify: for s in 'contradicts the pinned key' 'too many failed handshakes' 'requires protocol v3' 'No network protocols were loaded' 'is not valid JSON' 'installing DenyAllPolicy' 'could not generate a node public key'; do grep -rqF "$s" hivemind_core || exit 1; grep -v "^verify:" docs/troubleshooting.md | grep -qF "$s" || exit 1; done
 see: contributing.md
 -->
 
