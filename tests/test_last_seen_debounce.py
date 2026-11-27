@@ -45,6 +45,8 @@ def _client(peer="peer", key="access-key"):
         key=key,
         peer=peer,
         is_admin=False,
+        noise_handshake=None,
+        noise_transport=None,
         layer1_session_id="nonce:a-session",
         sess=SimpleNamespace(session_id="a-session",
                              serialize=MagicMock(return_value={})),

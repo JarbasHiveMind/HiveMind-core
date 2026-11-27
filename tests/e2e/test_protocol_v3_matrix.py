@@ -14,6 +14,8 @@ There is no v1/v2 handshake left in this node (flag day, HIVEMIND-CRYPTO-1
 outright, never silently downgraded.
 """
 
+import os
+import tempfile
 import time
 from unittest.mock import patch
 
@@ -22,11 +24,16 @@ from ovos_bus_client.message import Message
 from websocket import ABNF
 
 import hivemind_core.protocol as server_protocol
+from json_database import JsonStorage
 from hivemind_bus_client.client import HiveMessageBusClient
 from hivemind_bus_client.identity import NodeIdentity
 from hivemind_bus_client.message import HiveMessage, HiveMessageType
 from hivemind_bus_client.protocol import HiveMindSlaveProtocol
 from hivescope import TopologyBuilder
+
+
+# one file per client name: a reconnect reuses its Noise static key
+_IDENTITY_DIR = tempfile.mkdtemp(prefix="hm-v3-matrix-")
 
 
 def _wait_for(condition, timeout: float = 10.0, interval: float = 0.05) -> bool:
@@ -42,7 +49,8 @@ def _make_client(url, key, password, name="v3-matrix-client",
                  max_protocol_version=3):
     host, port = url.replace("ws://", "").rstrip("/").split(":")
     port = int(port)
-    identity = NodeIdentity()
+    identity = NodeIdentity(identity_file=JsonStorage(
+        os.path.join(_IDENTITY_DIR, f"{name}.json")))
     identity.access_key = key
     identity.password = password
     identity.default_master = f"ws://{host}"

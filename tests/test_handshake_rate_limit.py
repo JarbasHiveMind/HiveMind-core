@@ -147,6 +147,13 @@ class TestHandshakeRateLimit(unittest.TestCase):
         self.assertEqual((proto._key_failures.limit, proto._key_failures.window), (2, 10))
         self.assertEqual(proto._ip_failures.limit, 0)
 
+    def test_a_limit_that_is_not_an_int_is_refused(self):
+        for bad in ("inf", 2.5, -1, True):
+            cfg = {"handshake_failures_per_key": bad}
+            with patch.object(protocol_module, "get_server_config", return_value=cfg):
+                with self.assertRaisesRegex(ValueError, "handshake_failures_per_key"):
+                    HiveMindListenerProtocol(agent_protocol=MagicMock(), db=_Db(self.row))
+
 
 if __name__ == "__main__":
     unittest.main()

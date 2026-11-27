@@ -221,6 +221,13 @@ def _non_negative_float(value, default: float) -> float:
     return parsed if parsed >= 0 else default
 
 
+def _failure_limit(cfg: dict, name: str, default: int) -> int:
+    value = cfg.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"server config '{name}' must be a non-negative int, got {value!r}")
+    return value
+
+
 class HandshakeFailureLimiter:
     """Counts failed handshakes per identity in a sliding window.
 
@@ -1036,9 +1043,9 @@ class HiveMindListenerProtocol:
         cfg = get_server_config()
         window = _non_negative_float(cfg.get("handshake_failure_window", 60), 60.0)
         self._key_failures = HandshakeFailureLimiter(
-            int(_non_negative_float(cfg.get("handshake_failures_per_key", 5), 5)), window)
+            _failure_limit(cfg, "handshake_failures_per_key", 5), window)
         self._ip_failures = HandshakeFailureLimiter(
-            int(_non_negative_float(cfg.get("handshake_failures_per_ip", 20), 20)), window)
+            _failure_limit(cfg, "handshake_failures_per_ip", 20), window)
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
