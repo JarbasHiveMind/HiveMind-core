@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.14a1) (2026-11-27)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.13a1...5.3.14a1)
+
+**Merged pull requests:**
+
+- fix: an unreadable frame is dropped on a live session, a malformed HELLO or HANDSHAKE closes [\#406](https://github.com/JarbasHiveMind/HiveMind-core/pull/406) ([JarbasAl](https://github.com/JarbasAl))
+
 ## [5.3.13a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.13a1) (2026-11-13)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.12a1...5.3.13a1)
@@ -348,17 +356,9 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.2a1...4.15.0a1)
 
-**Merged pull requests:**
-
-- feat: un-NAT the client session in core send\(\) \(BRIDGE-1 §4 outbound half\) [\#306](https://github.com/JarbasHiveMind/HiveMind-core/pull/306) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [4.14.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.2a1) (2026-09-03)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.14.1a1...4.14.2a1)
-
-**Merged pull requests:**
-
-- fix: handshake decision keys on negotiated connection capability, not a provisioned crypto\_key \(prevents transport downgrade\) [\#305](https://github.com/JarbasHiveMind/HiveMind-core/pull/305) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.14.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.14.1a1) (2026-09-03)
 
