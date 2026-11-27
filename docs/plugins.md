@@ -1,116 +1,109 @@
-# Plugin System
+# Plugins
+<!-- agent-hint
+covers: the four plugin types of the hub (network, agent, binary, database), how to list, install and select them
+source: hivemind_core/service.py:get_agent_protocol, hivemind_core/service.py:get_binary_protocol, hivemind_core/service.py:HiveMindService.run, hivemind_core/database.py, hivemind_core/config.py:_DEFAULT
+generated: no
+verify: python3 -c "import sys; from hivemind_plugin_manager import HiveMindPluginTypes as T; doc=open('docs/plugins.md').read(); sys.exit(0 if all(t.value in doc for t in T) else 1)"
+see: troubleshooting.md
+-->
 
-HiveMind Core delegates all transport, AI, binary handling, and storage concerns to plugins. Plugins are discovered via Python entry points managed by `hivemind-plugin-manager`.
+The hub has no transport, agent or storage of its own. Plugins supply each of them. This page shows how to list the installed plugins and how to select one in `server.json`.
 
-## Network protocol plugins
+## Example
 
-Responsible for accepting connections and delivering raw payloads to `HiveMindListenerProtocol`.
+This script lists the plugins that are installed, for each entry point group:
 
-| Plugin | Description | Install |
-|---|---|---|
-| `hivemind-websocket-protocol` | WebSocket-based real-time connections | `pip install hivemind-websocket-protocol` |
-| `hivemind-http-protocol` | HTTP request/response, for clients without persistent connections | `pip install hivemind-http-protocol` |
+```python
+from hivemind_plugin_manager import HiveMindPluginTypes, find_plugins
 
-Multiple network protocols can run at the same time. Each starts in its own daemon thread.
+for plugin_type in HiveMindPluginTypes:
+    print(plugin_type.value, sorted(find_plugins(plugin_type)))
+```
 
-Configuration example (in `server.json`):
+With only the dependencies of `hivemind-core`, it prints:
+
+```text
+hivemind.database ['hivemind-json-db-plugin', 'hivemind-sqlite-db-plugin']
+hivemind.network.protocol ['hivemind-websocket-plugin']
+hivemind.agent.protocol ['hivemind-ovos-agent-plugin']
+hivemind.binary.protocol []
+hivemind.policy ['hivemind-deny-all-policy', 'hivemind-message-type-acl-policy', 'hivemind-ovos-agent-policy']
+```
+
+## Steps
+
+1. Install the plugin package in the environment of the hub, for example `uv pip install --prerelease=allow hivemind-http-protocol`.
+2. Run the script above and find the entry point name of the plugin.
+3. Put the name in the `server.json` block of its type (see the table below).
+4. Restart the hub. The log names each plugin that loads, for example `Network protocol: HiveMindWebsocketProtocol`.
+
+## Reference
+
+| Type | Entry point group | `server.json` block | Default |
+| :--- | :--- | :--- | :--- |
+| Network | `hivemind.network.protocol` | `network_protocol` | `hivemind-websocket-plugin` |
+| Agent | `hivemind.agent.protocol` | `agent_protocol` | `hivemind-ovos-agent-plugin` |
+| Binary | `hivemind.binary.protocol` | `binary_protocol` | none |
+| Database | `hivemind.database` | `database` | `hivemind-sqlite-db-plugin` |
+| Policy | `hivemind.policy` | `policy.chain` | `hivemind-ovos-agent-policy` |
+
+### Network plugins
+
+A network plugin listens for clients and carries HiveMind messages. The hub can run more than one at a time: each key of `network_protocol` starts one transport, with the key value as its settings.
 
 ```json
 "network_protocol": {
-  "hivemind-websocket-plugin": { "host": "0.0.0.0", "port": 5678 },
-  "hivemind-http-plugin":      { "host": "0.0.0.0", "port": 5679 }
+  "hivemind-websocket-plugin": {"host": "0.0.0.0", "port": 5678},
+  "hivemind-http-plugin": {"host": "0.0.0.0", "port": 5679}
 }
 ```
 
----
+| Package | Entry point name |
+| :--- | :--- |
+| `hivemind-websocket-protocol` (dependency of the hub) | `hivemind-websocket-plugin` |
+| `hivemind-http-protocol` | `hivemind-http-plugin` |
 
-## Agent protocol plugins
+### Agent plugins
 
-Responsible for handling the `Message` payloads extracted from `HiveMessageType.BUS` messages.
-
-| Plugin | Description | Install |
-|---|---|---|
-| `hivemind-ovos-agent-plugin` | Forwards messages to a running OVOS / Mycroft message bus | via `ovos-bus-client` |
-| `hivemind-persona-agent-plugin` | Routes messages to an LLM persona (OpenAI-compatible) | via `ovos-persona` |
-
-Only one agent protocol can be active at a time.
-
-Configuration example:
+The agent plugin receives the messages that pass the policy chain and sends the answers back. The hub runs one agent. `module` names it, and the key with the same name holds its settings:
 
 ```json
 "agent_protocol": {
   "module": "hivemind-ovos-agent-plugin",
-  "hivemind-ovos-agent-plugin": { "host": "127.0.0.1", "port": 8181 }
+  "hivemind-ovos-agent-plugin": {"host": "127.0.0.1", "port": 8181}
 }
 ```
 
----
+`hivemind-ovos-agent-plugin` connects to an OpenVoiceOS message bus. Other agent packages, such as `hivemind-persona-agent-plugin`, document their own settings. With an agent that is not OpenVoiceOS, remove `hivemind-ovos-agent-policy` from `policy.chain`.
 
-## Binary data protocol plugins
+### Binary plugins
 
-Optional. Invoked when a `HiveMessageType.BINARY` message is received.
-
-| Plugin | Description | Install |
-|---|---|---|
-| `hivemind-audio-binary-protocol` | STT transcription and audio handling via `ovos-plugin-manager` | `pip install hivemind-audio-binary-protocol` |
-
-Binary payloads cross the `allowed_types` gate first. A client with an empty whitelist
-cannot send binary at all. When no binary protocol is configured (`"module": null`), an
-admitted binary message reaches a no-op stub and nothing happens to it.
-
-Binary payload types dispatched to the plugin:
-
-| `HiveMindBinaryPayloadType` | Handler called |
-|---|---|
-| `RAW_AUDIO` | `handle_microphone_input(data, sample_rate, sample_width, client)` |
-| `STT_AUDIO_TRANSCRIBE` | `handle_stt_transcribe_request(data, sr, sw, lang, client)` |
-| `STT_AUDIO_HANDLE` | `handle_stt_handle_request(data, sr, sw, lang, client)` |
-| `TTS_AUDIO` | `handle_receive_tts(data, utterance, lang, file_name, client)` |
-| `FILE` | `handle_receive_file(data, file_name, client)` |
-| `NUMPY_IMAGE` | `handle_numpy_image(data, camera_id, client)` |
-
----
-
-## Database plugins
-
-| Plugin | Description | Install |
-|---|---|---|
-| `hivemind-sqlite-database` | SQLite storage (default for fresh installs) | bundled |
-| `hivemind-json-db-plugin` | JSON flat-file storage (kept for existing JSON deployments) | bundled |
-| `hivemind-redis-database` | Redis storage. Recommended for large deployments | `pip install hivemind-redis-database` |
-
-Configuration example:
+A binary plugin handles binary payloads from clients, for example audio. With `"module": null`, the hub uses `BinaryDataHandlerProtocol`, which does nothing with the payloads. Satellites that stream audio need a binary plugin such as `hivemind-audio-binary-protocol`:
 
 ```json
-"database": {
-  "module": "hivemind-sqlite-db-plugin",
-  "hivemind-sqlite-db-plugin": { "name": "clients", "subfolder": "hivemind-core" }
+"binary_protocol": {
+  "module": "hivemind-audio-binary-protocol-plugin",
+  "hivemind-audio-binary-protocol-plugin": {}
 }
 ```
 
-The key in `database` is the plugin entry-point name, not the package name. The three
-entry-point names are `hivemind-sqlite-db-plugin`, `hivemind-json-db-plugin`, and
-`hivemind-redis-db-plugin`.
+Binary payloads also pass the policy chain. A client with an empty `allowed_types` list cannot send them.
+
+### Database plugins
+
+A database plugin stores the client rows. The `hivemind-core` CLI and the hub read the same `database` block.
+
+| Package | Entry point name |
+| :--- | :--- |
+| `hivemind-sqlite-database` (dependency of the hub) | `hivemind-sqlite-db-plugin` |
+| `hivemind-json-db-plugin` (dependency of the hub) | `hivemind-json-db-plugin` |
+| `hivemind-redis-database` | `hivemind-redis-db-plugin` |
+
+To change the backend, copy the clients first, then change `database.module`:
+
+```bash
+hivemind-core migrate-db --from hivemind-json-db-plugin --to hivemind-sqlite-db-plugin
+```
 
 ---
-
-## Writing a custom plugin
-
-All plugin types follow the same pattern:
-
-1. Create a class that inherits from the appropriate base class in `hivemind-plugin-manager`.
-2. Register it via a Python entry point in your `setup.py` / `pyproject.toml`.
-3. Reference the entry-point name in `server.json`.
-
-The four base classes are:
-
-| Base class | Module |
-|---|---|
-| `NetworkProtocol` | `hivemind_plugin_manager.protocols` |
-| `AgentProtocol` | `hivemind_plugin_manager.protocols` |
-| `BinaryDataHandlerProtocol` | `hivemind_plugin_manager.protocols` |
-| `AbstractDB` | `hivemind_plugin_manager.database` |
-| `PolicyPlugin` | `hivemind_plugin_manager.policy` |
-
----
-[← Policy Chain](policy.md) · [Home](README.md) · [Extending →](extending.md)
+[← Policies and ACLs](policies.md) · [Home](index.md) · [Troubleshooting →](troubleshooting.md)

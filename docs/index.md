@@ -1,45 +1,44 @@
-# HiveMind Core
+# HiveMind-core documentation
+<!-- agent-hint
+covers: the reading order of the docs and one line for each page
+source: docs/
+generated: no
+verify: diff <(ls docs/*.md | grep -v index.md | xargs -n1 basename | sort) <(grep -o '([a-z0-9-]*\.md)' docs/index.md | tr -d '()' | sort -u)
+see: ../README.md
+-->
 
-HiveMind Core is the central server of the HiveMind network. It accepts connections from satellites and other nodes, authenticates them, enforces per-client permissions, and routes messages to the configured AI agent backend.
+HiveMind-core is the hub of a HiveMind network: it authenticates satellites with a Noise handshake, checks each message against a policy chain, and passes the messages to an agent such as OpenVoiceOS.
 
-## Overview
-
+```mermaid
+flowchart LR
+    S1[satellite] -- Noise session --> N[network plugin]
+    S2[bridge] -- Noise session --> N
+    N --> G[inbound gates and policy chain]
+    G --> A[agent plugin]
+    A --> O[OpenVoiceOS or another agent]
+    G --> B[binary plugin]
+    D[(database plugin)] --- G
 ```
-Satellite / Client
-       │
-       │  WebSocket / HTTP (encrypted)
-       ▼
- ┌─────────────┐
- │ hivemind-   │  Network Protocol Plugin (WebSocket, HTTP, …)
- │    core     │──────────────────────────────────────────────▶ Agent Protocol Plugin (OVOS, Persona, …)
- │             │  Binary Protocol Plugin (audio, image, file)
- └─────────────┘
-       │
-  ClientDatabase (JSON, SQLite, Redis)
+
+## Quickstart
+
+```bash
+uv pip install --prerelease=allow hivemind-core
+hivemind-core add-client --name kitchen --allow ovos.utterance.handle --allow recognizer_loop:utterance
+hivemind-core listen
 ```
 
-HiveMind Core is fully **plugin-driven**:
+`add-client` prints the access key and the password for the satellite. `listen` starts the hub on the WebSocket port 5678. [Install and run a hub](install-and-run.md) shows the output of each step.
 
-| Layer | Role | Configured by |
-|---|---|---|
-| **Network protocol** | How messages are transported (WebSocket, HTTP) | `network_protocol` config key |
-| **Agent protocol** | What handles message payloads (OVOS bus, LLM persona) | `agent_protocol` config key |
-| **Binary protocol** | What to do with received binary data (audio, images) | `binary_protocol` config key |
-| **Database** | Where client credentials are stored (JSON, SQLite, Redis) | `database` config key |
+## Pages
 
-## Documentation
-
-- [Architecture Guide](architecture.md): explains the Mind, Satellite, and Bridge components.
-- [Security and Encryption](security.md): covers the Noise handshake, AES-256-GCM, and the encrypted transport.
-- [Authentication and Client Management](auth.md): covers adding clients and managing permissions.
-- [Installation](installation.md): gets you started with HiveMind Core.
-- [Configuration](configuration.md): covers configuring protocols and databases.
-- [CLI Reference](cli.md): a complete command-line reference.
-- [Protocol Internals](protocol.md): explains the HiveMind message format.
-- [Plugin System](plugins.md): an overview of the modular plugin architecture.
-- [Transformer Pipelines](transformers.md): OVOS transformer plugins on the text/bus path.
-- [Plugin Development](plugin_development.md): a guide for creating custom plugins.
-
-## License
-
-HiveMind-core is licensed under **Apache-2.0**. Releases up to `hivemind-core` **3.4.0** were Apache-2.0. The **4.x** series shipped under AGPL-3.0 as a short-lived experiment. From this release forward, HiveMind-core returns to Apache-2.0. Previously published 3.x and 4.x releases on PyPI stay under the license they were published with. Contact [jarbasai@mailfence.com](mailto:jarbasai@mailfence.com) for support or sponsorship.
+| Page | What you get there |
+| :--- | :--- |
+| [Install and run a hub](install-and-run.md) | install, first client, start the hub, the files that it writes |
+| [Add and manage clients](clients.md) | the `hivemind-core` CLI: add, list, permissions, reset the Noise pin, remove |
+| [Configuration reference](configuration.md) | each key of `server.json` with its default |
+| [Security model](security.md) | access keys, the Noise handshake, the key pin, the rate limit, the inbound gates |
+| [Policies and ACLs](policies.md) | the message type whitelist, the policy chain and the deny reply |
+| [Plugins](plugins.md) | network, agent, binary and database plugins |
+| [Troubleshooting](troubleshooting.md) | log messages and replies, with the cause and the fix |
+| [Contributing and tests](contributing.md) | development setup, tests, CI and licence |

@@ -1,347 +1,121 @@
-# Configuration Reference
+# Configuration reference
+<!-- agent-hint
+covers: every key of server.json, its default and its effect
+source: hivemind_core/config.py:_DEFAULT, hivemind_core/config.py:_default_database, hivemind_core/config.py:get_server_config
+generated: no
+verify: python3 -c "import re,sys; from hivemind_core.config import _DEFAULT; doc=open('docs/configuration.md').read().split('\n### Top-level keys\n')[1].split('\n### Handshake')[0]; keys=set(re.findall(r'^\| \`([a-z_]+)\`', doc, re.M)); want=set(_DEFAULT)|{'database'}; sys.exit(0 if keys==want else 1)"
+see: security.md
+-->
 
-HiveMind Core reads its configuration from `~/.config/hivemind-core/server.json` (XDG).
-The file is created with defaults on first run if absent.
+The hub reads one JSON file, `~/.config/hivemind-core/server.json`. This page lists each top-level key with its default value. The defaults are in `hivemind_core/config.py`.
 
----
+## Example
 
-## Full Default Configuration
+This `server.json` changes the WebSocket port and lowers the rate limit for each access key. The hub adds the default value of each key that the file does not set.
 
 ```json
 {
-  "binarize": false,
-  "allowed_encodings": [
-    "JSON-B64", "JSON-URLSAFE-B64", "JSON-B91",
-    "JSON-Z85B", "JSON-Z85P", "JSON-B32", "JSON-HEX"
-  ],
-  "allowed_ciphers": ["CHACHA20-POLY1305", "AES-GCM"],
-
-  "min_password_bits": 40,
-  "runtime_password_strength_check": true,
-
-  "ping_flood_interval": 30,
-  "last_seen_update_interval": 60,
-
-  "presence": {
-    "enabled": true,
-    "name": "HiveMind-Node",
-    "zeroconf": true,
-    "upnp": false
-  },
-
-  "agent_protocol": {
-    "module": "hivemind-ovos-agent-plugin",
-    "hivemind-ovos-agent-plugin": {
-      "host": "127.0.0.1",
-      "port": 8181
-    }
-  },
-
-  "binary_protocol": {
-    "module": null
-  },
-
-  "upstream": {
-    "enabled": false,
-    "host": "127.0.0.1",
-    "port": 5678,
-    "key": "",
-    "password": "",
-    "ssl": false,
-    "self_signed": true
-  },
-
   "network_protocol": {
     "hivemind-websocket-plugin": {
       "host": "0.0.0.0",
-      "port": 5678,
-      "ssl": false,
-      "cert_dir": "~/.local/share/hivemind",
-      "cert_name": "hivemind"
-    },
-    "hivemind-http-plugin": {
-      "host": "0.0.0.0",
-      "port": 5679,
-      "ssl": false,
-      "cert_dir": "~/.local/share/hivemind",
-      "cert_name": "hivemind"
+      "port": 5700
     }
   },
-
-  "database": {
-    "module": "hivemind-sqlite-db-plugin",
-    "hivemind-sqlite-db-plugin": {
-      "name": "clients",
-      "subfolder": "hivemind-core"
-    }
-  },
-
-  "utterance_transformers": {},
-  "metadata_transformers": {},
-  "dialog_transformers": {},
-
-  "policy": {
-    "chain": [
-      {"module": "hivemind-ovos-agent-policy"}
-    ]
-  }
+  "handshake_failures_per_key": 3
 }
 ```
 
----
+To see the result, run `hivemind-core print-config`.
 
-## Top-Level Keys
+## Steps
 
-| Key | Type | Default | Purpose |
-|---|---|---|---|
-| `binarize` | bool | `false` | Enable HiveMind binarization protocol (requires compatible client version) |
-| `allowed_encodings` | list | see above | Ordered list of accepted message encodings; first match wins during handshake |
-| `allowed_ciphers` | list | `["CHACHA20-POLY1305", "AES-GCM"]` | Accepted session ciphers; first match wins |
-| `min_password_bits` | float | `40` | Lowest password entropy `add-client` accepts, and the handshake backstop rejects |
-| `runtime_password_strength_check` | bool | `true` | Re-check password strength at handshake time. Set to `false`, or set `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1`, to skip the backstop |
-| `last_seen_update_interval` | int | `60` | Seconds to debounce the `last_seen` write, which runs on every inbound message. `0` writes on every message |
-| `ping_flood_interval` | int | `30` | Minimum seconds between two mesh-wide `PING` floods emitted by this node. Inside the window the node answers only the peer that pinged it |
-| `utterance_transformers` | dict | `{}` | OVOS utterance transformer plugins to load, keyed by plugin name. |
-| `metadata_transformers` | dict | `{}` | OVOS metadata transformer plugins to load, keyed by plugin name |
-| `dialog_transformers` | dict | `{}` | OVOS dialog transformer plugins to load, keyed by plugin name. They rewrite `QUERY`/`CASCADE` answer chunks before they go back to clients |
-| `presence` | dict | see above | Local-network advertisement through the optional `hivemind-presence` package. Keys: `enabled`, `name`, `zeroconf` (mDNS), `upnp` (SSDP) |
-| `upstream` | dict | see above | Connection to a master above this node. Disabled by default |
+1. Stop the hub.
+2. Edit `~/.config/hivemind-core/server.json`. The file can hold comments.
+3. Run `hivemind-core print-config` to make sure that the hub reads the file.
+4. Start the hub with `hivemind-core listen`.
 
-> **Every session is encrypted.** The v3 Noise handshake is the sole key
-> exchange, so there is no "require crypto" switch. An `INTERCOM` frame that
-> carries no signed envelope proves nothing about its origin, so the server
-> drops it rather than relaying or escalating it (HIVEMIND-CRYPTO-1 §4).
+## How the hub reads the file
 
----
+- When the file does not exist, the hub writes it with the defaults. In `network_protocol`, it writes only the transports that are installed.
+- When the file is not valid JSON, or is not a JSON object, each command stops with an error. The hub does not change the file. Fix the file, or remove it to start from the defaults.
+- A top-level key that the file does not set gets its default value.
+- In a block that names a `module` (`agent_protocol`, `binary_protocol`, `database`), a missing sub-key gets its default value. In `network_protocol`, the sub-keys are the set of transports that start, so the hub adds no transport.
+- The `upstream` block always gets each sub-key that it does not set.
+- The hub ignores `policy.fail_open` and writes a warning to the log. The policy chain always fails closed.
 
-## `agent_protocol`
+## Reference
 
-Selects the AI backend. `module` is the entry-point name of an agent protocol plugin.
+### Top-level keys
 
-```json
-"agent_protocol": {
-  "module": "hivemind-ovos-agent-plugin",
-  "hivemind-ovos-agent-plugin": {
-    "host": "127.0.0.1",
-    "port": 8181
-  }
-}
-```
+| Key | Default | Effect |
+| :--- | :--- | :--- |
+| `binarize` | `false` | offer the binary framing of HiveMind messages |
+| `allowed_encodings` | `["JSON-B64", "JSON-URLSAFE-B64", "JSON-B91", "JSON-Z85B", "JSON-Z85P", "JSON-B32", "JSON-HEX"]` | payload encodings that the hub offers in the HANDSHAKE, in order of preference |
+| `allowed_ciphers` | `["CHACHA20-POLY1305", "AES-GCM"]` | ciphers that the hub offers in the HANDSHAKE |
+| `min_password_bits` | `40` | the minimum guess resistance of a client password, in bits |
+| `runtime_password_strength_check` | `true` | check the password again at each handshake |
+| `agent_protocol` | `{"module": "hivemind-ovos-agent-plugin", "hivemind-ovos-agent-plugin": {"host": "127.0.0.1", "port": 8181}}` | the agent that receives the client messages |
+| `binary_protocol` | `{"module": null}` | the handler for binary payloads; `null` writes each payload to the log only |
+| `network_protocol` | see [Transports](#transports) | the transports that listen for clients |
+| `database` | see [Database](#database) | the client database backend |
+| `presence` | `{"enabled": true, "name": "HiveMind-Node", "zeroconf": true, "upnp": false}` | local network discovery; needs the `presence` extra |
+| `rendezvous` | `{"enabled": false, "max_pending_per_mailbox": 256}` | hold messages for peers that are not online at the same time; needs `hivemind-rendezvous` |
+| `upstream` | see [Upstream](#upstream) | a connection from this hub to a hub above it |
+| `policy` | `{"chain": [{"module": "hivemind-ovos-agent-policy"}]}` | policy plugins after the built-in gates; see [Policies and ACLs](policies.md) |
+| `utterance_transformers` | `{}` | OVOS utterance transformer plugins for client utterances |
+| `metadata_transformers` | `{}` | OVOS metadata transformer plugins for client messages |
+| `dialog_transformers` | `{}` | OVOS dialog transformer plugins for QUERY and CASCADE answers |
+| `ping_flood_interval` | `30` | minimum seconds between two PING floods that this hub sends to the mesh |
+| `last_seen_update_interval` | `60` | minimum seconds between two writes of the `last_seen` time of one client; `0` writes on each message |
+| `handshake_failures_per_key` | `5` | failed handshakes for one access key, inside the window, that block that key; `0` turns the limit off |
+| `handshake_failures_per_ip` | `20` | failed handshakes from one source IP, inside the window, that block that IP; `0` turns the limit off |
+| `handshake_failure_window` | `60` | the length of the window for the two limits above, in seconds |
 
-The plugin-specific config object is keyed by the plugin name. Available plugins:
+The `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1` environment variable also turns off the check at the handshake. The check at `add-client` always applies.
 
-| Plugin name | Package | Backend |
-|---|---|---|
-| `hivemind-ovos-agent-plugin` | `ovos-bus-client` | OpenVoiceOS message bus |
-| `hivemind-persona-agent-plugin` | `ovos-persona` | Persona / LLM (OpenAI-compatible) |
+A transformer plugin loads only when its name is a key of its block, for example `"utterance_transformers": {"ovos-utterance-corrections-plugin": {}}`.
 
----
+### Handshake rate limit
 
-## `binary_protocol`
+The hub counts failed handshakes for each access key and for each source IP. When a count reaches its limit inside `handshake_failure_window`, the hub refuses each handshake from that key or that IP until the oldest failure leaves the window. A successful handshake does not reset a count. The two limits must be non-negative integers. The hub refuses other values with a `ValueError`. [Security model](security.md#handshake-rate-limit) explains the defence.
 
-Optional server-side audio/image handler. Set `module` to `null` to use the no-op stub.
+### Transports
 
-```json
-"binary_protocol": {
-  "module": "hivemind-audio-binary-protocol-plugin"
-}
-```
+`network_protocol` maps each transport name to its settings. Each name in the block starts one transport.
 
-The `hivemind-audio-binary-protocol` plugin enables server-side STT and TTS, used by
-lightweight satellites (voice relay, mic satellite) that stream raw audio instead of
-running a local speech stack.
+| Transport | `host` | `port` | `ssl` | `cert_dir` | `cert_name` |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `hivemind-websocket-plugin` | `0.0.0.0` | `5678` | `false` | `~/.local/share/hivemind` | `hivemind` |
+| `hivemind-http-plugin` | `0.0.0.0` | `5679` | `false` | `~/.local/share/hivemind` | `hivemind` |
 
----
+`hivemind-http-plugin` needs the `hivemind-http-protocol` package. When a transport in the block is not installed, the log names the package to install, and the other transports start. When no transport starts, the hub stops.
 
-## `upstream`
+### Database
 
-Connects this node to a master above it. The node keeps serving its own
-downstream clients, and it also forwards downstream `PROPAGATE` and `ESCALATE`
-up to that master, and fans `BROADCAST` and `PROPAGATE` from the master back
-down (HIVEMIND-NODE-1 §3.3 and §4). It is disabled by default, so a node with
-no upstream is a top-level master, as before.
-
-```json
-"upstream": {
-  "enabled": true,
-  "host": "master.example.com",
-  "port": 5678,
-  "key": "the-access-key",
-  "password": "the-password",
-  "ssl": true,
-  "self_signed": false
-}
-```
-
-| Key | Type | Default | Purpose |
-|---|---|---|---|
-| `enabled` | bool | `false` | Connect upstream. When `false`, this node is a top-level master |
-| `host` | str | `127.0.0.1` | Hostname or IP of the master. Write it without a scheme; `ssl` picks `ws://` or `wss://` |
-| `port` | int | `5678` | Port the master listens on |
-| `key` | str | `""` | Access key the master issued to this node |
-| `password` | str | `""` | Password the master issued to this node |
-| `ssl` | bool | `false` | Connect with `wss://` |
-| `self_signed` | bool | `true` | Accept a self-signed certificate from the master |
-
-Run `hivemind-core add-client` **on the master** to get the `key` and
-`password` for this node. Set both: with either one empty the node logs an
-error and stays a top-level master, rather than refusing to start and taking
-its own clients offline with it.
-
-The upstream connection uses the node's own identity
-(`~/.config/hivemind/_identity.json`) for both directions — the key it
-answers its own clients with is the key it announces to its master.
-`upstream.key` / `upstream.password` are connection settings for the
-upstream client, not part of the node's identity, and they are never
-written back into `_identity.json`.
-
-The connection opens on a background thread and the client keeps retrying, so
-an unreachable master delays nothing at startup: the node comes up and serves
-its downstream clients while it waits.
-
-You do not have to write the whole block. Any key you leave out keeps its
-default from the table above, and a block that is not a block at all (`null`,
-say) is replaced by the defaults with a warning. Nothing in the `upstream`
-block can keep the node from starting.
-
-Point `upstream` at the master **above** this node, never at this node. An
-upstream aimed at one of this node's own listeners is refused at startup, with
-an error in the log: the link would connect, be rejected, and reconnect every
-few seconds forever. `127.0.0.1` and `0.0.0.0` name the same listener here, so
-both are refused.
-
----
-
-## `network_protocol`
-
-Each key is a network plugin name; its value is passed to the plugin's constructor.
-Multiple plugins run simultaneously (e.g. WebSocket + HTTP).
-
-| Plugin name | Package | Default port |
-|---|---|---|
-| `hivemind-websocket-plugin` | `hivemind-websocket-protocol` | 5678 |
-| `hivemind-http-plugin` | `hivemind-http-protocol` | 5679 |
-
-hivemind-core depends only on `hivemind-websocket-protocol`. On the first run it
-writes this block with only the transports that are installed, so
-`hivemind-http-plugin` is included only when `hivemind-http-protocol` is
-installed. To add it later, install the package and add the block by hand.
-A transport named here that is not installed is skipped at startup: the log
-names the package to install, and the other transports still start.
-
-**TLS example** (generate a self-signed cert first):
-
-```json
-"hivemind-websocket-plugin": {
-  "host": "0.0.0.0",
-  "port": 5678,
-  "ssl": true,
-  "cert_dir": "/etc/hivemind/certs",
-  "cert_name": "hivemind"
-}
-```
-
----
-
-## `database`
-
-Selects the client credential store. `module` is the entry-point name.
+A fresh install uses SQLite:
 
 ```json
 "database": {
   "module": "hivemind-sqlite-db-plugin",
-  "hivemind-sqlite-db-plugin": {
-    "name": "clients",
-    "subfolder": "hivemind-core"
-  }
+  "hivemind-sqlite-db-plugin": {"name": "clients", "subfolder": "hivemind-core"}
 }
 ```
 
-**Default for fresh installs:** SQLite. An existing `clients.json` on disk keeps using the
-JSON backend automatically. Migrate with:
+When `~/.local/share/hivemind-core/clients.json` exists and `clients.db` does not, the default is `hivemind-json-db-plugin` with the same settings. To move the clients to SQLite, run `hivemind-core migrate-db --to hivemind-sqlite-db-plugin`, then set `database.module`.
 
-```bash
-hivemind-core migrate-db --from hivemind-json-db-plugin --to hivemind-sqlite-db-plugin
-```
+### Upstream
 
-`--from` and `--to` take database plugin entry-point names, not short aliases. The
-defaults are the two names shown above.
+| Sub-key | Default | Effect |
+| :--- | :--- | :--- |
+| `enabled` | `false` | connect to a hub above this one |
+| `host` | `127.0.0.1` | the host of the upper hub |
+| `port` | `5678` | the port of the upper hub |
+| `key` | `""` | the access key that the upper hub gave to this hub |
+| `password` | `""` | the password that the upper hub gave to this hub |
+| `ssl` | `false` | use `wss://` instead of `ws://` |
+| `self_signed` | `true` | accept a self-signed certificate from the upper hub |
 
-Available backends:
-
-| Plugin name | Package | Type |
-|---|---|---|
-| `hivemind-sqlite-db-plugin` | `hivemind-sqlite-database` | Local SQLite |
-| `hivemind-json-db-plugin` | `json_database` | Local JSON file |
-| `hivemind-redis-db-plugin` | `hivemind-redis-database` | Remote Redis |
-
-**Redis example:**
-
-```json
-"database": {
-  "module": "hivemind-redis-db-plugin",
-  "hivemind-redis-db-plugin": {
-    "name": "clients",
-    "subfolder": "hivemind-core",
-    "host": "192.168.1.10",
-    "port": 6379,
-    "password": "s3cr3t",
-    "max_connections": 50
-  }
-}
-```
-
-**Use Redis for large deployments.** Redis looks up a client by API key with a single
-key read and writes one record at a time. SQLite reads through an `api_key` index and
-writes one row. JSON scans every client and rewrites the whole file on each write.
-
-`max_connections` sets the Redis connection pool size. It defaults to 5. Raise it above
-the number of clients that handshake at the same time, or the server queues on the pool.
+Make the credentials on the upper hub with `hivemind-core add-client`.
 
 ---
-
-## `policy`
-
-Configures the admission-control chain. `MessageTypeACLPolicy` and
-`DefaultSessionPolicy` are always prepended and cannot be removed. See [policy.md](policy.md) for the full policy chain specification.
-
-```json
-"policy": {
-  "chain": [
-    {"module": "hivemind-ovos-agent-policy"},
-    {"module": "my-quota-policy", "config": {"limit": 500}},
-    {"module": "my-experimental-policy", "optional": true}
-  ]
-}
-```
-
-| Field | Type | Purpose |
-|---|---|---|
-| `module` | str | Entry-point name of the policy plugin |
-| `config` | dict | Plugin-specific configuration passed to its constructor |
-| `optional` | bool | If `true`, exceptions in `review` log a warning and continue (allow). Default `false` (fail-closed). |
-
-Drop `hivemind-ovos-agent-policy` only if you are running a non-OVOS agent backend.
-
----
-
-## Editing the Config
-
-The file is a plain JSON document. After editing, restart hivemind-core for changes to
-take effect:
-
-```bash
-hivemind-core listen
-```
-
-The `hpm` CLI from `hivemind-plugin-manager` provides a friendlier interface for
-switching active plugins:
-
-```bash
-hpm list database
-hpm set database hivemind-redis-db-plugin
-hpm show-config
-```
-
----
-[← Architecture](architecture.md) · [Home](README.md) · [CLI Reference →](cli-reference.md)
+[← Clients](clients.md) · [Home](index.md) · [Security model →](security.md)
