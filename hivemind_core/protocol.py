@@ -848,7 +848,8 @@ class HiveMindListenerProtocol:
     # ``_node_id`` (the node public key) for provenance and addressing.
     peer: str = "master:0.0.0.0"
 
-    identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
+    identity: NodeIdentity = dataclasses.field(
+        default_factory=lambda: NodeIdentity(app_name="hivemind-core"))
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 
