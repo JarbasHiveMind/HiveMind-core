@@ -11,7 +11,7 @@ This page explains how the hub decides who can connect and what a connected clie
 
 ## Example
 
-A client that connects with a known access key and the correct password gets an encrypted session. The hub log shows the handshake. A client with the wrong password fails the handshake, and the hub closes the connection with code 1008.
+A client that connects with a known access key and the correct password gets an encrypted session. The hub log shows the handshake. With a wrong password, the handshake fails on the client side, and the hub counts a failed handshake.
 
 ```mermaid
 sequenceDiagram

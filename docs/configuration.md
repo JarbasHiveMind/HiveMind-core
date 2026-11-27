@@ -73,7 +73,7 @@ To see the result, run `hivemind-core print-config`.
 
 The `HIVEMIND_DISABLE_PASSWORD_STRENGTH_CHECK=1` environment variable also turns off the check at the handshake. The check at `add-client` always applies.
 
-A transformer plugin loads only when its name is a key of its block, for example `"utterance_transformers": {"ovos-utterance-corrections-plugin": {}}`.
+A transformer plugin loads only when its name is a key of its block, for example `"utterance_transformers": {"ovos-utterance-corrections-plugin": {}}`. A transformer in the hub applies to each client of the hub, and a client sees its own utterance after the change. When OpenVoiceOS or a binary plugin runs the same transformer, the text is changed two times.
 
 ### Handshake rate limit
 

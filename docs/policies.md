@@ -65,7 +65,7 @@ The hub compares the exact type name. OpenVoiceOS sends `ovos.utterance.handle`,
 
 ### Add a policy
 
-1. Install the policy plugin. It registers under the `hivemind.policy` entry point.
+1. Install the policy plugin. It registers under the `hivemind.policy` entry point. A plugin is a subclass of `PolicyPlugin` from `hivemind-plugin-manager`. It implements `review`, and optionally `review_binary` and `observe`, and returns a `Verdict`.
 2. Add it to `policy.chain` in `server.json`:
 
    ```json
@@ -95,7 +95,7 @@ The hub compares the exact type name. OpenVoiceOS sends `ovos.utterance.handle`,
 
 The policies run in order. The first deny stops the chain. A policy can also return mutations, which change the message before the next policy runs. Binary payloads pass the chain too, without mutations.
 
-The chain fails closed. When a policy raises an exception, the result is a deny with code `policy_error`. An entry with `"optional": true` is the exception: its error goes to the log, and the chain continues. When the chain cannot be built from the configuration, the hub installs `DenyAllPolicy`, which denies each message with code `policy_chain_unavailable`. The log says `failed to build policy chain; installing DenyAllPolicy fallback`.
+The chain fails closed. When a policy raises an exception, the result is a deny with code `policy_error`. An entry with `"optional": true` is the exception: an error in its review goes to the log, and the chain continues. An entry that does not load stops the whole chain from building, also when it is optional. When the chain cannot be built from the configuration, the hub installs `DenyAllPolicy` after the two built-in policies. A type that is not in `allowed_types` still gets `acl_disallowed_type`. Each other message gets `policy_chain_unavailable`. The log says `failed to build policy chain; installing DenyAllPolicy fallback`.
 
 ### Entry keys
 
@@ -122,7 +122,7 @@ A client that sends a denied message gets a `hive.policy.denied` bus message:
 | :--- | :--- |
 | `acl_disallowed_type` | the type is not in `allowed_types` |
 | `session_id_default_forbidden` | a non-admin client used the `default` session |
-| `policy_error` | a policy or a mutation raised an exception |
+| `policy_error` | a policy or a mutation raised an exception; `data` names the `policy`, the `error` and, for a mutation, the `mutation` |
 | `policy_chain_unavailable` | the chain did not build; `DenyAllPolicy` is installed |
 | `malformed_payload` | the payload cannot be rebuilt as a message |
 | `backend_unavailable` | the message passed the chain, but the agent bus is not available |

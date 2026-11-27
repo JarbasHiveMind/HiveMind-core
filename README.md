@@ -57,4 +57,4 @@ The [HiveMind community docs](https://jarbashivemind.github.io/HiveMind-communit
 
 ## Licence
 
-HiveMind-core is under the [Apache License 2.0](LICENSE). Releases up to 3.4.0 were under Apache-2.0, and the 4.x releases were under AGPL-3.0. Each published release keeps the licence that it was published with. The HiveMind names and logos are trademarks and are not part of the licence: see [TRADEMARK-USAGE.md](TRADEMARK-USAGE.md). For sponsorship or paid support, write to [jarbasai@mailfence.com](mailto:jarbasai@mailfence.com).
+HiveMind-core is under the [Apache License 2.0](LICENSE). Releases 3.4.1a4 to 4.2.0a1, the stable 4.0.0 included, were under AGPL-3.0. Each published release keeps the licence that it was published with. The HiveMind names and logos are trademarks and are not part of the licence: see [TRADEMARK-USAGE.md](TRADEMARK-USAGE.md). For sponsorship or paid support, write to [jarbasai@mailfence.com](mailto:jarbasai@mailfence.com).

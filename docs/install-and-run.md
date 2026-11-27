@@ -21,13 +21,13 @@ hivemind-core listen
 The `listen` command prints nothing to the terminal. It writes its log to `~/.local/state/mycroft/hivemind.log`. A start writes these lines, with others between them:
 
 ```text
-hivemind_core.service:on_started:182 - INFO - hivemind-core service started!
-hivemind_core.service:run:441 - INFO - Agent protocol: OVOSAgentProtocol
-hivemind_core.service:run:448 - INFO - BinaryData protocol: BinaryDataHandlerProtocol
-hivemind_core.policy:from_config:102 - INFO - loaded policy plugin: hivemind-ovos-agent-policy
-hivemind_core.service:run:479 - INFO - Network protocol: HiveMindWebsocketProtocol
-hivemind_core.service:on_ready:174 - INFO - hivemind-core service ready!
-hivemind_websocket_protocol:start_listener:306 - INFO - ws listener started
+hivemind_core.service:on_started - INFO - hivemind-core service started!
+hivemind_core.service:run - INFO - Agent protocol: OVOSAgentProtocol
+hivemind_core.service:run - INFO - BinaryData protocol: BinaryDataHandlerProtocol
+hivemind_core.policy:from_config - INFO - loaded policy plugin: hivemind-ovos-agent-policy
+hivemind_core.service:run - INFO - Network protocol: HiveMindWebsocketProtocol
+hivemind_core.service:on_ready - INFO - hivemind-core service ready!
+hivemind_websocket_protocol:start_listener - INFO - ws listener started
 ```
 
 ## Steps
@@ -65,6 +65,10 @@ hivemind_websocket_protocol:start_listener:306 - INFO - ws listener started
 | `hivemind-core[presence]` | `hivemind-presence` and `hivemind-ggwave`: local network discovery (`presence` block) |
 | `hivemind-http-protocol` | the HTTP transport `hivemind-http-plugin`, port 5679 by default |
 | `hivemind-rendezvous` | the store-and-forward mailbox (`rendezvous` block) |
+
+## Several hubs on one machine
+
+Each hub needs its own `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, because these hold the configuration, the client database and the node identity (`hivemind/_identity.json`). Give each hub a free port for each transport. The `agent_protocol` port selects the OpenVoiceOS instance that the hub uses. When all transports stop, the log says `Every network protocol has stopped, this node no longer accepts clients`.
 
 ## Files
 
