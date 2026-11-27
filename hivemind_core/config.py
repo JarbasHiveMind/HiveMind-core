@@ -81,7 +81,7 @@ _DEFAULT = {
                              "cert_name": "hivemind"
                          }},
     # policy admission chain — evaluated for every client message before
-    # injection into the agent bus. See HiveMind-core#85.
+    # injection into the agent bus.
     #
     # The chain is ALWAYS fail-closed: any unhandled exception in a
     # policy becomes Verdict.deny("policy_error", ...). No knob.

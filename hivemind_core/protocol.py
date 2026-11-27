@@ -307,11 +307,14 @@ def _binary_type_code(frame: bytes) -> Optional[int]:
     return int(bits[pos:pos + 5], 2) if len(bits) >= pos + 5 else None
 
 
+#: the two message types that travel in the clear, before the Noise session
+_KEY_EXCHANGE_TYPES = (HiveMessageType.HELLO, HiveMessageType.HANDSHAKE)
+
 #: the codes WIRE-1 assigns to HELLO and HANDSHAKE, read off frames the
 #: serializer builds so they are never restated here
 _BINARY_HANDSHAKE_CODES = frozenset(
     _binary_type_code(get_bitstring(t, {}).tobytes())
-    for t in (HiveMessageType.HELLO, HiveMessageType.HANDSHAKE))
+    for t in _KEY_EXCHANGE_TYPES)
 
 
 @dataclass
@@ -508,14 +511,10 @@ class HiveMindClientConnection:
         self._resolved_user_ts = 0.0
 
     def __post_init__(self):
-        # Reuse the node's already-imported RSA key (loaded once in
-        # HiveMindListenerProtocol.__post_init__) instead of re-reading and
-        # re-validating the PEM file on every connection — PyCryptodome's
-        # validation of a 2048-bit key measured 35-58ms, and it used to run
-        # inline on the IOLoop thread serving every connected client. Only
-        # the immutable ``private_key`` is shared; the HandShake instance
-        # itself is fresh per connection, since ``target_key``/``secret``
-        # hold per-peer session state that must never leak between clients.
+        # Share the node's imported RSA key: PEM validation costs 35-58 ms
+        # on the IOLoop thread. Only the immutable ``private_key`` is shared;
+        # ``target_key``/``secret`` are per-peer state, so the HandShake
+        # instance is fresh per connection.
         if not self.handshake:
             self.handshake = HandShake.__new__(HandShake)
             self.handshake.private_key = self.hm_protocol.identity_rsa_key
@@ -703,8 +702,7 @@ class HiveMindClientConnection:
                     raise MalformedFrameError(
                         f"a wire frame must be a JSON object, got "
                         f"{type(frame).__name__} (HIVEMIND-MSG-1 §2)")
-                if (frame.get("msg_type") in (HiveMessageType.HELLO,
-                                              HiveMessageType.HANDSHAKE)
+                if (frame.get("msg_type") in _KEY_EXCHANGE_TYPES
                         and not isinstance(frame.get("payload"), dict)):
                     # The constructor would substitute {} for null, and the
                     # payload bytes of these two are bound into the Noise
@@ -720,8 +718,7 @@ class HiveMindClientConnection:
             else:
                 handshake_frame = (isinstance(frame, dict)
                                    and frame.get("msg_type")
-                                   in (HiveMessageType.HELLO,
-                                       HiveMessageType.HANDSHAKE))
+                                   in _KEY_EXCHANGE_TYPES)
             if self.noise_transport is None or handshake_frame:
                 # A malformed HELLO or HANDSHAKE closes the connection, and so
                 # does any unreadable frame before the Noise session exists:
@@ -743,8 +740,7 @@ class HiveMindClientConnection:
         # session key); everything else is rejected and the client dropped.
         if (not encrypted
                 and self.crypto_required
-                and message.msg_type not in (HiveMessageType.HELLO,
-                                             HiveMessageType.HANDSHAKE)):
+                and message.msg_type not in _KEY_EXCHANGE_TYPES):
             LOG.error(f"Dropping unencrypted {message.msg_type} message from "
                       f"{self.peer}: server requires crypto")
             self._reject(1008, "unencrypted message rejected: crypto is required",
@@ -755,19 +751,8 @@ class HiveMindClientConnection:
         return message
 
     def authorize(self, message: Message) -> bool:
-        """Subclass override hook — return False to short-circuit bus
-        injection without going through the policy chain.
-
-        The allowed_types whitelist that used to live here moved to
-        MessageTypeACLPolicy in hivemind_core/policy.py (see #85). Kept as a
-        default-True stub so subclasses overriding it for ad-hoc
-        admission gates continue to work.
-        """
-        # legacy hooks: subclasses may still want to plug intent / skill
-        # decisions here outside the policy chain
-        # for OVOS agent this is passed in Session and ignored during match
-        # adding it here allows blocking the utterance completely instead
-        # or adding a callback for specific agents to decide how to handle
+        """Subclass hook: return False to drop bus injection without the
+        policy chain. Message-type ACLs live in ``MessageTypeACLPolicy``."""
         return True
 
 
@@ -895,7 +880,7 @@ class HiveMindListenerProtocol:
     # class-level default without every node sharing one, so the default is
     # None and the property builds one per instance on first access.
     _forwarded_flood_cache: Optional[FloodIdCache] = field(default=None, init=False, repr=False)
-    # Backing field for ``trusted_pubkeys``. handle_client_disconnected now
+    # Backing field for ``trusted_pubkeys``. handle_client_disconnected
     # sweeps the TOFU pin store on every disconnect, so a bypass-built
     # fixture reaches it too.
     _trusted_pubkeys: Optional[dict] = field(default=None, init=False, repr=False)
@@ -2184,9 +2169,8 @@ class HiveMindListenerProtocol:
         try:
             reply = self.mailbox.handle(message, client.key)
         except Exception:
-            # The mailbox is an optional third-party component. An exception
-            # here used to escape handle_message and take the connection down
-            # with it, skipping update_last_seen on the way out.
+            # The mailbox is an optional third-party component; its errors
+            # must not take the connection down.
             LOG.exception(f"rendezvous mailbox failed for {client.peer}")
             reply = HiveMessage(HiveMessageType.RENDEZVOUS,
                                 payload={"status": "error",
@@ -2263,7 +2247,7 @@ class HiveMindListenerProtocol:
         assert message.msg_type == HiveMessageType.BINARY
         bin_data = message.payload
 
-        # policy admission chain — issue #85
+        # policy admission chain
         verdict = self.policy_chain.review_binary(bin_data, client)
         if verdict.denied:
             LOG.info(f"policy denied binary payload from {client.peer}: "
@@ -2272,7 +2256,7 @@ class HiveMindListenerProtocol:
                 "hive.policy.denied",
                 {
                     "denied_type": "binary",
-                    "bin_type": str(getattr(message, "bin_type", "")),
+                    "bin_type": str(message.bin_type),
                     "code": verdict.code,
                     "reason": verdict.reason,
                     "data": verdict.data,
@@ -2459,14 +2443,10 @@ class HiveMindListenerProtocol:
         if client.noise_transport is not None:
             # Session already established; a client-controlled duplicate or
             # replayed HANDSHAKE frame must not reach a None noise_handshake.
-            # DROP THE FRAME, NOT THE SESSION. The early return is what keeps
-            # the duplicate away from the handshake state; aborting as well
-            # killed a healthy session and, because the client records the
-            # 1008 as a refused identity, took a correctly registered
-            # satellite off the mesh until it was restarted. It is also a
-            # denial of service: one injected or replayed frame on an
-            # established connection ended it. This is the measured cause of
-            # the hivemind-test-harness nightly red.
+            # DROP THE FRAME, NOT THE SESSION. The early return keeps the
+            # duplicate away from the handshake state. An abort would let one
+            # replayed frame end a healthy session, and the client records
+            # the 1008 as a refused identity.
             LOG.warning(
                 f"ignoring a HANDSHAKE frame from {client.peer}: the Noise "
                 f"session is already established")
@@ -2738,13 +2718,9 @@ class HiveMindListenerProtocol:
             LOG.warning("Ignoring BUS payload with invalid message/context shape")
             return
 
-        # The per-message "session_id == 'default'" gate moved to
-        # OVOSAgentPolicy.review (HiveMind-core#85). Non-admin clients
-        # injecting a default-session payload get Verdict.deny(
-        # "session_id_default_forbidden", ...) and the message is dropped
-        # with a hive.policy.denied response — replacing the previous
-        # severe `client.disconnect()` reaction. The HELLO-time check at
-        # handle_hello_message stays as connection-establishment gate.
+        # OVOSAgentPolicy.review denies a non-admin "default" session per
+        # message (hive.policy.denied); handle_hello_message gates it at
+        # connection time.
         #
         # A bus payload NEVER mutates ``client.sess``: that stays the
         # HELLO-established baseline for the connection and only changes on
@@ -3303,7 +3279,7 @@ class HiveMindListenerProtocol:
         # this node (the request came FROM upstream, not from a downstream peer
         # this node admitted), so no participation state is bound here; the
         # matching response has nowhere authorized to go and drops at
-        # _route_query_response, unchanged from before this binding existed.
+        # _route_query_response.
         self._relay_downstream(message)
 
     def query_to_master(self, message: HiveMessage) -> None:
@@ -4035,10 +4011,7 @@ class HiveMindListenerProtocol:
         # ``str()`` because the annotation does not coerce and this value is
         # stamped straight into the Layer-1 context. A plugin whose
         # ``plugin_id`` is not a string would put that object in the message,
-        # and OVOS-MSG-1 §3.3 requires a single string. Not reachable through
-        # the factory, which sets the entry-point name; it WAS reachable while
-        # hivemind-plugin-manager#65 could bind a positional argument into the
-        # field, so this is hardening rather than a live fix.
+        # and OVOS-MSG-1 §3.3 requires a single string.
         return str(getattr(self.agent_protocol, "plugin_id", "") or "") or "hivemind"
 
     def _install_client_session(self, message: Message,
@@ -4049,11 +4022,8 @@ class HiveMindListenerProtocol:
         session (skill/intent injection mutations will land on this
         dict).
 
-        Skill / intent / message-type blacklist injection moved to
-        ``OVOSAgentPolicy`` in ``hivemind-ovos-agent-plugin`` (see #85).
-        This method only handles the session-rewrite half of what used
-        to be ``_update_blacklist``: copy ``client.sess.serialize()`` onto
-        the message, taking care not to reattach a stale pipeline.
+        Copy ``client.sess.serialize()`` onto the message without
+        reattaching a stale pipeline. Blacklists are ``OVOSAgentPolicy``'s job.
 
         Per SESSION-1 §2: any session field carrying JSON ``null`` is
         malformed and MUST be treated as absent (not preserved). This
@@ -4070,8 +4040,7 @@ class HiveMindListenerProtocol:
         # them. The overlay is taken from the raw wire dict, NEVER by building
         # a fresh Session (Session.__init__ fabricates Configuration() defaults
         # — e.g. the master's own location — for absent fields, which would
-        # clobber the satellite's real values; that was the session-contents
-        # bleed bug).
+        # clobber the satellite's real values).
         session = client.sess.serialize()
         overlay = {k: v for k, v in raw_session.items() if v is not None}
         session.update(overlay)
@@ -4139,7 +4108,7 @@ class HiveMindListenerProtocol:
 
         # ensure client specific session data is injected in query to ovos
         message = self._install_client_session(message, client)
-        # policy admission chain — issue #85
+        # policy admission chain
         verdict = self.policy_chain.review(message, client)
         if verdict.denied:
             LOG.info(f"policy denied '{message.msg_type}' from {client.peer}: "
@@ -4248,7 +4217,7 @@ class HiveMindListenerProtocol:
     def _send_policy_denied(self, client: HiveMindClientConnection,
                              message: Message, verdict) -> None:
         """Inform a client that an admission policy denied their message."""
-        self._send_denied(client, getattr(message, "msg_type", None),
+        self._send_denied(client, message.msg_type,
                           verdict.code, verdict.reason, verdict.data)
 
     def _send_backend_unavailable(self, client: HiveMindClientConnection,

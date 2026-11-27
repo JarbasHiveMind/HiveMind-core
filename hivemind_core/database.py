@@ -51,11 +51,10 @@ class ClientDatabase:
                    # Deprecated kwargs — folded into metadata. Kept so the
                    # CLI and external callers using the old signature keep
                    # working. Client.deserialize handles the same migration
-                   # on the read side. See HiveMind-core#85.
+                   # on the read side.
                    intent_blacklist: Optional[List[str]] = None,
                    skill_blacklist: Optional[List[str]] = None,
                    message_blacklist: Optional[List[str]] = None) -> bool:
-        # Migrate any legacy blacklist kwargs into metadata.
         meta = dict(metadata) if metadata else {}
         for k, v in (("skill_blacklist", skill_blacklist),
                      ("intent_blacklist", intent_blacklist),

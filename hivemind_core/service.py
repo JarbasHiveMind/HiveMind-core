@@ -276,7 +276,7 @@ class HiveMindService:
         if not cfg.get("enabled", False):
             return
 
-        # hivemind-rendezvous 2.0.0a1 (PR #14) switched from keying mailboxes
+        # hivemind-rendezvous 2.0.0a1 switched from keying mailboxes
         # by the recipient's public key to keying them by the authenticated
         # access key, which is what this protocol passes to mailbox.handle().
         # An older package silently accepts deposits under the wrong key and
