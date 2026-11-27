@@ -200,7 +200,8 @@ class HiveMindService:
     """
     hm_protocol: Type[HiveMindListenerProtocol] = HiveMindListenerProtocol
 
-    identity: NodeIdentity = dataclasses.field(default_factory=NodeIdentity)
+    identity: NodeIdentity = dataclasses.field(
+        default_factory=lambda: NodeIdentity(app_name="hivemind-core"))
     db: ClientDatabase = dataclasses.field(default_factory=ClientDatabase)
     callbacks: ClientCallbacks = dataclasses.field(default_factory=ClientCallbacks)
 

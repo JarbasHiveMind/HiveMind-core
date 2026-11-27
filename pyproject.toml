@@ -43,7 +43,7 @@ dependencies = [
     # 1.1.0a1 adds transparent multi-frame Noise chunking (send_message splits
     # oversized payloads, the client reassembles them); the hub relies on this
     # floor for its own hub-side reassembly of inbound multi-frame messages.
-    "hivemind_bus_client>=1.1.0a1,<2.0.0",
+    "hivemind_bus_client>=1.2.1a1,<2.0.0",
     "ovos_utils>=0.0.33,<1.0.0",
     "pybase64",
     # 0.9.0a1 added AbstractDB.get_client_by_api_key, which ClientDatabase calls
