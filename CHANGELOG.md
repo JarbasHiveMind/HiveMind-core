@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.15a1) (2026-11-27)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.14a1...5.3.15a1)
+
+**Merged pull requests:**
+
+- fix: rate-limit failed handshakes per access key and source IP [\#412](https://github.com/JarbasHiveMind/HiveMind-core/pull/412) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.14a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.14a1) (2026-11-27)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.13a1...5.3.14a1)
@@ -347,10 +355,6 @@
 ## [5.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.0.0a1) (2026-09-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.15.0a1...5.0.0a1)
-
-**Breaking changes:**
-
-- feat!: v3 Noise is the sole transport crypto — remove legacy v1/v2 handshake, crypto\_key, and AES path \(flag-day\) [\#309](https://github.com/JarbasHiveMind/HiveMind-core/pull/309) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [4.15.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.15.0a1) (2026-09-03)
 
