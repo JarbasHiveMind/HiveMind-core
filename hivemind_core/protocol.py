@@ -2256,7 +2256,7 @@ class HiveMindListenerProtocol:
                 "hive.policy.denied",
                 {
                     "denied_type": "binary",
-                    "bin_type": str(getattr(message, "bin_type", "")),
+                    "bin_type": str(message.bin_type),
                     "code": verdict.code,
                     "reason": verdict.reason,
                     "data": verdict.data,
@@ -4217,7 +4217,7 @@ class HiveMindListenerProtocol:
     def _send_policy_denied(self, client: HiveMindClientConnection,
                              message: Message, verdict) -> None:
         """Inform a client that an admission policy denied their message."""
-        self._send_denied(client, getattr(message, "msg_type", None),
+        self._send_denied(client, message.msg_type,
                           verdict.code, verdict.reason, verdict.data)
 
     def _send_backend_unavailable(self, client: HiveMindClientConnection,
