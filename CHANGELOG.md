@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.15a3](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.15a3) (2026-11-27)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.15a2...5.3.15a3)
+
+**Merged pull requests:**
+
+- docs: README, docs index, navigation and agent hints [\#416](https://github.com/JarbasHiveMind/HiveMind-core/pull/416) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.15a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.15a2) (2026-11-27)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.15a1...5.3.15a2)
@@ -347,10 +355,6 @@
 ## [5.1.0a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.0a2) (2026-09-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.1.0a1...5.1.0a2)
-
-**Merged pull requests:**
-
-- test: re-enable ping\_flood e2e, pin hivescope\>=0.8.4a1 [\#313](https://github.com/JarbasHiveMind/HiveMind-core/pull/313) ([JarbasAl](https://github.com/JarbasAl))
 
 ## [5.1.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.1.0a1) (2026-09-04)
 
