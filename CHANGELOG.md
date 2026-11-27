@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.3.15a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.15a2) (2026-11-27)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.15a1...5.3.15a2)
+
+**Merged pull requests:**
+
+- chore: refactor pass on hivemind\_core \(comments, guards, decode constant\) [\#414](https://github.com/JarbasHiveMind/HiveMind-core/pull/414) ([openvoiceos-bot](https://github.com/openvoiceos-bot))
+
 ## [5.3.15a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.3.15a1) (2026-11-27)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.3.14a1...5.3.15a1)
@@ -348,10 +356,6 @@
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/5.0.0a1...5.1.0a1)
 
-**Merged pull requests:**
-
-- feat: send oversize v3 messages via multi-frame Noise chunking [\#311](https://github.com/JarbasHiveMind/HiveMind-core/pull/311) ([JarbasAl](https://github.com/JarbasAl))
-
 ## [5.0.0a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/5.0.0a1) (2026-09-04)
 
 [Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.15.0a1...5.0.0a1)
@@ -510,15 +514,15 @@
 
 ## [4.12.4a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.4a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.4a1)
-
-## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.3a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.2a1...4.12.4a1)
 
 ## [4.12.2a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.2a1) (2026-08-10)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.2a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.3a1...4.12.2a1)
+
+## [4.12.3a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.3a1) (2026-08-10)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.12.1a1...4.12.3a1)
 
 ## [4.12.1a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.12.1a1) (2026-08-10)
 
@@ -590,15 +594,15 @@
 
 ## [4.10.12a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.12a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.12a1)
-
-## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
-
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.11a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.10a1...4.10.12a1)
 
 ## [4.10.10a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.10a1) (2026-08-02)
 
-[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.10a1)
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.11a1...4.10.10a1)
+
+## [4.10.11a1](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.11a1) (2026-08-02)
+
+[Full Changelog](https://github.com/JarbasHiveMind/HiveMind-core/compare/4.10.9a2...4.10.11a1)
 
 ## [4.10.9a2](https://github.com/JarbasHiveMind/HiveMind-core/tree/4.10.9a2) (2026-08-02)
 
