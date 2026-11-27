@@ -105,5 +105,26 @@ To change the backend, copy the clients first, then change `database.module`:
 hivemind-core migrate-db --from hivemind-json-db-plugin --to hivemind-sqlite-db-plugin
 ```
 
+## Write a plugin
+
+A plugin is a Python package that subclasses one base class from `hivemind_plugin_manager` and registers the subclass under one entry-point group in its `pyproject.toml`.
+
+| Type | Base class | Methods to implement | Entry-point group | Guide |
+| :--- | :--- | :--- | :--- | :--- |
+| Network | `hivemind_plugin_manager.protocols.NetworkProtocol` | `run` | `hivemind.network.protocol` | [network-protocol.md](https://github.com/JarbasHiveMind/hivemind-plugin-manager/blob/dev/docs/plugins/network-protocol.md) |
+| Agent | `hivemind_plugin_manager.protocols.AgentProtocol` | `natural_language_query` | `hivemind.agent.protocol` | [agent-protocol.md](https://github.com/JarbasHiveMind/hivemind-plugin-manager/blob/dev/docs/plugins/agent-protocol.md) |
+| Binary | `hivemind_plugin_manager.protocols.BinaryDataHandlerProtocol` | the `handle_*` methods for the binary types that the plugin accepts | `hivemind.binary.protocol` | [binary-protocol.md](https://github.com/JarbasHiveMind/hivemind-plugin-manager/blob/dev/docs/plugins/binary-protocol.md) |
+| Database | `hivemind_plugin_manager.database.AbstractDB` | `add_item`, `search_by_value`, `__len__`, `__iter__` | `hivemind.database` | [database.md](https://github.com/JarbasHiveMind/hivemind-plugin-manager/blob/dev/docs/plugins/database.md) |
+| Policy | `hivemind_plugin_manager.policy.PolicyPlugin` | `review` | `hivemind.policy` | [policies.md](policies.md) |
+
+Example registration for a network plugin:
+
+```toml
+[project.entry-points."hivemind.network.protocol"]
+my-network-plugin = "my_package:MyNetworkProtocol"
+```
+
+The entry-point name is the plugin name that `server.json` uses.
+
 ---
 [← Policies and ACLs](policies.md) · [Home](index.md) · [Troubleshooting →](troubleshooting.md)
