@@ -221,6 +221,52 @@ def _non_negative_float(value, default: float) -> float:
     return parsed if parsed >= 0 else default
 
 
+class HandshakeFailureLimiter:
+    """Counts failed handshakes per identity in a sliding window.
+
+    An identity with ``limit`` failures inside the last ``window`` seconds is
+    blocked until the oldest of them leaves the window (CRYPTO-1 §3.4).
+    """
+
+    MAX_IDENTITIES = 4096
+
+    def __init__(self, limit: int, window: float):
+        self.limit = limit
+        self.window = window
+        self._failures: "OrderedDict[str, deque]" = OrderedDict()
+        self._lock = threading.Lock()
+
+    def _live(self, ident: str, now: float) -> Optional[deque]:
+        times = self._failures.get(ident)
+        if times is None:
+            return None
+        while times and now - times[0] >= self.window:
+            times.popleft()
+        if not times:
+            del self._failures[ident]
+            return None
+        return times
+
+    def blocked(self, ident: Optional[str]) -> bool:
+        if ident is None or self.limit <= 0:
+            return False
+        with self._lock:
+            times = self._live(ident, time.monotonic())
+            return times is not None and len(times) >= self.limit
+
+    def record(self, ident: Optional[str]) -> None:
+        if ident is None or self.limit <= 0:
+            return
+        now = time.monotonic()
+        with self._lock:
+            times = self._live(ident, now)
+            if times is None:
+                times = self._failures[ident] = deque(maxlen=self.limit)
+                while len(self._failures) > self.MAX_IDENTITIES:
+                    self._failures.popitem(last=False)
+            times.append(now)
+
+
 class UnencryptedMessageError(ValueError):
     """Raised when a cleartext frame arrives that is not part of key exchange.
 
@@ -273,6 +319,9 @@ class HiveMindClientConnection:
     node_type: HiveMindNodeType = HiveMindNodeType.CANDIDATE_NODE
     handshake: Optional[HandShake] = None
     pswd_handshake: Optional[PasswordHandShake] = None
+    # source address, set by the network transport; keys the per-IP
+    # handshake rate limit (None: no per-IP limit for this connection)
+    ip: Optional[str] = None
 
     pub_key: Optional[str] = None  # TODO add field to database
 
@@ -893,6 +942,10 @@ class HiveMindListenerProtocol:
     shared_bus_callback = None  # passive sharing of slave device bus (info)
     _upstream_hm = None  # HiveMessageBusClient to the upstream master when this node relays
     cascade_select_callback = None  # (query_id, [CascadeResponse]) -> Optional[Message]; CASCADE disambiguation
+    # failed-handshake limiters, built from config in __post_init__; a
+    # bypass-built instance gets these disabled class defaults
+    _key_failures = HandshakeFailureLimiter(0, 60.0)
+    _ip_failures = HandshakeFailureLimiter(0, 60.0)
     # size of the recent_rejections ring the node's own operator reads
     rejection_history_size = 100
     # A kick of an ADMITTED client is kept in its own ring of the same size.
@@ -927,7 +980,8 @@ class HiveMindListenerProtocol:
         "noise_handshake_failed", "noise_pin_mismatch", "non_noise_frame",
         "invalid_noise_frame", "unencrypted_frame", "internal_error",
         "illegal_broadcast", "illegal_propagate", "illegal_query",
-        "illegal_cascade", "illegal_escalate", "malformed_frame", "other",
+        "illegal_cascade", "illegal_escalate", "malformed_frame",
+        "handshake_rate_limited", "other",
     })
     # backing store for ``recent_rejections``; None so a bypass-built
     # instance still sees a class default. One lock for every instance:
@@ -979,6 +1033,12 @@ class HiveMindListenerProtocol:
             get_server_config().get("ping_flood_interval", 30),
             30.0,
         )
+        cfg = get_server_config()
+        window = _non_negative_float(cfg.get("handshake_failure_window", 60), 60.0)
+        self._key_failures = HandshakeFailureLimiter(
+            int(_non_negative_float(cfg.get("handshake_failures_per_key", 5), 5)), window)
+        self._ip_failures = HandshakeFailureLimiter(
+            int(_non_negative_float(cfg.get("handshake_failures_per_ip", 20), 20)), window)
         self.agent_protocol.hm_protocol = self
         if not self.binary_data_protocol:
             # just logs received messages
@@ -1723,6 +1783,10 @@ class HiveMindListenerProtocol:
 
     def handle_client_disconnected(self, client: HiveMindClientConnection):
         client.disconnected = True
+        if client.noise_handshake is not None and client.noise_transport is None:
+            # gone between Noise message 2 and the end of the handshake: a
+            # wrong password fails on the initiator, so this is the failure
+            self._record_handshake_failure(client)
         try:
             self.callbacks.on_disconnect(client)
         except:
@@ -2335,8 +2399,13 @@ class HiveMindListenerProtocol:
     # the client never sees the close
     MAX_CLOSE_REASON_BYTES = 123
 
+    def _record_handshake_failure(self, client: HiveMindClientConnection) -> None:
+        self._key_failures.record(client.key)
+        self._ip_failures.record(client.ip)
+
     def _abort_noise_handshake(self, client: HiveMindClientConnection, reason: str,
-                               close_reason: Optional[str] = None):
+                               close_reason: Optional[str] = None,
+                               count_failure: bool = True):
         """Fatal Noise handshake failure — reject the connection (§3.3).
 
         ``reason`` goes to the node log. The client gets ``close_reason``
@@ -2352,6 +2421,8 @@ class HiveMindListenerProtocol:
         # derivation parked on this connection must not resume in between
         client.disconnected = True
         client.noise_psk_pending = False
+        if count_failure:
+            self._record_handshake_failure(client)
         # the close reason is free text and can name the access key, so the
         # ring gets a stable code; a caller with a sharper code records first
         self.record_rejection(client, 1008, "noise_handshake_failed")
@@ -2409,6 +2480,13 @@ class HiveMindListenerProtocol:
             return
 
         if client.noise_handshake is None:
+            # refuse a rate-limited key or IP before any reply, so it gets
+            # no Noise message 2
+            if self._key_failures.blocked(client.key) or self._ip_failures.blocked(client.ip):
+                self.record_rejection(client, 1008, "handshake_rate_limited")
+                self._abort_noise_handshake(client, "too many failed handshakes",
+                                            count_failure=False)
+                return
             # Noise message 1: fixes the Noise protocol name
             offered = (client._handshake_payload or {}).get("noise") or {}
             pattern = noise_params.get("pattern")

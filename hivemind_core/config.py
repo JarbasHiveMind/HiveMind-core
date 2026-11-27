@@ -126,6 +126,14 @@ _DEFAULT = {
     # client" stays accurate while cutting that write rate drastically. Set
     # to 0 to write on every message (disables throttling entirely).
     "last_seen_update_interval": 60,
+
+    # Rate limit for failed handshakes (HIVEMIND-CRYPTO-1 §3.4). After this
+    # many failures inside the window, the node refuses new handshakes from
+    # the same access key or source IP until the window passes. 0 disables
+    # that limit. A successful handshake does not reset either count.
+    "handshake_failures_per_key": 5,
+    "handshake_failures_per_ip": 20,
+    "handshake_failure_window": 60,
 }
 
 
