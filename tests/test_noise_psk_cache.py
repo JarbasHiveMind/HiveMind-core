@@ -16,6 +16,9 @@ import tempfile
 import unittest
 from unittest.mock import MagicMock, PropertyMock, patch
 
+import os
+
+from json_database import JsonStorage
 from hivemind_bus_client.identity import NodeIdentity
 
 import hivemind_core.protocol as protocol_module
@@ -31,7 +34,8 @@ def _make_protocol(identity_path, node_id="node-A"):
     db = MagicMock()
     db.get_client_by_api_key.return_value = MagicMock(allowed_types=[], is_admin=False)
 
-    identity = NodeIdentity()
+    identity = NodeIdentity(identity_file=JsonStorage(
+        os.path.join(os.path.dirname(identity_path), "identity.json")))
     identity.private_key = identity_path
 
     proto = HiveMindListenerProtocol(agent_protocol=agent, db=db,
